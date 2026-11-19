@@ -224,7 +224,7 @@ function createAvatar(a = {}) {
   const hair = a.hairColor || "#252b38";
   const pants = a.pantsColor || "#294a70";
   const shoeColor = a.shoesColor || "#202a38";
-  const sphereGeometry = new THREE.SphereGeometry(1, 24, 18);
+  const sphereGeometry = new THREE.SphereGeometry(1, 32, 24);
 
   const sphere = (parent, color, x, y, z, sx, sy, sz, roughness = 0.72) => {
     const mesh = new THREE.Mesh(sphereGeometry, mat(color, roughness));
