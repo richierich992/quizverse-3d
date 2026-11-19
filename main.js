@@ -124,7 +124,7 @@ scene.add(new THREE.HemisphereLight("#d8eaff", "#172432", 1.45));
 const sun = new THREE.DirectionalLight("#fff4df", 2.8);
 sun.position.set(-12, 22, 13);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1536, 1536);
+sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.left = -28;
 sun.shadow.camera.right = 28;
 sun.shadow.camera.top = 26;
@@ -976,7 +976,7 @@ function setOwnAvatar(a) {
   }
   playerMesh = createAvatar(a);
   setAvatarNameTag(playerMesh, $("name")?.value || "Pemain");
-  playerMesh.position.set(ownPosition.x, 0, ownPosition.z);
+  playerMesh.position.set(ownPosition.x, answerBaySurfaceAt(ownPosition.x, ownPosition.z), ownPosition.z);
   scene.add(playerMesh);
   syncProfile().catch(() => {});
 }
