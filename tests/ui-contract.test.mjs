@@ -22,6 +22,15 @@ assert.match(player, /id="avatarPreviewCanvas"/, "Player has a dedicated 3D prev
 assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel during answer reveal");
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
+assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
+assert.match(main, /Object\.values\(remotePlayers\)/, "Spectator camera tracks the active player group");
+assert.match(main, /spectatorCameraPosition\.set\([\s\S]*?spectatorFocus\.z \+ distance/, "Spectator camera stays behind the live group at mid-game height");
+assert.match(main, /const spectatorActive = isHost && id === "hud"/, "Spectator presentation is enabled only for Host during gameplay");
+assert.match(main, /id !== "hud" \|\| isHost \|\| !matchMedia/, "Host never receives Player touch controls");
+assert.match(index, /id="spectatorBadge"/, "Host HUD identifies live spectator mode");
+assert.match(index, /id="spectatorViewLabel"/, "Host HUD identifies the in-arena spectator view");
+assert.match(index, /class="player-only-hud"/, "Player-only score and movement hints are marked for Host hiding");
+assert.match(css, /#app\.host-spectator \.hud/, "Host spectator HUD remains translucent over the live arena");
 assert.match(main, /let lastQuestionIndex = -1;/, "Realtime question-change tracker is declared before Firebase callbacks");
 assert.match(main, /lastQuestionIndex = -1;[\s\S]*?stateUnsubscribe = onValue/, "Switching room subscriptions resets the question tracker");
 assert.match(main, /activeState\.phase === "reveal"[\s\S]*?lastQuestionIndex !== Number\(activeState\.questionIndex\)[\s\S]*?renderQuestion\(activeState\)/, "Players reconnecting during reveal rebuild the current question UI");
