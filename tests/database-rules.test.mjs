@@ -99,7 +99,7 @@ try {
     phase: "reveal", correctOption: 2, explanation: "Second key", revealEndsAt: Date.now() + 100
   }));
   await assertSucceeds(update(ref(p1, \`\${base}/players/player-1\`), {
-    score: 220, streak: 2, lastScoredQuestionIndex: 1
+    score: 200, streak: 2, lastScoredQuestionIndex: 1
   }));
 
   console.log("PASS: private keys, one answer per round, deadline, reveal, score validation, and per-round progression.");
