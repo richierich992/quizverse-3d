@@ -1,11 +1,9 @@
 // Firebase Web App configuration — QuizVerse (project: quizverse-a5e26).
-// databaseURL wajib diisi dari Firebase Console > Realtime Database setelah database dibuat.
-// Firebase Web API key adalah identifier aplikasi, bukan service-account secret.
-// Jangan pernah memasukkan service-account JSON / private key ke frontend.
+// Konfigurasi Web app dan URL Realtime Database dari pemilik project.
 export const firebaseConfig = {
   apiKey: "AIzaSyC1OiBW-8pXcZ2sUqd94Z0vB0zCiqcQC7E",
   authDomain: "quizverse-a5e26.firebaseapp.com",
-  databaseURL: "ISI_DATABASE_URL_DARI_FIREBASE_CONSOLE",
+  databaseURL: "https://quizverse-a5e26-default-rtdb.firebaseio.com",
   projectId: "quizverse-a5e26",
   storageBucket: "quizverse-a5e26.firebasestorage.app",
   messagingSenderId: "70964517589",
@@ -17,7 +15,6 @@ export function isFirebaseConfigured() {
   return Boolean(
     firebaseConfig.apiKey &&
     firebaseConfig.projectId === "quizverse-a5e26" &&
-    firebaseConfig.databaseURL &&
-    !firebaseConfig.databaseURL.includes("ISI_DATABASE_URL")
+    firebaseConfig.databaseURL.startsWith("https://")
   );
 }
