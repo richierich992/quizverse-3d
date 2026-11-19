@@ -107,7 +107,7 @@ export const createRoom = onCall({ region: REGION, maxInstances: 5 }, async (req
     updatedAt: now
   };
   updates[`rooms/${roomPin}/players/${uid}`] = {
-    uid, name, avatar, x: 0, z: 0, score: 0, streak: 0, connected: true, hasAnswered: false
+    uid, name, avatar, x: 0, z: 0, score: 0, streak: 0, lastScoredQuestionIndex: -1, connected: true, hasAnswered: false
   };
   updates[`privateRooms/${roomPin}`] = {
     hostUid: uid, questions, durationSeconds, createdAt: now,
@@ -132,7 +132,7 @@ export const joinRoom = onCall({ region: REGION, maxInstances: 10 }, async (requ
   }
   const playerRef = roomRef.child(`players/${uid}`);
   await playerRef.transaction((current) => ({
-    ...(current ?? { score: 0, streak: 0, x: 0, z: 0, hasAnswered: false }),
+    ...(current ?? { score: 0, streak: 0, lastScoredQuestionIndex: -1, x: 0, z: 0, hasAnswered: false }),
     uid,
     name: cleanText(data.name, 18, "Pemain") || "Pemain",
     avatar: cleanAvatar(data.avatar),
