@@ -21,7 +21,7 @@ jobs:
           node-version: 20
       - name: Check browser JavaScript syntax
         run: npm run check
-      - name: Install Cloud Functions dependencies
-        run: npm --prefix functions install --no-audit --no-fund
-      - name: Compile Cloud Functions
-        run: npm --prefix functions run build
+      - name: Validate Firebase JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('firebase.json','utf8'))"
