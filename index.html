@@ -120,5 +120,27 @@
   </section>
   <div class="version">QUIZVERSE 3D · REALTIME LEARNING</div>
 </main>
+<script>
+(() => {
+  function reportBootError(message) {
+    const connection = document.getElementById("connection");
+    if (connection) {
+      connection.textContent = "● Error aplikasi";
+      connection.style.color = "#ff9baa";
+    }
+    const status = document.getElementById("status");
+    if (status) {
+      status.textContent = "Aplikasi gagal dimuat: " + String(message || "Kesalahan JavaScript").slice(0, 220);
+      status.style.color = "#ff9baa";
+    }
+  }
+  window.addEventListener("error", (event) => {
+    if (event.error || event.message) reportBootError(event.error?.message || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    reportBootError(event.reason?.message || event.reason);
+  });
+})();
+</script>
 <script type="module" src="./main.js"></script>
 </body></html>

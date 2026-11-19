@@ -1080,66 +1080,6 @@ if (PLAYER_ONLY) {
 }
 
 // -------------------- Movement controls --------------------
-$("chooseHost").addEventListener("click", () => {
-  $("hostFields").classList.remove("hidden");
-  $("playerFields").classList.add("hidden");
-  $("setupEyebrow").textContent = "HOST CONTROL";
-  $("setupTitle").textContent = "Buat arena kuis.";
-  showScreen("setupScreen");
-  status("Pilih bank soal JSON dari perangkatmu.");
-});
-$("choosePlayer").addEventListener("click", () => {
-  $("playerFields").classList.remove("hidden");
-  $("hostFields").classList.add("hidden");
-  $("setupEyebrow").textContent = "PLAYER SETUP";
-  $("setupTitle").textContent = "Siapkan avatarmu.";
-  showScreen("setupScreen");
-  status("Masukkan PIN yang diberikan host.");
-});
-$("backRole").addEventListener("click", () => showScreen("roleScreen"));
-$("questionFile").addEventListener("change", async (event) => {
-  questionBank = null;
-  const file = event.target.files?.[0];
-  if (!file) { $("fileStatus").textContent = "Belum ada bank soal dipilih."; return; }
-  try {
-    const parsed = JSON.parse(await file.text());
-    const questions = Array.isArray(parsed) ? parsed : parsed.questions;
-    if (!Array.isArray(questions) || !questions.length) throw new Error("Properti questions tidak ditemukan.");
-    if (questions.length > 50) throw new Error("Maksimal 50 pertanyaan per room.");
-    questionBank = {
-      title: String(parsed.title || $("quizTitle").value || "QuizVerse Challenge"),
-      durationSeconds: Number(parsed.durationSeconds || 15),
-      questions
-    };
-    $("fileStatus").textContent = "✓ " + file.name + " · " + questions.length + " soal siap divalidasi.";
-  } catch (error) {
-    $("fileStatus").textContent = "File tidak valid: " + error.message;
-  }
-});
-$("createRoom").addEventListener("click", makeRoom);
-$("joinRoom").addEventListener("click", joinRoom);
-$("startGame").addEventListener("click", startGame);
-$("copyPin").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(roomPin);
-    $("copyPin").textContent = "Tersalin";
-    setTimeout(() => $("copyPin").textContent = "Salin", 1200);
-  } catch { $("copyPin").textContent = roomPin; }
-});
-$("returnHome").addEventListener("click", () => {
-  stopListeners();
-  roomPin = ""; isHost = false; questionBank = null; activeState = null;
-  localAnswerRound = -1; scoreBusyRound = -1; hostTransitionBusy = false;
-  ownPosition = { x: 0, z: 0 };
-  if (playerMesh) playerMesh.position.set(0, 0, 0);
-  showScreen("roleScreen");
-});
-["hair", "hairColor", "face", "skin", "shirt", "shirtColor", "pants", "pantsColor", "hat"].forEach((id) => {
-  $(id).addEventListener("change", () => setOwnAvatar(appearance()));
-});
-$("name").addEventListener("change", () => syncProfile().catch((e) => status(explainError(e), true)));
-
-// -------------------- Movement controls --------------------
 function moveInput() {
   const x = (moveKeys.d || moveKeys.ArrowRight ? 1 : 0) - (moveKeys.a || moveKeys.ArrowLeft ? 1 : 0) + joystick.x;
   const z = (moveKeys.s || moveKeys.ArrowDown ? 1 : 0) - (moveKeys.w || moveKeys.ArrowUp ? 1 : 0) + joystick.y;
@@ -1232,4 +1172,4 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
   resizeAvatarPreview();
 });
-connection("Gratis · Firebase Spark", true);
+connection("Aplikasi siap · Firebase Spark", true);

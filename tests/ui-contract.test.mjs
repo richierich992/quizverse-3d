@@ -42,6 +42,10 @@ assert.match(main, /WARDROBE_CATEGORIES/, "Wardrobe category data is available")
 assert.match(main, /data-wardrobe-category/, "Wardrobe navigation renders category controls");
 assert.match(main, /data-group-index/, "Wardrobe tiles can be selected");
 assert.match(main, /playerInviteUrl/);
+assert.doesNotMatch(main, /\$\("chooseHost"\)\.addEventListener/, "Player route must not bind removed Host button");
+assert.doesNotMatch(main, /\$\("choosePlayer"\)\.addEventListener/, "Player route must not bind removed role switch");
+assert.match(player, /reportBootError/, "Player page reports JavaScript boot errors visibly");
+assert.match(main, /connection\("Aplikasi siap · Firebase Spark", true\)/, "Successful module initialization clears loading status");
 assert.match(css, /\.wardrobe-rail/);
 assert.match(css, /\.wardrobe-items/);
 assert.match(css, /#avatarPreviewStage/);
