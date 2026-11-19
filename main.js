@@ -62,6 +62,7 @@ let activeState = null, playerData = {}, remotePlayers = {}, ownAvatar = null;
 let ownPosition = { x: 0, z: 0 }, moveKeys = {}, joystick = { x: 0, y: 0 };
 let jumpVelocity = 0, grounded = true, serverOffset = 0;
 let stateUnsubscribe = null, playersUnsubscribe = null;
+let lastQuestionIndex = -1;
 let localAnswerRound = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
 
@@ -779,6 +780,8 @@ function playerInviteUrl() {
 }
 function subscribeRoom() {
   stopListeners();
+  // A new room subscription must render its first live question, even after switching rooms.
+  lastQuestionIndex = -1;
   stateUnsubscribe = onValue(dbPath(`rooms/${roomPin}/public`), (snap) => {
     activeState = snap.val();
     if (!activeState) return;
@@ -796,6 +799,11 @@ function subscribeRoom() {
       }
       showScreen("hud");
     } else if (activeState.phase === "reveal") {
+      // Rebuild the current question for players reconnecting after the reveal has begun.
+      if (lastQuestionIndex !== Number(activeState.questionIndex)) {
+        lastQuestionIndex = Number(activeState.questionIndex);
+        renderQuestion(activeState);
+      }
       showScreen("hud");
       $("feedback").textContent = "Jawaban benar: " + String.fromCharCode(65 + Number(activeState.correctOption)) +
         (activeState.explanation ? " · " + activeState.explanation : "");
@@ -1589,6 +1597,7 @@ $("returnHome").addEventListener("click", () => {
     sessionStorage.removeItem(HOST_DRAFT_KEY);
   }
   roomPin = ""; isHost = false; questionBank = null; activeState = null;
+  lastQuestionIndex = -1;
   localAnswerRound = -1; scoreBusyRound = -1; hostTransitionBusy = false;
   ownPosition = { x: 0, z: 0 };
   if (playerMesh) playerMesh.position.set(0, 0, 0);
