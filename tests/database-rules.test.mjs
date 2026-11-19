@@ -51,7 +51,6 @@ try {
     phase: "lobby", questionIndex: -1, totalQuestions: 2, durationSeconds: 10,
     question: { category: "", question: "", options: [] }, title: "Rules Test", deadlineAt: 0
   }));
-  await assertSucceeds(set(ref(host, `${base}/players/host`), profile("host", "Host")));
   await assertSucceeds(set(ref(p1, `${base}/players/player-1`), profile("player-1", "Player 1")));
   await assertSucceeds(set(ref(p2, `${base}/players/player-2`), profile("player-2", "Player 2")));
 

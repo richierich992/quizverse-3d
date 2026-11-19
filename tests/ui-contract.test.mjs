@@ -21,6 +21,7 @@ assert.match(main, /HOST_DRAFT_KEY/);
 assert.match(main, /sessionStorage\.setItem\(HOST_DRAFT_KEY/);
 assert.match(main, /sessionStorage\.removeItem\(HOST_DRAFT_KEY/);
 assert.match(main, /restoreHostSession/);
+assert.match(main, /await auth\.authStateReady\(\)/, "Host refresh waits for Firebase to restore the anonymous identity");
 assert.match(main, /HOST_SESSION_KEY/);
 const makeRoomBlock = main.slice(main.indexOf("async function makeRoom"), main.indexOf("async function createOwnPlayer"));
 assert.doesNotMatch(makeRoomBlock, /createOwnPlayer|setOwnAvatar/, "Host is not created as a named/avatar player");

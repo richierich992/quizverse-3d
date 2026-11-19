@@ -227,6 +227,7 @@ async function ensureFirebase() {
     db = getDatabase(app);
     onValue(ref(db, ".info/serverTimeOffset"), (s) => { serverOffset = Number(s.val() || 0); });
   }
+  await auth.authStateReady();
   if (!auth.currentUser) await signInAnonymously(auth);
   uid = auth.currentUser.uid;
   connection("Firebase Spark terhubung", true);
