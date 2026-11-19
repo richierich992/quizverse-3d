@@ -23,6 +23,9 @@ assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel d
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
+assert.match(main, /camera\.position\.set\(0, 13, 20\)/, "Players retain the original third-person camera height");
+assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.x \* 0\.28, -18\.5, 18\.5\)/, "Host spectator camera stays between the side walls");
+assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.z \+ distance, -19\.5, 19\.5\)/, "Host spectator camera stays inside the front and back walls");
 assert.match(main, /function createArenaFloorTexture\(\)/, "Arena floor has a procedural textured composite finish");
 assert.match(main, /function answerBaySurfaceAt\(x, z\)/, "Raised answer podium surface height is shared by all clients");
 assert.match(main, /const groundHeight = answerBaySurfaceAt\(ownPosition\.x, ownPosition\.z\)/, "Local player stands on raised answer podiums");
