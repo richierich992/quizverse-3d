@@ -863,6 +863,38 @@ function renderWardrobeNav() {
       <span>${c.icon}</span><small>${c.label}</small>
     </button>`).join("");
 }
+function wardrobeItemArt(item) {
+  if (item.preset) {
+    const avatar = item.preset.avatar;
+    return `<span class="mini-avatar" style="--mini-skin:${avatar.skin};--mini-hair:${avatar.hairColor};--mini-shirt:${avatar.shirtColor};--mini-pants:${avatar.pantsColor}">
+      <i class="mini-avatar-hair"></i><i class="mini-avatar-head"></i>
+      <i class="mini-avatar-eye mini-eye-left"></i><i class="mini-avatar-eye mini-eye-right"></i>
+      <i class="mini-avatar-smile"></i><i class="mini-avatar-body"></i>
+      <i class="mini-avatar-arm mini-arm-left"></i><i class="mini-avatar-arm mini-arm-right"></i>
+      <i class="mini-avatar-leg mini-leg-left"></i><i class="mini-avatar-leg mini-leg-right"></i>
+    </span>`;
+  }
+  if (item.color) return '<i class="wardrobe-color-chip"></i>';
+  const patch = item.patch || {};
+  if (patch.face) {
+    const expressions = { smile:"☺", happy:"😄", cool:"😎", wink:"😉", surprised:"😮", serious:"😐", nerd:"🤓", sleepy:"😴" };
+    return `<b class="wardrobe-feature-icon">${expressions[patch.face] || "☺"}</b>`;
+  }
+  if (patch.hair) {
+    return `<i class="wardrobe-hair-swatch hair-${patch.hair}"></i>`;
+  }
+  if (patch.shirt) {
+    return `<i class="wardrobe-clothes-swatch shirt-swatch"><b></b><b></b></i>`;
+  }
+  if (patch.pants) {
+    return `<i class="wardrobe-clothes-swatch pants-swatch"><b></b><b></b></i>`;
+  }
+  if (patch.shoes) {
+    return `<i class="wardrobe-shoes-swatch"><b></b><b></b></i>`;
+  }
+  if (patch.hat) return `<b class="wardrobe-feature-icon">${item.icon || "♛"}</b>`;
+  return `<b class="wardrobe-feature-icon">${item.icon || "✦"}</b>`;
+}
 function renderWardrobeGrid() {
   const c=WARDROBE_CATEGORIES.find(x=>x.id===activeWardrobeCategory)||WARDROBE_CATEGORIES[0];
   $("wardrobeTitle").textContent=c.title;
@@ -874,8 +906,8 @@ function renderWardrobeGrid() {
       <div class="wardrobe-items">${g.items.map((item,ii)=>`
         <button type="button" class="wardrobe-item ${isWardrobeItemSelected(item)?"selected":""}" data-group-index="${gi}" data-item-index="${ii}" aria-pressed="${isWardrobeItemSelected(item)}">
           <span class="wardrobe-item-art ${item.color?"is-color":""}" ${item.color?`style="--item-color:${item.color}"`:""}>
-            ${item.color?'<i class="wardrobe-color-chip"></i>':`<b>${item.icon||"✦"}</b>`}
-          </span><span class="wardrobe-item-label">${item.label}</span>${item.detail?`<small>${item.detail}</small>`:""}<span class="wardrobe-item-check">✓</span>
+            ${wardrobeItemArt(item)}
+          </span><span class="wardrobe-item-label">${escapeHtml(item.label)}</span>${item.detail?`<small>${escapeHtml(item.detail)}</small>`:""}<span class="wardrobe-item-check">✓</span>
         </button>`).join("")}</div>
     </section>`).join("");
 }

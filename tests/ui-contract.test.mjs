@@ -64,3 +64,7 @@ assert.match(main, /orb\("#ffffff", x, 2\.08, 0\.438/, "Avatar has visible eye w
 assert.match(main, /TubeGeometry\(curve, 20, radius/, "Avatar uses curved mouth/facial details");
 assert.match(main, /new THREE\.CapsuleGeometry\(0\.15, legHeight/, "Avatar limbs use rounded geometry");
 assert.match(css, /border-radius:17px/, "Wardrobe cards use softer rounded styling");
+
+assert.match(main, /function wardrobeItemArt\(item\)/, "Wardrobe catalog uses visual item thumbnails");
+assert.match(main, /mini-avatar-head/, "Preset character tiles show miniature avatar previews");
+assert.match(css, /\.mini-avatar-head/, "Mini avatar thumbnails have visible facial detail");
