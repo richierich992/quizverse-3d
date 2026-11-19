@@ -22,6 +22,10 @@ assert.match(player, /id="avatarPreviewCanvas"/, "Player has a dedicated 3D prev
 assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel during answer reveal");
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
+assert.match(main, /let lastQuestionIndex = -1;/, "Realtime question-change tracker is declared before Firebase callbacks");
+assert.match(main, /lastQuestionIndex = -1;[\s\S]*?stateUnsubscribe = onValue/, "Switching room subscriptions resets the question tracker");
+assert.match(main, /activeState\.phase === "reveal"[\s\S]*?lastQuestionIndex !== Number\(activeState\.questionIndex\)[\s\S]*?renderQuestion\(activeState\)/, "Players reconnecting during reveal rebuild the current question UI");
+
 assert.match(main, /ranking\.slice\(0, 5\)/, "Leaderboard limits the main display to five players");
 assert.match(main, /POSISI KAMU #/, "Leaderboard shows the current player's personal position");
 assert.match(css, /\.round-leaderboard\{/, "Reveal standings have dedicated responsive styling");
