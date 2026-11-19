@@ -510,7 +510,6 @@ function renderQuestion(state) {
   });
   $("roundLabel").textContent = "SOAL " + (Number(state.questionIndex) + 1) + "/" + Number(state.totalQuestions);
   $("feedback").textContent = "Berlari ke platform dengan warna jawabanmu.";
-  $("score").textContent = "0";
   $("bar").style.width = "100%";
   hasAnswered = false;
   if (ownPlayer) ownPlayer.position.set(0, 0, 0);
@@ -570,8 +569,8 @@ function movementInput() {
   const length = Math.hypot(x, z);
   return length > 1 ? { x: x / length, z: z / length } : { x, z };
 }
-async function movePlayer(dt) {
-  if (!ownPlayer || !activeState || activeState.phase === "lobby" || activeState.phase === "finished") return;
+function movePlayer(dt) {
+  if (!ownPlayer || !activeState || activeState.phase !== "question") return;
   const input = movementInput();
   const speed = 7.2;
   currentPosition.x = THREE.MathUtils.clamp(currentPosition.x + input.x * speed * dt, -21, 21);
@@ -592,7 +591,7 @@ async function movePlayer(dt) {
     for (const pad of pads) {
       const distance = Math.hypot(currentPosition.x - pad.x, currentPosition.z - pad.z);
       if (distance <= 3.15) {
-        await submitPlatformAnswer(pad.index);
+        submitPlatformAnswer(pad.index);
         break;
       }
     }
@@ -649,9 +648,11 @@ async function animate() {
       $("bar").style.width = "100%";
     }
     if (seconds <= 0) requestAdvance();
+  } else if (activeState?.phase === "scoring") {
+    requestAdvance();
   }
   if (ownPlayer) {
-    await movePlayer(dt);
+    movePlayer(dt);
     camera.position.x += (ownPlayer.position.x - camera.position.x) * 0.045;
     camera.position.z += (ownPlayer.position.z + 19 - camera.position.z) * 0.045;
     camera.lookAt(ownPlayer.position.x, 0.7, ownPlayer.position.z);
