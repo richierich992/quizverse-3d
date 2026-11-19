@@ -719,7 +719,7 @@ function restoreHostSession() {
   if (!saved) return Promise.resolve(false);
   return (async () => {
     const session = JSON.parse(saved);
-    if (!/^\d{6}$/.test(String(session.pin || "")) throw new Error("Data sesi Host tidak valid.");
+    if (!/^\d{6}$/.test(String(session.pin || ""))) throw new Error("Data sesi Host tidak valid.");
     await ensureFirebase();
     const pin = String(session.pin);
     const [metaSnap, publicSnap] = await Promise.all([
