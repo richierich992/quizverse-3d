@@ -108,7 +108,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color("#07111f");
 scene.fog = new THREE.Fog("#0a1724", 38, 86);
 const camera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.1, 120);
-camera.position.set(0, 9.2, 18.5);
+camera.position.set(0, 13, 20);
 camera.lookAt(0, 0.85, 0);
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
@@ -2065,9 +2065,9 @@ function updateHostSpectatorCamera(dt) {
   // Pull back slightly when the group spreads across several answer platforms.
   const distance = THREE.MathUtils.clamp(18.5 + spread * 0.22, 18.5, 23.5);
   const desiredCamera = spectatorCameraPosition.set(
-    spectatorFocus.x * 0.28,
+    THREE.MathUtils.clamp(spectatorFocus.x * 0.28, -18.5, 18.5),
     9.2 + Math.min(1.8, spread * 0.07),
-    spectatorFocus.z + distance
+    THREE.MathUtils.clamp(spectatorFocus.z + distance, -19.5, 19.5)
   );
   const cameraBlend = 1 - Math.exp(-2.2 * dt);
   camera.position.lerp(desiredCamera, cameraBlend);
