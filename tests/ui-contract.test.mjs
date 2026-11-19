@@ -84,4 +84,6 @@ assert.match(main, /tag\.material\.depthTest = false/, "Nameplates remain readab
 assert.match(main, /targetX: x, targetZ: z/, "Remote avatars store target positions for interpolation");
 assert.match(main, /const remoteBlend = 1 - Math\.exp\(-16 \* dt\)/, "Remote motion is interpolated between realtime updates");
 assert.match(main, /function disposeAvatar\(mesh\)/, "Avatar instances release replaced geometry");
+assert.match(main, /Fine face,[\s\S]*?details remain lit, but do not create dozens of shadow casters/, "Avatar shadow pass is optimized for multiplayer scale");
+assert.match(main, /torsoBody\.castShadow = true;[\s\S]*?headBase\.castShadow = true;/, "Only core avatar silhouette casts shadows");
 assert.match(main, /!node\.isSprite && !sharedAvatarGeometries\.has\(node\.geometry\)/, "Avatar cleanup preserves shared sprite and rounded geometry");
