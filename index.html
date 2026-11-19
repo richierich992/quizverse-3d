@@ -105,7 +105,7 @@
   </section>
 
   <section id="hud" class="hud hidden">
-    <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span>SKOR <b id="score">0</b></span></div>
+    <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span id="spectatorBadge">● SPECTATOR · LIVE</span><span id="playerScoreHud" class="player-only-hud">SKOR <b id="score">0</b></span></div>
     <div class="question-card"><div class="eyebrow" id="category">PERTANYAAN</div><h2 id="question">Pertanyaan akan muncul di sini.</h2></div>
     <div class="timer-row"><div class="timer"><i id="bar"></i></div><b id="time">15</b></div>
     <div id="answers" class="answer-legend"></div>
@@ -114,7 +114,7 @@
       <div class="round-leaderboard-head"><span>KLASEMEN SEMENTARA</span><strong id="myRank">POSISI KAMU</strong></div>
       <div id="roundLeaderboardList" class="round-leaderboard-list"></div>
     </section>
-    <div class="hud-bottom"><span>STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span>WASD / Joystick</span></div>
+    <div class="hud-bottom"><span id="playerStreakHud" class="player-only-hud">STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span id="spectatorViewLabel">MENONTON ARENA LANGSUNG</span><span id="movementHint" class="player-only-hud">WASD / Joystick</span></div>
   </section>
 
   <div id="touchControls" class="touch-controls hidden"><div id="stick" class="stick">●</div><button id="jump" class="jump-btn">JUMP</button></div>
