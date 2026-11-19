@@ -145,7 +145,7 @@ assert.match(main, /face:"happy"/, "Default character presets use friendly expre
 assert.doesNotMatch(main.slice(main.indexOf('id:"face"'), main.indexOf('id:"top"')), /\["Serious"|\["Sleepy"|\["Cool"/, "Wardrobe expression choices avoid intimidating faces");
 assert.match(main, /function setAvatarNameTag\(mesh, name\)/, "Players have floating nameplates");
 assert.match(main, /tag\.material\.depthTest = false/, "Nameplates remain readable above characters");
-assert.match(main, /targetX: x, targetZ: z/, "Remote avatars store target positions for interpolation");
+assert.match(main, /targetX: x, targetY: y, targetZ: z/, "Remote avatars store target positions and podium height for interpolation");
 assert.match(main, /const remoteBlend = 1 - Math\.exp\(-16 \* dt\)/, "Remote motion is interpolated between realtime updates");
 assert.match(main, /function disposeAvatar\(mesh\)/, "Avatar instances release replaced geometry");
 assert.match(main, /Fine face,[\s\S]*?details remain lit, but do not create dozens of shadow casters/, "Avatar shadow pass is optimized for multiplayer scale");
