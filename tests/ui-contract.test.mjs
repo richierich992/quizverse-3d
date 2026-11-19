@@ -77,3 +77,11 @@ assert.match(main, /mini-avatar-head/, "Preset character tiles show miniature av
 assert.match(css, /\.mini-avatar-head/, "Mini avatar thumbnails have visible facial detail");
 assert.match(main, /animateAvatar\(previewAvatar, now, false\)/, "Live avatar preview animates while idle");
 assert.match(main, /Object\.values\(remotePlayers\)\.forEach/, "Remote avatars receive independent animation updates");
+assert.match(main, /function roundedBoxGeometry\(width, height, depth, radius = 0\.16\)/, "Avatar uses rounded block geometry for a Roblox-like silhouette");
+assert.match(main, /roundedBox\(head, skin, 1\.02, 1\.08, 0\.74/, "Avatar head has a rounded block profile");
+assert.match(main, /function setAvatarNameTag\(mesh, name\)/, "Players have floating nameplates");
+assert.match(main, /tag\.material\.depthTest = false/, "Nameplates remain readable above characters");
+assert.match(main, /targetX: x, targetZ: z/, "Remote avatars store target positions for interpolation");
+assert.match(main, /const remoteBlend = 1 - Math\.exp\(-16 \* dt\)/, "Remote motion is interpolated between realtime updates");
+assert.match(main, /function disposeAvatar\(mesh\)/, "Avatar instances release replaced geometry");
+assert.match(main, /!node\.isSprite && !sharedAvatarGeometries\.has\(node\.geometry\)/, "Avatar cleanup preserves shared sprite and rounded geometry");
