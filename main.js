@@ -80,7 +80,10 @@ function showScreen(id) {
   ["roleScreen", "setupScreen", "lobbyScreen", "hud", "endScreen"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== id);
   });
-  $("touchControls").classList.toggle("hidden", id !== "hud" || !matchMedia("(pointer: coarse)").matches);
+  const spectatorActive = isHost && id === "hud";
+  $("app").classList.toggle("host-spectator", spectatorActive);
+  // Host observes the arena; movement and jump controls belong only to Players.
+  $("touchControls").classList.toggle("hidden", id !== "hud" || isHost || !matchMedia("(pointer: coarse)").matches);
 }
 function explainError(error) {
   const code = error?.code || "";
@@ -97,7 +100,10 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color("#07111f");
 scene.fog = new THREE.Fog("#07111f", 30, 78);
 const camera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.1, 120);
-camera.position.set(0, 13, 20);
+camera.position.set(0, 9.2, 18.5);
+camera.lookAt(0, 0.85, 0);
+const spectatorFocus = new THREE.Vector3(0, 0, 0);
+const spectatorCameraPosition = new THREE.Vector3();
 const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -1713,6 +1719,43 @@ function updateJoystick(event) {
   joystick.y = THREE.MathUtils.clamp((event.clientY - r.top - r.height / 2) / (r.height / 2), -1, 1);
 }
 
+// Host has no avatar: use a smooth in-arena spectator camera that follows the
+// live group of participants without switching to a top-down overview.
+function updateHostSpectatorCamera(dt) {
+  const entries = Object.values(remotePlayers);
+  let focusX = 0, focusZ = 0, spread = 0;
+
+  if (entries.length) {
+    entries.forEach((entry) => {
+      focusX += Number(entry.targetX || 0);
+      focusZ += Number(entry.targetZ || 0);
+    });
+    focusX /= entries.length;
+    focusZ /= entries.length;
+    entries.forEach((entry) => {
+      spread = Math.max(spread, Math.hypot(
+        Number(entry.targetX || 0) - focusX,
+        Number(entry.targetZ || 0) - focusZ
+      ));
+    });
+  }
+
+  const focusBlend = 1 - Math.exp(-1.8 * dt);
+  spectatorFocus.x += (focusX - spectatorFocus.x) * focusBlend;
+  spectatorFocus.z += (focusZ - spectatorFocus.z) * focusBlend;
+
+  // Pull back slightly when the group spreads across several answer platforms.
+  const distance = THREE.MathUtils.clamp(18.5 + spread * 0.22, 18.5, 23.5);
+  const desiredCamera = spectatorCameraPosition.set(
+    spectatorFocus.x * 0.28,
+    9.2 + Math.min(1.8, spread * 0.07),
+    spectatorFocus.z + distance
+  );
+  const cameraBlend = 1 - Math.exp(-2.2 * dt);
+  camera.position.lerp(desiredCamera, cameraBlend);
+  camera.lookAt(spectatorFocus.x, 0.85, spectatorFocus.z);
+}
+
 // -------------------- Realtime game loop --------------------
 const clock = new THREE.Clock();
 function animate() {
@@ -1728,7 +1771,9 @@ function animate() {
     $("bar").style.width = "100%";
   }
   if (isHost) hostAdvance();
-  if (playerMesh) {
+  if (isHost) {
+    updateHostSpectatorCamera(dt);
+  } else if (playerMesh) {
     camera.position.x += (playerMesh.position.x - camera.position.x) * 0.045;
     camera.position.z += (playerMesh.position.z + 19 - camera.position.z) * 0.045;
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
