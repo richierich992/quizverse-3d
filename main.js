@@ -23,7 +23,7 @@ const CHARACTER_PRESETS = [
 ];
 const DEFAULT_AVATAR={...CHARACTER_PRESETS[0].avatar};
 let selectedAvatar={...DEFAULT_AVATAR},selectedLookName="Nova",activeWardrobeCategory="look";
-let previewScene=null,previewCamera=null,previewRenderer=null,previewAvatar=null;
+let previewScene=null,previewCamera=null,previewAvatar=null,previewResizeObserver=null;
 const WARDROBE_CATEGORIES=[
  {id:"look",label:"Gaya",icon:"✦",title:"Pilih gaya awal",subtitle:"Mulai dari karakter siap pakai, lalu ubah sesukamu.",groups:[
   {title:"KARAKTER PILIHAN",items:CHARACTER_PRESETS.map(p=>({label:p.name,detail:p.role,icon:p.mark,preset:p}))}
@@ -766,38 +766,128 @@ function setupWardrobeInteractions() {
   $("resetAvatar").addEventListener("click",resetWardrobeAvatar);
 }
 function resizeAvatarPreview() {
-  if(!previewRenderer||!$("avatarPreviewCanvas"))return;
-  const canvas=$("avatarPreviewCanvas"),w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight);
-  previewRenderer.setSize(w,h,false);previewCamera.aspect=w/h;previewCamera.updateProjectionMatrix();
+  const stage = $("avatarPreviewStage");
+  if (!previewCamera || !stage) return;
+  const rect = stage.getBoundingClientRect();
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  previewCamera.aspect = width / height;
+  previewCamera.updateProjectionMatrix();
 }
 function refreshAvatarPreview() {
-  if(!previewScene)return;
-  if(previewAvatar)previewScene.remove(previewAvatar);
-  previewAvatar=createAvatar(appearance());previewAvatar.position.y=0.03;previewScene.add(previewAvatar);
+  if (!previewScene) return;
+  if (previewAvatar) {
+    previewScene.remove(previewAvatar);
+    previewAvatar.traverse((node) => {
+      if (node.geometry) node.geometry.dispose();
+      if (node.material) {
+        if (Array.isArray(node.material)) node.material.forEach((material) => material.dispose());
+        else node.material.dispose();
+      }
+    });
+  }
+  previewAvatar = createAvatar(appearance());
+  previewAvatar.position.y = 0.03;
+  previewScene.add(previewAvatar);
 }
 function initAvatarPreview() {
-  if(previewRenderer){refreshAvatarPreview();resizeAvatarPreview();return;}
-  const canvas=$("avatarPreviewCanvas");
-  previewScene=new THREE.Scene();previewCamera=new THREE.PerspectiveCamera(34,1,.1,80);
-  previewRenderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:"low-power"});
-  previewRenderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75));previewRenderer.outputColorSpace=THREE.SRGBColorSpace;
-  previewScene.add(new THREE.HemisphereLight("#d9f4ff","#26334d",2.2));
-  const key=new THREE.DirectionalLight("#fff",2.6);key.position.set(-4,7,5);previewScene.add(key);
-  const rim=new THREE.PointLight("#48dfff",85,15);rim.position.set(3.5,3.5,-2);previewScene.add(rim);
-  const warm=new THREE.PointLight("#d18cff",35,12);warm.position.set(-3,2.3,1.5);previewScene.add(warm);
-  const backdrop=new THREE.Mesh(new THREE.CircleGeometry(3.3,64),new THREE.MeshBasicMaterial({color:"#174367",transparent:true,opacity:.38,side:THREE.DoubleSide}));
-  backdrop.position.set(0,2.05,-2.5);previewScene.add(backdrop);
-  const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(1.25,1.45,.22,48),new THREE.MeshStandardMaterial({color:"#183852",metalness:.6,roughness:.32,emissive:"#0c2537",emissiveIntensity:.35}));
-  pedestal.position.y=-.1;previewScene.add(pedestal);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.36,.035,10,64),new THREE.MeshStandardMaterial({color:"#63e4ff",emissive:"#1ba6df",emissiveIntensity:1.2,metalness:.5}));
-  ring.rotation.x=Math.PI/2;ring.position.y=.02;previewScene.add(ring);
-  const glow=new THREE.Mesh(new THREE.CircleGeometry(1.9,64),new THREE.MeshBasicMaterial({color:"#248cc0",transparent:true,opacity:.12}));
-  glow.rotation.x=-Math.PI/2;glow.position.y=.025;previewScene.add(glow);
-  const gemMat=new THREE.MeshStandardMaterial({color:"#8cecff",emissive:"#237caf",emissiveIntensity:.8,metalness:.25});
-  for(let i=0;i<8;i++){const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.09+(i%3)*.035),gemMat);const a=i/8*Math.PI*2;gem.position.set(Math.cos(a)*2.1,1.1+(i%3)*.53,-.45+Math.sin(a)*.35);previewScene.add(gem);}
-  previewCamera.position.set(4.1,3.25,7.1);previewCamera.lookAt(0,1.2,0);
-  refreshAvatarPreview();resizeAvatarPreview();
-  if(window.ResizeObserver){const observer=new ResizeObserver(resizeAvatarPreview);observer.observe(canvas);}
+  if (previewScene) {
+    refreshAvatarPreview();
+    resizeAvatarPreview();
+    return;
+  }
+
+  // Use the app's existing WebGL context. A second WebGLRenderer can fail on
+  // devices/browser GPU limits and halt the whole Player module.
+  previewScene = new THREE.Scene();
+  previewScene.background = null;
+  previewCamera = new THREE.PerspectiveCamera(34, 1, 0.1, 80);
+
+  previewScene.add(new THREE.HemisphereLight("#d9f4ff", "#26334d", 2.2));
+  const keyLight = new THREE.DirectionalLight("#ffffff", 2.6);
+  keyLight.position.set(-4, 7, 5);
+  previewScene.add(keyLight);
+  const rimLight = new THREE.PointLight("#48dfff", 85, 15);
+  rimLight.position.set(3.5, 3.5, -2);
+  previewScene.add(rimLight);
+  const warmLight = new THREE.PointLight("#d18cff", 35, 12);
+  warmLight.position.set(-3, 2.3, 1.5);
+  previewScene.add(warmLight);
+
+  const backdrop = new THREE.Mesh(
+    new THREE.CircleGeometry(3.3, 64),
+    new THREE.MeshBasicMaterial({ color:"#174367", transparent:true, opacity:0.38, side:THREE.DoubleSide })
+  );
+  backdrop.position.set(0, 2.05, -2.5);
+  previewScene.add(backdrop);
+
+  const pedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.25, 1.45, 0.22, 48),
+    new THREE.MeshStandardMaterial({ color:"#183852", metalness:0.6, roughness:0.32, emissive:"#0c2537", emissiveIntensity:0.35 })
+  );
+  pedestal.position.y = -0.1;
+  previewScene.add(pedestal);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(1.36, 0.035, 10, 64),
+    new THREE.MeshStandardMaterial({ color:"#63e4ff", emissive:"#1ba6df", emissiveIntensity:1.2, metalness:0.5 })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.02;
+  previewScene.add(ring);
+
+  const floorGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.9, 64),
+    new THREE.MeshBasicMaterial({ color:"#248cc0", transparent:true, opacity:0.12 })
+  );
+  floorGlow.rotation.x = -Math.PI / 2;
+  floorGlow.position.y = 0.025;
+  previewScene.add(floorGlow);
+
+  const sparkleMaterial = new THREE.MeshStandardMaterial({ color:"#8cecff", emissive:"#237caf", emissiveIntensity:0.8, metalness:0.25 });
+  for (let i = 0; i < 8; i++) {
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.09 + (i % 3) * 0.035), sparkleMaterial);
+    const angle = i / 8 * Math.PI * 2;
+    gem.position.set(Math.cos(angle) * 2.1, 1.1 + (i % 3) * 0.53, -0.45 + Math.sin(angle) * 0.35);
+    previewScene.add(gem);
+  }
+
+  previewCamera.position.set(4.1, 3.25, 7.1);
+  previewCamera.lookAt(0, 1.2, 0);
+  refreshAvatarPreview();
+  resizeAvatarPreview();
+
+  if (window.ResizeObserver) {
+    previewResizeObserver = new ResizeObserver(resizeAvatarPreview);
+    previewResizeObserver.observe($("avatarPreviewStage"));
+  }
+}
+function renderAvatarPreview() {
+  const stage = $("avatarPreviewStage");
+  if (!previewScene || !previewCamera || !stage) return;
+  const stageRect = stage.getBoundingClientRect();
+  const canvasRect = renderer.domElement.getBoundingClientRect();
+  if (stageRect.width < 2 || stageRect.height < 2 || canvasRect.width < 2 || canvasRect.height < 2) return;
+
+  // Three.js viewport/scissor coordinates are measured from the canvas bottom-left.
+  const x = stageRect.left - canvasRect.left;
+  const y = canvasRect.bottom - stageRect.bottom;
+  const width = stageRect.width;
+  const height = stageRect.height;
+  const size = renderer.getSize(new THREE.Vector2());
+  const oldAutoClear = renderer.autoClear;
+
+  renderer.autoClear = false;
+  renderer.setScissorTest(true);
+  renderer.setViewport(x, y, width, height);
+  renderer.setScissor(x, y, width, height);
+  renderer.clearDepth();
+  if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
+  renderer.render(previewScene, previewCamera);
+
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, size.x, size.y);
+  renderer.autoClear = oldAutoClear;
 }
 
 function restoreHostSession() {
@@ -1129,13 +1219,10 @@ function animate() {
     camera.position.z += (playerMesh.position.z + 19 - camera.position.z) * 0.045;
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
-  if (previewRenderer && previewScene) {
-    if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
-    previewRenderer.render(previewScene, previewCamera);
-  }
   const t = performance.now() * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
   renderer.render(scene, camera);
+  renderAvatarPreview();
 }
 animate();
 
