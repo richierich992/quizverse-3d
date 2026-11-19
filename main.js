@@ -530,7 +530,8 @@ async function requestAdvance() {
   if (lastAdvanceKey === key) return;
   lastAdvanceKey = key;
   try {
-    await callable("advanceGame")({ roomPin });
+    const result = await callable("advanceGame")({ roomPin });
+    if (!result.data?.advanced) lastAdvanceKey = "";
   } catch (error) {
     if (!error?.code?.includes("deadline-exceeded")) console.warn("advanceGame:", error);
     lastAdvanceKey = "";
