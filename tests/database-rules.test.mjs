@@ -56,7 +56,7 @@ try {
 
   await assertFails(get(ref(p1, `answerKeys/${pin}/questions`)));
 
-  const deadline0 = Date.now() + 1200;
+  const deadline0 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
     id: "q0", category: "Test", question: "Question one?", options: ["A", "B", "C", "D"]
   }, deadline0)));
@@ -69,7 +69,7 @@ try {
   await assertFails(get(ref(p1, submission2)));
   await assertFails(update(ref(p1, `${base}/players/player-1`), { score: 999 }));
 
-  await delay(1300);
+  await delay(5100);
   await assertFails(update(ref(host, `${base}/public`), {
     phase: "reveal", correctOption: 0, explanation: "Wrong key", revealEndsAt: Date.now() + 100
   }));
@@ -88,13 +88,13 @@ try {
   }));
 
   await delay(180);
-  const deadline1 = Date.now() + 1200;
+  const deadline1 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(1, {
     id: "q1", category: "Test", question: "Question two?", options: ["A", "B", "C", "D"]
   }, deadline1)));
   await assertSucceeds(set(ref(p1, submission1), { questionIndex: 1, answerIndex: 2 }));
 
-  await delay(1300);
+  await delay(5100);
   await assertSucceeds(update(ref(host, `${base}/public`), {
     phase: "reveal", correctOption: 2, explanation: "Second key", revealEndsAt: Date.now() + 100
   }));
