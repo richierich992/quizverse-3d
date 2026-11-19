@@ -56,8 +56,8 @@
         "current": {
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($roomPin).child('players').child($uid).exists() && root.child('rooms').child($roomPin).child('public').child('phase').val() === 'question' && now <= root.child('rooms').child($roomPin).child('public').child('deadlineAt').val()",
-            ".validate": "newData.hasChildren(['questionIndex','answerIndex']) && newData.child('questionIndex').val() === root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && newData.child('answerIndex').isNumber() && newData.child('answerIndex').val() >= 0 && newData.child('answerIndex').val() <= 3 && (!data.exists() || data.child('questionIndex').val() < newData.child('questionIndex').val())"
+            ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($roomPin).child('public').child('phase').val() === 'question'",
+            ".validate": "newData.hasChildren(['questionIndex','answerIndex']) && newData.child('questionIndex').isNumber() && newData.child('answerIndex').isNumber() && newData.child('answerIndex').val() >= 0 && newData.child('answerIndex').val() <= 3 && (!data.exists() || data.child('questionIndex').val() < newData.child('questionIndex').val())"
           }
         }
       }
