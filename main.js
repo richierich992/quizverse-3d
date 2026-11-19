@@ -295,7 +295,7 @@ function createAvatar(a = {}) {
   torso.position.set(0, 1.29, 0);
   g.add(torso);
 
-  roundedBox(torso, shirt, 0.80, 0.98, 0.60, 0.22, 0, 0, 0, 0.78);
+  const torsoBody = roundedBox(torso, shirt, 0.80, 0.98, 0.60, 0.22, 0, 0, 0, 0.78);
   sphere(torso, pants, 0, -0.39, 0, 0.34, 0.20, 0.27);
   torus(torso, a.shirtAccent || "#eaf7ff", 0.19, 0.025, 0, 0.43, 0, Math.PI / 2);
 
@@ -386,7 +386,7 @@ function createAvatar(a = {}) {
   const head = new THREE.Group();
   head.position.set(0, 2.08, 0);
   g.add(head);
-  roundedBox(head, skin, 1.02, 1.08, 0.74, 0.24, 0, 0, 0, 0.78);
+  const headBase = roundedBox(head, skin, 1.02, 1.08, 0.74, 0.24, 0, 0, 0, 0.78);
   sphere(head, skin, -0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
   sphere(head, skin, 0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
   sphere(head, a.earAccent || skin, -0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
@@ -510,6 +510,17 @@ function createAvatar(a = {}) {
   // Small silhouette accents make the avatar read better at game-camera distance.
   sphere(g, a.shirtAccent || "#f5d25b", -0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
   sphere(g, a.shirtAccent || "#f5d25b", 0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
+
+  // Keep only the large silhouette meshes in the shadow pass. Fine face,
+  // hair and clothing details remain lit, but do not create dozens of shadow casters.
+  g.traverse((node) => {
+    if (node.isMesh) {
+      node.castShadow = false;
+      node.receiveShadow = false;
+    }
+  });
+  torsoBody.castShadow = true;
+  headBase.castShadow = true;
 
   g.userData.rig = { torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes };
   g.userData.moving = false;
