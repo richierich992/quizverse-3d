@@ -760,6 +760,7 @@ function renderPlayers(players) {
     $("streak").textContent = String(Number(me.streak || 0));
     if (activeState?.phase === "reveal") settleMyScore(activeState).catch(console.warn);
   }
+  if (activeState?.phase === "reveal") renderRoundLeaderboard();
 }
 function lobbyFromState(state) {
   $("roomPin").textContent = roomPin;
@@ -798,12 +799,14 @@ function subscribeRoom() {
       showScreen("hud");
       $("feedback").textContent = "Jawaban benar: " + String.fromCharCode(65 + Number(activeState.correctOption)) +
         (activeState.explanation ? " · " + activeState.explanation : "");
+      renderRoundLeaderboard();
       $("answers").querySelectorAll("span").forEach((el, index) => {
         el.style.borderColor = index === Number(activeState.correctOption) ? "#79e8b8" : "#25425c";
         el.style.background = index === Number(activeState.correctOption) ? "#154b43" : "#102238";
       });
       settleMyScore(activeState).catch((error) => console.warn("Settle score:", error));
     } else if (activeState.phase === "finished") {
+      $("roundLeaderboard").classList.add("hidden");
       renderPodium(activeState.podium || []);
       showScreen("endScreen");
     }
@@ -835,6 +838,7 @@ function publicQuestion(q, index, total, duration, title) {
   };
 }
 function renderQuestion(state) {
+  $("roundLeaderboard").classList.add("hidden");
   const q = state.question;
   $("category").textContent = String(q.category || "PERTANYAAN").toUpperCase();
   $("question").textContent = q.question || "Pertanyaan";
@@ -1012,6 +1016,81 @@ async function settleMyScore(state) {
     console.warn("Score update denied:", error);
   }
 }
+function renderRoundLeaderboard() {
+  const panel = $("roundLeaderboard");
+  const list = $("roundLeaderboardList");
+  const rankLabel = $("myRank");
+  if (!panel || !list || !rankLabel) return;
+
+  const sorted = Object.entries(playerData || {})
+    .map(([id, person]) => ({
+      id,
+      name: String(person?.name || "Pemain").trim().slice(0, 18) || "Pemain",
+      score: Math.max(0, Number(person?.score) || 0)
+    }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
+  const ranking = sorted.map((person, index) => ({
+    ...person,
+    rank: index > 0 && person.score === sorted[index - 1].score
+      ? null
+      : index + 1
+  }));
+  // Competition ranking: tied players share the same position.
+  ranking.forEach((person, index) => {
+    if (person.rank === null) {
+      const previous = ranking[index - 1];
+      person.rank = previous.rank;
+    }
+  });
+
+  const myIndex = ranking.findIndex((person) => person.id === uid);
+  rankLabel.textContent = isHost
+    ? ranking.length + " PESERTA"
+    : myIndex >= 0
+      ? "POSISI KAMU #" + ranking[myIndex].rank + " / " + ranking.length
+      : "MENUNGGU SKOR";
+
+  list.replaceChildren();
+  panel.classList.remove("hidden");
+  if (!ranking.length) {
+    const empty = document.createElement("p");
+    empty.className = "round-rank-empty";
+    empty.textContent = "Belum ada pemain di klasemen.";
+    list.appendChild(empty);
+    return;
+  }
+
+  const visible = ranking.slice(0, 5);
+  if (!isHost && myIndex >= 5) {
+    visible.push(null, ranking[myIndex]);
+  }
+
+  visible.forEach((person) => {
+    if (!person) {
+      const gap = document.createElement("div");
+      gap.className = "round-rank-gap";
+      gap.textContent = "···";
+      gap.setAttribute("aria-hidden", "true");
+      list.appendChild(gap);
+      return;
+    }
+    const row = document.createElement("div");
+    row.className = "round-rank-entry" + (person.id === uid ? " is-me" : "");
+    const rank = document.createElement("span");
+    rank.className = "round-rank-number";
+    rank.textContent = person.rank === 1 ? "🥇" : person.rank === 2 ? "🥈" : person.rank === 3 ? "🥉" : "#" + person.rank;
+    const name = document.createElement("span");
+    name.className = "round-rank-name";
+    name.textContent = person.name;
+    const score = document.createElement("strong");
+    score.className = "round-rank-score";
+    score.textContent = person.score + " pts";
+    row.append(rank, name, score);
+    list.appendChild(row);
+  });
+}
+
 function renderPodium(podium) {
   $("podium").replaceChildren();
   const medals = ["🏆", "🥈", "🥉"];
