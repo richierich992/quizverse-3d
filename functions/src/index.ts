@@ -170,7 +170,7 @@ export const startGame = onCall({ region: REGION, maxInstances: 5 }, async (requ
   return { started: true };
 });
 
-// Only the server reads the answer key and mutates score/streak.
+// Answers are held privately until the round closes. No score or correctness feedback is returned yet.
 export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
@@ -192,35 +192,21 @@ export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (
   const questionIndex = Number(state.questionIndex);
   const question = privateRoom?.questions?.[questionIndex] as QuizQuestion | undefined;
   if (!question) throw new HttpsError("not-found", "Pertanyaan tidak ditemukan.");
-  const isCorrect = answerIndex === question.answerIndex;
+
   const remainingSeconds = Math.max(0, Math.floor((Number(state.deadlineAt) - now) / 1000));
   const answerRef = db.ref(`privateRooms/${pin}/answers/${questionIndex}/${uid}`);
   const answerTx = await answerRef.transaction((current) => current === null ? {
-    answerIndex, isCorrect, submittedAt: now
+    answerIndex,
+    isCorrect: answerIndex === question.answerIndex,
+    remainingSeconds,
+    submittedAt: now
   } : undefined);
   if (!answerTx.committed) throw new HttpsError("already-exists", "Jawaban sudah dikirim.");
-
-  let awarded = 0;
-  const playerRef = roomRef.child(`players/${uid}`);
-  const playerTx = await playerRef.transaction((current) => {
-    if (!current) return;
-    const currentStreak = Number(current.streak || 0);
-    const nextStreak = isCorrect ? currentStreak + 1 : 0;
-    awarded = isCorrect ? 100 + remainingSeconds * 5 + Math.min(currentStreak, 10) * 10 : 0;
-    current.score = Number(current.score || 0) + awarded;
-    current.streak = nextStreak;
-    current.hasAnswered = true;
-    return current;
-  });
-  if (!playerTx.committed) {
-    await answerRef.remove();
-    throw new HttpsError("failed-precondition", "Data pemain tidak dapat diperbarui.");
-  }
   return { accepted: true };
 });
 
 // Any room member may advance only after the authoritative deadline.
-// This also keeps the game moving if the host disconnects.
+// A scoring phase makes score settlement retryable if a function invocation is interrupted.
 export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
@@ -235,41 +221,87 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
   const questions = privateRoom?.questions as QuizQuestion[] | undefined;
   if (!state || !questions?.length) throw new HttpsError("not-found", "Game tidak ditemukan.");
   const now = Date.now();
-  const podium = Object.values(playersSnap.val() ?? {})
-    .map((p: any) => ({ name: cleanText(p.name, 18, "Pemain"), score: Number(p.score || 0) }))
-    .sort((a, b) => b.score - a.score).slice(0, 3);
   const publicRef = roomRef.child("public");
-  const tx = await publicRef.transaction((current) => {
-    if (!current) return;
-    if (current.phase === "question" && now >= Number(current.deadlineAt)) {
-      const q = questions[Number(current.questionIndex)];
-      if (!q) return;
-      return {
-        ...current, phase: "reveal", correctOption: q.answerIndex,
-        explanation: q.explanation || "", revealEndsAt: now + 3500, updatedAt: now
-      };
-    }
-    if (current.phase === "reveal" && now >= Number(current.revealEndsAt)) {
-      const nextIndex = Number(current.questionIndex) + 1;
-      if (nextIndex >= questions.length) {
-        return { ...current, phase: "finished", podium, finishedAt: now, updatedAt: now };
-      }
-      return {
-        ...makePublicQuestion(questions[nextIndex], nextIndex, questions.length,
-          Number(privateRoom.durationSeconds || 15), now),
-        title: current.title || "QuizVerse Quiz"
-      };
-    }
-    return;
-  });
-  const nextState = tx.snapshot.val();
-  if (tx.committed && nextState?.phase === "finished") {
-    await roomRef.child("meta/status").set("finished");
-  } else if (tx.committed && nextState?.phase === "question") {
-    const players = playersSnap.val() ?? {};
-    const reset: Record<string, boolean> = {};
-    for (const playerId of Object.keys(players)) reset[`rooms/${pin}/players/${playerId}/hasAnswered`] = false;
-    if (Object.keys(reset).length) await db.ref().update(reset);
+
+  // First caller closes the question. A transaction prevents multiple callers
+  // from starting score settlement or moving the same round more than once.
+  if (state.phase === "question" && now >= Number(state.deadlineAt)) {
+    await publicRef.transaction((current) => {
+      if (!current || current.phase !== "question" || now < Number(current.deadlineAt)) return;
+      return { ...current, phase: "scoring", scoringStartedAt: now, updatedAt: now };
+    });
   }
-  return { phase: nextState?.phase || state.phase, advanced: tx.committed };
+
+  let latestState = (await publicRef.get()).val();
+  if (latestState?.phase === "scoring") {
+    const questionIndex = Number(latestState.questionIndex);
+    const question = questions[questionIndex];
+    if (!question) throw new HttpsError("not-found", "Pertanyaan tidak ditemukan.");
+    const answers = privateRoom.answers?.[questionIndex] ?? {};
+    const players = playersSnap.val() ?? {};
+
+    // Each player stores lastScoredQuestionIndex atomically with their score,
+    // making repeated settlement calls idempotent.
+    await Promise.all(Object.entries(players).map(async ([playerId, playerData]: [string, any]) => {
+      const answer = answers[playerId];
+      const playerRef = roomRef.child(`players/${playerId}`);
+      await playerRef.transaction((current) => {
+        if (!current || Number(current.lastScoredQuestionIndex ?? -1) >= questionIndex) return;
+        const wasCorrect = Boolean(answer?.isCorrect);
+        const currentStreak = Number(current.streak || 0);
+        const points = wasCorrect
+          ? 100 + Math.max(0, Number(answer.remainingSeconds || 0)) * 5 + Math.min(currentStreak, 10) * 10
+          : 0;
+        current.score = Number(current.score || 0) + points;
+        current.streak = wasCorrect ? currentStreak + 1 : 0;
+        current.lastScoredQuestionIndex = questionIndex;
+        current.hasAnswered = Boolean(answer);
+        return current;
+      });
+    }));
+
+    const revealAt = Date.now();
+    await publicRef.transaction((current) => {
+      if (!current || current.phase !== "scoring" || Number(current.questionIndex) !== questionIndex) return;
+      return {
+        ...current,
+        phase: "reveal",
+        correctOption: question.answerIndex,
+        explanation: question.explanation || "",
+        revealEndsAt: revealAt + 3500,
+        updatedAt: revealAt
+      };
+    });
+    latestState = (await publicRef.get()).val();
+  }
+
+  if (latestState?.phase === "reveal" && Date.now() >= Number(latestState.revealEndsAt)) {
+    const nextIndex = Number(latestState.questionIndex) + 1;
+    if (nextIndex >= questions.length) {
+      const freshPlayers = (await roomRef.child("players").get()).val() ?? {};
+      const podium = Object.values(freshPlayers)
+        .map((p: any) => ({ name: cleanText(p.name, 18, "Pemain"), score: Number(p.score || 0) }))
+        .sort((a, b) => b.score - a.score).slice(0, 3);
+      await publicRef.transaction((current) => {
+        if (!current || current.phase !== "reveal" || Date.now() < Number(current.revealEndsAt)) return;
+        return { ...current, phase: "finished", podium, finishedAt: Date.now(), updatedAt: Date.now() };
+      });
+      const finalState = (await publicRef.get()).val();
+      if (finalState?.phase === "finished") await roomRef.child("meta/status").set("finished");
+      latestState = finalState;
+    } else {
+      const nextAt = Date.now();
+      await publicRef.transaction((current) => {
+        if (!current || current.phase !== "reveal" || Date.now() < Number(current.revealEndsAt)) return;
+        return {
+          ...makePublicQuestion(questions[nextIndex], nextIndex, questions.length,
+            Number(privateRoom.durationSeconds || 15), nextAt),
+          title: current.title || "QuizVerse Quiz"
+        };
+      });
+      latestState = (await publicRef.get()).val();
+    }
+  }
+  return { phase: latestState?.phase || state.phase, advanced: latestState?.phase !== state.phase };
 });
+
