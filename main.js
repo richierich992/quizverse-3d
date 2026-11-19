@@ -428,7 +428,10 @@ async function joinRoom() {
     await ensureFirebase();
     const metaSnap = await get(dbPath(`rooms/${pin}/meta`));
     const meta = metaSnap.val();
-    if (!meta || meta.status !== "lobby") throw new Error("Room tidak ditemukan atau permainan sudah dimulai.");
+    const existingPlayer = await get(dbPath(`rooms/${pin}/players/${uid}`));
+    if (!meta || !["lobby", "playing"].includes(meta.status) || (meta.status === "playing" && !existingPlayer.exists())) {
+      throw new Error("Room tidak ditemukan, sudah selesai, atau permainan sudah dimulai.");
+    }
     roomPin = pin;
     isHost = false;
     ownPosition = { x: 0, z: 0 };
