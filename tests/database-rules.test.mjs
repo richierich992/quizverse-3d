@@ -38,6 +38,7 @@ try {
   const host = env.authenticatedContext("host").database();
   const p1 = env.authenticatedContext("player-1").database();
   const p2 = env.authenticatedContext("player-2").database();
+  const latePlayer = env.authenticatedContext("late-player").database();
 
   await assertSucceeds(set(ref(host, `${base}/meta`), {
     hostUid: "host", title: "Rules Test", status: "lobby", maxPlayers: 10
@@ -61,6 +62,8 @@ try {
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
     id: "q0", category: "Test", question: "Question one?", options: ["A", "B", "C", "D"]
   }, deadline0)));
+  await assertSucceeds(update(ref(host, `${base}/meta`), { status: "playing" }));
+  await assertFails(set(ref(latePlayer, `${base}/players/late-player`), profile("late-player", "Late Player")));
 
   const submission1 = `submissions/${pin}/current/player-1`;
   const submission2 = `submissions/${pin}/current/player-2`;
