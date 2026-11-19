@@ -11,6 +11,7 @@
 <main id="app">
   <canvas id="world" aria-label="Arena 3D QuizVerse"></canvas>
   <header class="topbar"><div class="brand">QUIZVERSE <span>3D LEARNING ARENA</span></div><div class="connection" id="connection">● Menghubungkan...</div></header>
+<details id="runtimeErrorNotice" class="runtime-error hidden" aria-live="assertive"><summary>⚠ Detail error aplikasi</summary><pre id="runtimeErrorDetail"></pre></details>
 
   <section id="roleScreen" class="panel role-panel hidden">
     <div class="eyebrow">LEARN · EXPLORE · PLAY</div>
@@ -118,23 +119,41 @@
 </main>
 <script>
 (() => {
-  function reportBootError(message) {
+  function reportBootError(message, details = "") {
+    const readableMessage = String(message || "Kesalahan JavaScript").slice(0, 220);
+    const fullDetails = [readableMessage, details].filter(Boolean).join("\n");
     const connection = document.getElementById("connection");
     if (connection) {
       connection.textContent = "● Error aplikasi";
       connection.style.color = "#ff9baa";
+      connection.title = fullDetails;
     }
     const status = document.getElementById("status");
     if (status) {
-      status.textContent = "Aplikasi gagal dimuat: " + String(message || "Kesalahan JavaScript").slice(0, 220);
+      status.textContent = "Aplikasi mengalami error: " + readableMessage;
       status.style.color = "#ff9baa";
+    }
+    const notice = document.getElementById("runtimeErrorNotice");
+    const detail = document.getElementById("runtimeErrorDetail");
+    if (notice && detail) {
+      detail.textContent = fullDetails;
+      notice.classList.remove("hidden");
     }
   }
   window.addEventListener("error", (event) => {
-    if (event.error || event.message) reportBootError(event.error?.message || event.message);
+    if (!event.error && !event.message) return;
+    const source = event.filename
+      ? "File: " + event.filename.split("/").pop() + " · baris " + (event.lineno || "?") + ":" + (event.colno || "?")
+      : "";
+    const stack = event.error?.stack
+      ? String(event.error.stack).split("\n").slice(0, 5).join("\n")
+      : "";
+    reportBootError(event.error?.message || event.message, [source, stack].filter(Boolean).join("\n"));
   });
   window.addEventListener("unhandledrejection", (event) => {
-    reportBootError(event.reason?.message || event.reason);
+    const reason = event.reason;
+    const stack = reason?.stack ? String(reason.stack).split("\n").slice(0, 6).join("\n") : "";
+    reportBootError(reason?.message || reason, stack);
   });
 })();
 </script>

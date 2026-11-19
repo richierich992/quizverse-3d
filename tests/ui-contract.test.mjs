@@ -59,6 +59,15 @@ assert.doesNotMatch(main, /\\$\\("chooseHost"\\)\\.addEventListener/, "Player ro
 assert.doesNotMatch(main, /\$\("chooseHost"\)\.addEventListener/, "Player route must not bind removed Host button");
 assert.doesNotMatch(main, /\$\("choosePlayer"\)\.addEventListener/, "Player route must not bind removed role switch");
 assert.match(player, /reportBootError/, "Player page reports JavaScript boot errors visibly");
+assert.match(index, /id="runtimeErrorNotice"/, "Host page exposes runtime error details without DevTools");
+assert.match(player, /id="runtimeErrorNotice"/, "Player page exposes runtime error details without DevTools");
+assert.match(index, /event\.filename/, "Host captures the failing source file");
+assert.match(player, /event\.filename/, "Player captures the failing source file");
+assert.match(index, /event\.lineno/, "Host captures the failing source line");
+assert.match(player, /event\.lineno/, "Player captures the failing source line");
+assert.match(index, /event\.reason/, "Host captures unhandled promise details");
+assert.match(player, /event\.reason/, "Player captures unhandled promise details");
+assert.match(css, /\.runtime-error\{/, "Runtime diagnostics remain readable above the arena");
 assert.match(main, /connection\("Aplikasi siap · Firebase Spark", true\)/, "Successful module initialization clears loading status");
 assert.match(css, /\.wardrobe-rail/);
 assert.match(css, /\.wardrobe-items/);
