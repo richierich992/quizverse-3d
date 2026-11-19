@@ -122,8 +122,13 @@ const grid = new THREE.GridHelper(50, 50, "#315c79", "#1c3953");
 grid.position.y = -0.055;
 scene.add(grid);
 
+const sharedMaterials = new Map();
 function mat(color, roughness = 0.72) {
-  return new THREE.MeshStandardMaterial({ color, roughness });
+  const key = String(color) + "|" + roughness;
+  if (!sharedMaterials.has(key)) {
+    sharedMaterials.set(key, new THREE.MeshStandardMaterial({ color, roughness }));
+  }
+  return sharedMaterials.get(key);
 }
 function cube(parent, w, h, d, color, x, y, z) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
@@ -344,11 +349,16 @@ function createAvatar(a = {}) {
   sphere(head, a.earAccent || skin, 0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
 
   const browColor = a.hair && a.hair !== "none" ? hair : "#604537";
+  const eyes = [];
   for (const x of [-0.175, 0.175]) {
-    sphere(head, "#ffffff", x, 0.035, 0.405, 0.105, 0.132, 0.055, 0.34);
-    sphere(head, a.eyeColor || "#4d9de0", x + 0.012, 0.025, 0.451, 0.061, 0.078, 0.027, 0.36);
-    sphere(head, "#142239", x + 0.018, 0.024, 0.473, 0.034, 0.047, 0.018, 0.28);
-    sphere(head, "#ffffff", x - 0.008, 0.060, 0.488, 0.016, 0.020, 0.009, 0.2);
+    const eye = new THREE.Group();
+    eye.position.x = x;
+    head.add(eye);
+    sphere(eye, "#ffffff", 0, 0.035, 0.405, 0.105, 0.132, 0.055, 0.34);
+    sphere(eye, a.eyeColor || "#4d9de0", 0.012, 0.025, 0.451, 0.061, 0.078, 0.027, 0.36);
+    sphere(eye, "#142239", 0.018, 0.024, 0.473, 0.034, 0.047, 0.018, 0.28);
+    sphere(eye, "#ffffff", -0.008, 0.060, 0.488, 0.016, 0.020, 0.009, 0.2);
+    eyes.push(eye);
     const brow = sphere(head, browColor, x, 0.218, 0.412, 0.13, 0.035, 0.03);
     brow.rotation.z = (x < 0 ? 1 : -1) * (a.face === "surprised" ? 0.18 : 0.07);
   }
@@ -450,7 +460,7 @@ function createAvatar(a = {}) {
   sphere(g, a.shirtAccent || "#f5d25b", -0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
   sphere(g, a.shirtAccent || "#f5d25b", 0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
 
-  g.userData.rig = { torso, head, leftArm, rightArm, leftLeg, rightLeg };
+  g.userData.rig = { torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes };
   g.userData.moving = false;
   return g;
 }
@@ -473,6 +483,12 @@ function animateAvatar(mesh, time, moving = false) {
   rig.head.rotation.x = Math.sin(t * 1.35) * 0.018 - Math.abs(swing) * 0.018;
   rig.head.rotation.y = Math.sin(t * 0.72) * 0.026;
   rig.head.rotation.z = Math.sin(t * 1.1) * 0.014;
+  // A quick, staggered blink keeps the faces from looking like static dolls.
+  const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
+  let blinkScale = 1;
+  if (blinkPhase < 0.07) blinkScale = 1 - (blinkPhase / 0.07) * 0.88;
+  else if (blinkPhase < 0.14) blinkScale = 0.12 + ((blinkPhase - 0.07) / 0.07) * 0.88;
+  rig.eyes.forEach((eye) => { eye.scale.y = blinkScale; });
 }
 
 function setOwnAvatar(a) {
@@ -520,13 +536,18 @@ function updateRemoteAvatar(id, data) {
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
     if (entry) scene.remove(entry.mesh);
-    entry = { mesh: createAvatar(data.avatar || {}), signature, lastMoveAt: 0 };
+    entry = { mesh: createAvatar(data.avatar || {}), signature, lastMoveAt: 0, lastX: x, lastZ: z };
     remotePlayers[id] = entry;
     scene.add(entry.mesh);
   }
-  if (Math.hypot(x - entry.mesh.position.x, z - entry.mesh.position.z) > 0.035) {
+  const dx = x - entry.lastX;
+  const dz = z - entry.lastZ;
+  if (Math.hypot(dx, dz) > 0.035) {
     entry.lastMoveAt = performance.now();
+    entry.mesh.rotation.y = Math.atan2(dx, dz);
   }
+  entry.lastX = x;
+  entry.lastZ = z;
   entry.mesh.position.set(x, 0, z);
 }
 function renderPlayers(players) {
