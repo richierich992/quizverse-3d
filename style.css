@@ -319,3 +319,25 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
 .wardrobe-shoes-swatch b:first-child{left:2px}.wardrobe-shoes-swatch b:last-child{right:2px}
 .wardrobe-item:hover .wardrobe-item-art{transform:scale(1.04)}
 .wardrobe-item-art{transition:transform .2s ease}
+
+
+/* Live standings shown during the reveal window. */
+.round-leaderboard{max-width:560px;margin:10px auto 0;padding:10px 12px;border:1px solid #5ba7c955;border-radius:12px;background:linear-gradient(135deg,rgba(15,42,65,.96),rgba(8,24,42,.96));box-shadow:inset 0 1px #ffffff0b}
+.round-leaderboard-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.round-leaderboard-head span{font-size:8px;font-weight:800;letter-spacing:1.8px;color:#83dfff}
+.round-leaderboard-head strong{font-size:8px;letter-spacing:.8px;color:#ffe49a}
+.round-leaderboard-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px}
+.round-rank-entry{display:flex;align-items:center;gap:7px;min-width:0;padding:6px 8px;border:1px solid #294b65;border-radius:8px;background:#0a1e32;color:#cfe4f5}
+.round-rank-entry.is-me{border-color:#65dbff;background:#103b54;box-shadow:inset 0 0 0 1px #65dbff33}
+.round-rank-number{flex:0 0 24px;text-align:center;font-size:10px;font-weight:800;color:#a8d8f0}
+.round-rank-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:700}
+.round-rank-score{flex:0 0 auto;font-size:9px;color:#9ce9ca}
+.round-rank-gap{grid-column:1/-1;text-align:center;height:4px;line-height:4px;color:#6b8ca7;font-size:10px}
+.round-rank-empty{grid-column:1/-1;margin:2px 0;text-align:center;color:#91abc0;font-size:9px}
+@media(max-width:650px){
+ .round-leaderboard{margin-top:7px;padding:8px}
+ .round-leaderboard-list{gap:4px}
+ .round-rank-entry{padding:5px 6px;gap:5px}
+ .round-rank-number{flex-basis:20px;font-size:9px}
+ .round-rank-name,.round-rank-score{font-size:8px}
+}
