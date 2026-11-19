@@ -23,6 +23,16 @@ assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel d
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
+assert.match(main, /function createArenaFloorTexture\(\)/, "Arena floor has a procedural textured composite finish");
+assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclosed indoor competition venue");
+assert.match(main, /createArenaScreenTexture\(\)/, "Arena includes a custom competition display screen");
+assert.match(main, /arenaRing\(23\.65, 0\.075, arenaMaterial\.lightCyan/, "Arena perimeter has a finished illuminated rim");
+assert.match(main, /for \(let row = 0; row < 3; row\+\+\)/, "Arena includes three stepped spectator seating rows");
+assert.match(main, /new THREE\.PointLight\(bayLights\[index\], 22, 19, 2\)/, "Four answer bays receive individual overhead light pools");
+assert.match(main, /roundedBoxGeometry\(7\.62, 0\.58, 7\.62, 0\.48\)/, "Answer platforms use layered physical bases with rounded edges");
+assert.match(main, /roundedBoxGeometry\(7\.08, 0\.30, 7\.08, 0\.34\)/, "Answer platforms have a raised rounded top surface");
+assert.doesNotMatch(main, /new THREE\.GridHelper\(50, 50/, "Bright construction grid is removed from the finished arena");
+assert.match(main, /renderer\.toneMapping = THREE\.ACESFilmicToneMapping/, "Arena uses a cinematic tone-mapping response");
 assert.match(main, /Object\.values\(remotePlayers\)/, "Spectator camera tracks the active player group");
 assert.match(main, /spectatorCameraPosition\.set\([\s\S]*?spectatorFocus\.z \+ distance/, "Spectator camera stays behind the live group at mid-game height");
 assert.match(main, /const spectatorActive = isHost && id === "hud"/, "Spectator presentation is enabled only for Host during gameplay");
