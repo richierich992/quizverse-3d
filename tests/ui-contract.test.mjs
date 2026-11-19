@@ -67,6 +67,9 @@ assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinkin
 assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
 assert.match(main, /entry\.mesh\.rotation\.y = Math\.atan2\(dx, dz\)/, "Remote players face their movement direction");
 assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
+const previewRefresh = main.slice(main.indexOf("function refreshAvatarPreview"), main.indexOf("function initAvatarPreview"));
+assert.match(previewRefresh, /if \(node\.geometry\) node\.geometry\.dispose\(\)/, "Replaced preview geometry is released");
+assert.doesNotMatch(previewRefresh, /node\.material\.dispose\(\)/, "Shared cached materials are not destroyed when changing wardrobes");
 assert.match(css, /border-radius:17px/, "Wardrobe cards use softer rounded styling");
 
 assert.match(main, /function wardrobeItemArt\(item\)/, "Wardrobe catalog uses visual item thumbnails");
