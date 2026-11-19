@@ -363,8 +363,8 @@ function createAvatar(a = {}) {
     brow.rotation.z = (x < 0 ? 1 : -1) * (a.face === "surprised" ? 0.18 : 0.07);
   }
   sphere(head, "#d88f79", 0, -0.095, 0.475, 0.052, 0.058, 0.035);
-  sphere(head, "#f08d9b", -0.34, -0.16, 0.375, 0.075, 0.04, 0.018);
-  sphere(head, "#f08d9b", 0.34, -0.16, 0.375, 0.075, 0.04, 0.018);
+  sphere(head, "#f08d9b", -0.34, -0.16, 0.455, 0.075, 0.04, 0.018);
+  sphere(head, "#f08d9b", 0.34, -0.16, 0.455, 0.075, 0.04, 0.018);
 
   if (a.face === "surprised") {
     sphere(head, "#57263d", 0, -0.27, 0.433, 0.07, 0.09, 0.03);
@@ -1066,12 +1066,10 @@ function refreshAvatarPreview() {
   if (!previewScene) return;
   if (previewAvatar) {
     previewScene.remove(previewAvatar);
+    // Avatar materials are cached and shared by all players; dispose only this
+    // preview instance's geometries when its appearance is replaced.
     previewAvatar.traverse((node) => {
       if (node.geometry) node.geometry.dispose();
-      if (node.material) {
-        if (Array.isArray(node.material)) node.material.forEach((material) => material.dispose());
-        else node.material.dispose();
-      }
     });
   }
   previewAvatar = createAvatar(appearance());
