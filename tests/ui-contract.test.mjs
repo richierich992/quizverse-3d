@@ -68,8 +68,10 @@ assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking 
 assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
 assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
 const previewRefresh = main.slice(main.indexOf("function refreshAvatarPreview"), main.indexOf("function initAvatarPreview"));
-assert.match(previewRefresh, /if \(node\.geometry\) node\.geometry\.dispose\(\)/, "Replaced preview geometry is released");
-assert.doesNotMatch(previewRefresh, /node\.material\.dispose\(\)/, "Shared cached materials are not destroyed when changing wardrobes");
+const disposeBlock = main.slice(main.indexOf("function disposeAvatar"), main.indexOf("function setAvatarNameTag"));
+assert.match(previewRefresh, /disposeAvatar\(previewAvatar\)/, "Wardrobe preview uses the shared safe cleanup routine");
+assert.match(disposeBlock, /node\.geometry && !node\.isSprite && !sharedAvatarGeometries\.has\(node\.geometry\)/, "Replaced avatar geometry is released without disposing shared geometry");
+assert.match(disposeBlock, /node\.userData\?\.isAvatarNameTag && node\.material/, "Only unique avatar nameplate materials are disposed");
 assert.match(css, /border-radius:17px/, "Wardrobe cards use softer rounded styling");
 
 assert.match(main, /function wardrobeItemArt\(item\)/, "Wardrobe catalog uses visual item thumbnails");
