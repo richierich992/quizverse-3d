@@ -14,12 +14,12 @@ const PLAYER_ONLY = location.pathname.endsWith("/player.html");
 const HOST_DRAFT_KEY = "quizverse-host-draft-v1";
 const HOST_SESSION_KEY = "quizverse-host-session-v1";
 const CHARACTER_PRESETS = [
-  { name:"Nova",role:"NEON RUNNER",mark:"⚡",avatar:{hair:"spiky",hairColor:"#18263c",face:"cool",skin:"#dfaa7e",shirt:"jersey",shirtColor:"#1ebad6",pants:"jogger",pantsColor:"#243b59",shoes:"sneakers",shoesColor:"#202a38",hat:"headphones"} },
-  { name:"Kai",role:"SKY EXPLORER",mark:"✦",avatar:{hair:"short",hairColor:"#754c32",face:"happy",skin:"#f3c9a5",shirt:"jacket",shirtColor:"#ef9b45",pants:"cargo",pantsColor:"#566b45",shoes:"boots",shoesColor:"#5b392b",hat:"cap"} },
-  { name:"Luna",role:"STAR SCHOLAR",mark:"✧",avatar:{hair:"long",hairColor:"#252b38",face:"smile",skin:"#bd8057",shirt:"hoodie",shirtColor:"#9b78e8",pants:"jeans",pantsColor:"#294a70",shoes:"high-top",shoesColor:"#e8e7df",hat:"none"} },
-  { name:"Rex",role:"ARENA CHAMP",mark:"★",avatar:{hair:"afro",hairColor:"#252b38",face:"happy",skin:"#8b563d",shirt:"jersey",shirtColor:"#e94e69",pants:"shorts",pantsColor:"#273344",shoes:"sneakers",shoesColor:"#f4c542",hat:"none"} },
-  { name:"Mika",role:"CREATIVE MAKER",mark:"❋",avatar:{hair:"bob",hairColor:"#b84935",face:"wink",skin:"#f3c9a5",shirt:"tee",shirtColor:"#27bd83",pants:"jogger",pantsColor:"#514477",shoes:"high-top",shoesColor:"#27bd83",hat:"beanie"} },
-  { name:"Zed",role:"TECH PILOT",mark:"◈",avatar:{hair:"sidepart",hairColor:"#e5bd68",face:"nerd",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#f0bb3e",pants:"cargo",pantsColor:"#263247",shoes:"boots",shoesColor:"#263247",hat:"headphones"} }
+  { name:"Nova",role:"SUNSHINE EXPLORER",mark:"✦",avatar:{hair:"spiky",hairColor:"#315b78",face:"happy",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#48c9d5",shirtAccent:"#ffe38a",pants:"jogger",pantsColor:"#536b91",shoes:"sneakers",shoesColor:"#f7fbff",hat:"headphones",hatAccent:"#ff9eb8"} },
+  { name:"Kai",role:"CLOUD ADVENTURER",mark:"☁",avatar:{hair:"short",hairColor:"#754c32",face:"smile",skin:"#f3c9a5",shirt:"jacket",shirtColor:"#ffad68",shirtAccent:"#fff0a5",pants:"cargo",pantsColor:"#7e9b73",shoes:"sneakers",shoesColor:"#fff4df",hat:"cap"} },
+  { name:"Luna",role:"RAINBOW DREAMER",mark:"✧",avatar:{hair:"long",hairColor:"#463454",face:"smile",skin:"#bd8057",shirt:"hoodie",shirtColor:"#aa91ee",shirtAccent:"#ffd0e9",pants:"jeans",pantsColor:"#668bc0",shoes:"high-top",shoesColor:"#f7eaf5",hat:"none"} },
+  { name:"Rex",role:"HAPPY CHAMPION",mark:"★",avatar:{hair:"curly",hairColor:"#342a35",face:"happy",skin:"#8b563d",shirt:"jersey",shirtColor:"#ff7184",shirtAccent:"#ffe18a",pants:"shorts",pantsColor:"#475b83",shoes:"sneakers",shoesColor:"#f4c542",hat:"none"} },
+  { name:"Mika",role:"COLOUR CREATOR",mark:"❋",avatar:{hair:"bob",hairColor:"#b84962",face:"wink",skin:"#f3c9a5",shirt:"tee",shirtColor:"#62d6a2",shirtAccent:"#fff2a3",pants:"jogger",pantsColor:"#7564a8",shoes:"high-top",shoesColor:"#fff0f6",hat:"beanie"} },
+  { name:"Zed",role:"LITTLE INVENTOR",mark:"◈",avatar:{hair:"sidepart",hairColor:"#ba9251",face:"nerd",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#ffd16b",shirtAccent:"#ffffff",pants:"cargo",pantsColor:"#53657f",shoes:"sneakers",shoesColor:"#edf5ff",hat:"headphones",hatAccent:"#75dff0"} }
 ];
 const DEFAULT_AVATAR={...CHARACTER_PRESETS[0].avatar};
 let selectedAvatar={...DEFAULT_AVATAR},selectedLookName="Nova",activeWardrobeCategory="look";
@@ -33,7 +33,7 @@ const WARDROBE_CATEGORIES=[
   {title:"WARNA RAMBUT",items:[["Hitam","#252b38"],["Cokelat","#754c32"],["Pirang","#e5bd68"],["Biru","#3988e8"],["Pink","#ed83bd"],["Ungu","#9a79df"],["Silver","#e8e7df"],["Merah","#b84935"]].map(([label,color])=>({label,color,patch:{hairColor:color}}))}
  ]},
  {id:"face",label:"Wajah",icon:"☻",title:"Face & skin",subtitle:"Atur ekspresi dan warna kulit karakter.",groups:[
-  {title:"EKSPRESI",items:[["Friendly","☺","smile"],["Happy","☻","happy"],["Cool","◉","cool"],["Wink","😉","wink"],["Surprised","○","surprised"],["Serious","▰","serious"],["Nerd","▣","nerd"],["Sleepy","◡","sleepy"]].map(([label,icon,value])=>({label,icon,patch:{face:value}}))},
+  {title:"EKSPRESI",items:[["Senyum","☺","smile"],["Super happy","☻","happy"],["Kedip mata","😉","wink"],["Terkejut lucu","○","surprised"],["Kacamata","▣","nerd"]].map(([label,icon,value])=>({label,icon,patch:{face:value}}))},
   {title:"WARNA KULIT",items:[["Fair","#f3c9a5"],["Warm","#dfaa7e"],["Tan","#bd8057"],["Brown","#8b563d"],["Deep","#59382e"]].map(([label,color])=>({label,color,patch:{skin:color}}))}
  ]},
  {id:"top",label:"Atasan",icon:"▣",title:"Upper wear",subtitle:"Kombinasikan model dan warna atasan.",groups:[
@@ -295,7 +295,8 @@ function createAvatar(a = {}) {
   torso.position.set(0, 1.29, 0);
   g.add(torso);
 
-  const torsoBody = roundedBox(torso, shirt, 0.80, 0.98, 0.60, 0.22, 0, 0, 0, 0.78);
+  const torsoBody = capsule(torso, shirt, 0.33, 0.40, 0, 0, 0, 0.82);
+  torsoBody.scale.z = 0.88;
   sphere(torso, pants, 0, -0.39, 0, 0.34, 0.20, 0.27);
   torus(torso, a.shirtAccent || "#eaf7ff", 0.19, 0.025, 0, 0.43, 0, Math.PI / 2);
 
@@ -382,99 +383,123 @@ function createAvatar(a = {}) {
   const leftLeg = makeLeg(-1);
   const rightLeg = makeLeg(1);
 
-  // Head, ears and face are kept together for subtle idle glances.
+  // Soft chibi head and friendly face. The face looks toward +Z.
   const head = new THREE.Group();
   head.position.set(0, 2.08, 0);
   g.add(head);
-  const headBase = roundedBox(head, skin, 1.02, 1.08, 0.74, 0.24, 0, 0, 0, 0.78);
-  sphere(head, skin, -0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
-  sphere(head, skin, 0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
-  sphere(head, a.earAccent || skin, -0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
-  sphere(head, a.earAccent || skin, 0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
+  const headBase = sphere(head, skin, 0, 0, 0, 0.56, 0.60, 0.48, 0.82);
 
-  const browColor = a.hair && a.hair !== "none" ? hair : "#604537";
+  // Small round ears with warm pink inner detail.
+  for (const side of [-1, 1]) {
+    sphere(head, skin, side * 0.525, -0.015, -0.005, 0.145, 0.17, 0.105);
+    sphere(head, "#e99a91", side * 0.56, -0.025, 0.072, 0.055, 0.082, 0.022);
+  }
+
+  const browColor = a.hair && a.hair !== "none" ? hair : "#78534a";
   const eyes = [];
-  for (const x of [-0.175, 0.175]) {
+  for (const x of [-0.19, 0.19]) {
     const eye = new THREE.Group();
     eye.position.x = x;
+    eye.userData.openScale = a.face === "wink" && x < 0 ? 0.18 : 1;
+    eye.scale.y = eye.userData.openScale;
     head.add(eye);
-    sphere(eye, "#ffffff", 0, 0.035, 0.405, 0.105, 0.132, 0.055, 0.34);
-    sphere(eye, a.eyeColor || "#4d9de0", 0.012, 0.025, 0.451, 0.061, 0.078, 0.027, 0.36);
-    sphere(eye, "#142239", 0.018, 0.024, 0.473, 0.034, 0.047, 0.018, 0.28);
-    sphere(eye, "#ffffff", -0.008, 0.060, 0.488, 0.016, 0.020, 0.009, 0.2);
+
+    // Big glossy eyes with two highlights make the expression feel lively.
+    sphere(eye, "#ffffff", 0, 0.035, 0.414, 0.132, 0.158, 0.060, 0.3);
+    sphere(eye, a.eyeColor || "#55a9db", 0.012, 0.018, 0.466, 0.083, 0.101, 0.032, 0.3);
+    sphere(eye, "#182b48", 0.018, 0.012, 0.493, 0.052, 0.067, 0.022, 0.26);
+    sphere(eye, "#ffffff", -0.018, 0.063, 0.513, 0.027, 0.031, 0.012, 0.2);
+    sphere(eye, "#ffffff", 0.040, -0.018, 0.512, 0.012, 0.014, 0.008, 0.2);
     eyes.push(eye);
-    const brow = sphere(head, browColor, x, 0.218, 0.412, 0.13, 0.035, 0.03);
-    brow.rotation.z = (x < 0 ? 1 : -1) * (a.face === "surprised" ? 0.18 : 0.07);
+
+    // Gentle curved eyebrows, never angled into an angry expression.
+    tube(head, [
+      [x - 0.092, 0.235, 0.405],
+      [x, 0.266, 0.423],
+      [x + 0.092, 0.235, 0.405]
+    ], browColor, 0.018);
   }
-  sphere(head, "#d88f79", 0, -0.095, 0.475, 0.052, 0.058, 0.035);
-  sphere(head, "#f08d9b", -0.34, -0.16, 0.455, 0.075, 0.04, 0.018);
-  sphere(head, "#f08d9b", 0.34, -0.16, 0.455, 0.075, 0.04, 0.018);
+
+  // Button nose, blush and a wide friendly smile.
+  sphere(head, "#e9a08c", 0, -0.105, 0.451, 0.052, 0.043, 0.032, 0.7);
+  sphere(head, "#f28f9e", -0.345, -0.165, 0.323, 0.105, 0.060, 0.018, 0.76);
+  sphere(head, "#f28f9e", 0.345, -0.165, 0.323, 0.105, 0.060, 0.018, 0.76);
+  sphere(head, "#ffd9cf", -0.345, -0.151, 0.341, 0.026, 0.012, 0.008, 0.55);
+  sphere(head, "#ffd9cf", 0.345, -0.151, 0.341, 0.026, 0.012, 0.008, 0.55);
 
   if (a.face === "surprised") {
-    sphere(head, "#57263d", 0, -0.27, 0.433, 0.07, 0.09, 0.03);
-    sphere(head, "#ef8295", 0, -0.30, 0.459, 0.031, 0.022, 0.01);
-  } else if (a.face === "serious" || a.face === "sleepy") {
-    box(head, "#633e48", 0.19, 0.026, 0.025, 0, -0.275, 0.43);
-    if (a.face === "sleepy") {
-      box(head, browColor, 0.17, 0.038, 0.026, -0.175, 0.04, 0.464);
-      box(head, browColor, 0.17, 0.038, 0.026, 0.175, 0.04, 0.464);
-    }
+    sphere(head, "#8f465c", 0, -0.285, 0.386, 0.070, 0.082, 0.025, 0.5);
+    sphere(head, "#f3a0ad", 0, -0.319, 0.407, 0.036, 0.022, 0.012, 0.5);
   } else {
-    tube(head, [[-0.125,-0.23,0.418],[-0.075,-0.285,0.445],[0,-0.30,0.45],[0.075,-0.285,0.445],[0.125,-0.23,0.418]],
-      a.face === "cool" ? "#663e4a" : "#8d4c51", 0.018);
-  }
-  if (a.face === "wink") {
-    box(head, browColor, 0.17, 0.034, 0.025, -0.175, 0.03, 0.464);
-  }
-  if (a.face === "nerd" || a.glasses || a.face === "cool") {
-    const frameColor = a.face === "cool" ? "#182d43" : "#29384e";
-    for (const x of [-0.175, 0.175]) {
-      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.018, 8, 24), mat(frameColor, 0.45));
-      lens.position.set(x, 0.035, 0.455);
-      head.add(lens);
-      if (a.face === "cool") sphere(head, "#31506d", x, 0.035, 0.45, 0.095, 0.095, 0.012, 0.32);
+    tube(head, [
+      [-0.145, -0.235, 0.355],
+      [-0.090, -0.285, 0.399],
+      [0, -0.302, 0.414],
+      [0.090, -0.285, 0.399],
+      [0.145, -0.235, 0.355]
+    ], "#9a5361", 0.022);
+    if (a.face === "happy" || a.face === "wink") {
+      sphere(head, "#fffaf5", 0, -0.278, 0.408, 0.078, 0.020, 0.009, 0.4);
     }
-    tube(head, [[-0.05,0.05,0.46],[0,0.065,0.48],[0.05,0.05,0.46]], frameColor, 0.014);
   }
 
-  // Hair silhouettes: layered volume, side locks and recognizable presets.
-  if (a.hair && a.hair !== "none") {
-    sphere(head, hair, 0, 0.40, -0.045, 0.52, 0.23, 0.46);
-    if (a.hair === "spiky" || a.hair === "short" || a.hair === "sidepart") {
-      sphere(head, hair, -0.20, 0.27, 0.31, 0.30, 0.13, 0.18);
-      sphere(head, hair, 0.14, 0.31, 0.27, 0.28, 0.11, 0.17);
-    } else if (a.hair === "long" || a.hair === "bob") {
-      sphere(head, hair, -0.20, 0.28, 0.30, 0.26, 0.11, 0.17);
-      sphere(head, hair, 0.12, 0.30, 0.28, 0.23, 0.10, 0.16);
+  // Round glasses are light and playful, not dark sunglasses.
+  if (a.face === "nerd" || a.glasses) {
+    const frameColor = "#55aebc";
+    for (const x of [-0.19, 0.19]) {
+      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.014, 8, 28), mat(frameColor, 0.42));
+      lens.position.set(x, 0.035, 0.475);
+      head.add(lens);
+      sphere(head, "#b9edee", x, 0.035, 0.436, 0.105, 0.108, 0.012, 0.3);
     }
+    tube(head, [[-0.045,0.045,0.475],[0,0.062,0.495],[0.045,0.045,0.475]], frameColor, 0.014);
+  }
+
+  // Hair is built from soft overlapping curls and rounded locks; no sharp spikes.
+  if (a.hair && a.hair !== "none") {
+    sphere(head, hair, 0, 0.405, -0.055, 0.535, 0.245, 0.46);
     if (a.hair === "spiky") {
-      for (let i = 0; i < 6; i++) {
-        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 10), mat(hair));
-        spike.position.set(-0.33 + i * 0.132, 0.60 + (i % 2) * 0.045, -0.02);
-        spike.rotation.z = (i - 2.5) * -0.15;
-        spike.castShadow = true;
-        head.add(spike);
+      for (let i = 0; i < 7; i++) {
+        const tuft = sphere(
+          head, hair, -0.34 + i * 0.113,
+          0.49 + (i % 2) * 0.055,
+          0.105 + (i % 3) * 0.018,
+          0.135, 0.18 + (i % 2) * 0.025, 0.16
+        );
+        tuft.rotation.z = (i - 3) * -0.12;
       }
+      sphere(head, hair, -0.15, 0.30, 0.335, 0.29, 0.13, 0.15);
+      sphere(head, hair, 0.13, 0.32, 0.32, 0.27, 0.12, 0.15);
+    } else if (a.hair === "short" || a.hair === "sidepart") {
+      sphere(head, hair, -0.22, 0.32, 0.31, 0.29, 0.15, 0.19);
+      sphere(head, hair, 0.10, 0.35, 0.32, 0.29, 0.13, 0.18);
+      if (a.hair === "sidepart") sphere(head, hair, -0.03, 0.43, 0.22, 0.23, 0.12, 0.22);
     } else if (a.hair === "long" || a.hair === "bob") {
-      sphere(head, hair, -0.45, -0.14, 0.015, 0.14, 0.43, 0.20);
-      sphere(head, hair, 0.45, -0.14, 0.015, 0.14, 0.43, 0.20);
-      if (a.hair === "bob") sphere(head, hair, 0, -0.39, 0.20, 0.42, 0.13, 0.19);
+      sphere(head, hair, -0.47, -0.10, 0.005, 0.15, 0.43, 0.20);
+      sphere(head, hair, 0.47, -0.10, 0.005, 0.15, 0.43, 0.20);
+      sphere(head, hair, -0.21, 0.31, 0.30, 0.28, 0.14, 0.18);
+      sphere(head, hair, 0.12, 0.33, 0.29, 0.28, 0.13, 0.18);
+      if (a.hair === "bob") sphere(head, hair, 0, -0.39, 0.12, 0.45, 0.13, 0.19);
     } else if (a.hair === "ponytail") {
-      sphere(head, hair, 0.36, 0.02, -0.38, 0.15, 0.33, 0.14);
-      sphere(head, hair, 0.36, -0.22, -0.40, 0.13, 0.16, 0.12);
+      sphere(head, hair, 0.38, 0.02, -0.38, 0.16, 0.30, 0.15);
+      sphere(head, hair, 0.40, -0.22, -0.39, 0.14, 0.16, 0.13);
+      sphere(head, hair, -0.18, 0.30, 0.31, 0.27, 0.13, 0.17);
     } else if (a.hair === "curly" || a.hair === "afro") {
-      const count = a.hair === "afro" ? 20 : 12;
+      const count = a.hair === "afro" ? 18 : 13;
       for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2;
-        const radius = a.hair === "afro" ? 0.40 : 0.34;
-        sphere(head, hair, Math.cos(angle) * radius, 0.37 + Math.sin(i * 2.1) * 0.065,
-          -0.035 + Math.sin(angle) * 0.30, 0.15, 0.15, 0.15);
+        const radius = a.hair === "afro" ? 0.39 : 0.33;
+        const curl = sphere(
+          head, hair,
+          Math.cos(angle) * radius,
+          0.37 + Math.sin(i * 2.1) * 0.055,
+          -0.04 + Math.sin(angle) * 0.29,
+          0.145, 0.145, 0.145
+        );
+        curl.rotation.z = Math.sin(angle) * 0.2;
       }
-    } else if (a.hair === "sidepart") {
-      sphere(head, hair, -0.19, 0.49, 0.25, 0.31, 0.12, 0.18);
-      sphere(head, hair, 0.13, 0.51, 0.12, 0.28, 0.10, 0.22);
-    } else if (a.hair === "short") {
-      sphere(head, hair, -0.25, 0.30, 0.28, 0.29, 0.13, 0.20);
+      sphere(head, hair, -0.18, 0.32, 0.30, 0.24, 0.13, 0.17);
+      sphere(head, hair, 0.14, 0.34, 0.29, 0.24, 0.12, 0.17);
     }
   }
 
@@ -541,17 +566,17 @@ function animateAvatar(mesh, time, moving = false) {
   rig.rightArm.rotation.z = (airborne ? -0.42 : 0.035) + swing * 0.10;
   rig.leftLeg.rotation.x = airborne ? -0.42 : -swing * 0.78;
   rig.rightLeg.rotation.x = airborne ? -0.42 : swing * 0.78;
-  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.022 : Math.sin(t * 2.0) * 0.012);
-  rig.torso.rotation.z = Math.sin(t * 1.5) * 0.012 + swing * 0.018;
-  rig.head.rotation.x = Math.sin(t * 1.35) * 0.022 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
-  rig.head.rotation.y = Math.sin(t * 0.72) * 0.026;
-  rig.head.rotation.z = Math.sin(t * 1.1) * 0.014;
+  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.035 : Math.sin(t * 2.5) * 0.024);
+  rig.torso.rotation.z = Math.sin(t * 1.5) * 0.018 + swing * 0.018;
+  rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
+  rig.head.rotation.y = Math.sin(t * 0.72) * 0.035;
+  rig.head.rotation.z = Math.sin(t * 1.1) * 0.022;
   // A quick, staggered blink keeps the faces from looking like static dolls.
   const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
   let blinkScale = 1;
   if (blinkPhase < 0.07) blinkScale = 1 - (blinkPhase / 0.07) * 0.88;
   else if (blinkPhase < 0.14) blinkScale = 0.12 + ((blinkPhase - 0.07) / 0.07) * 0.88;
-  rig.eyes.forEach((eye) => { eye.scale.y = blinkScale; });
+  rig.eyes.forEach((eye) => { eye.scale.y = eye.userData.openScale * blinkScale; });
 }
 
 function disposeAvatar(mesh) {
@@ -580,7 +605,7 @@ function setAvatarNameTag(mesh, name) {
   }
   const tag = labelSprite(label, "#58d6ff");
   tag.scale.set(1.92, 0.48, 1);
-  tag.position.set(0, 3.34, 0);
+  tag.position.set(0, 3.12, 0);
   tag.material.depthTest = false;
   tag.material.depthWrite = false;
   tag.renderOrder = 20;
