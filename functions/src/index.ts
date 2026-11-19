@@ -1,9 +1,10 @@
 import { initializeApp } from "firebase-admin/app";
-import { getDatabase, ServerValue } from "firebase-admin/database";
+import { getDatabase } from "firebase-admin/database";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { randomInt } from "node:crypto";
 
-const REGION = "us-central1"; // RTDB URL .firebaseio.com indicates us-central1.
+// The provided *.firebaseio.com URL belongs to the us-central1 RTDB location.
+const REGION = "us-central1";
 const DB_URL = "https://quizverse-a5e26-default-rtdb.firebaseio.com";
 initializeApp({ databaseURL: DB_URL });
 const db = getDatabase();
@@ -58,9 +59,6 @@ function validateQuestions(value: any): QuizQuestion[] {
 function publicQuestion(question: QuizQuestion) {
   return { id: question.id, category: question.category, question: question.question, options: question.options };
 }
-function requireMember(players: Record<string, any> | null, uid: string) {
-  if (!players || !players[uid]) throw new HttpsError("permission-denied", "Kamu bukan anggota room ini.");
-}
 function requireHost(meta: any, uid: string) {
   if (!meta || meta.hostUid !== uid) throw new HttpsError("permission-denied", "Hanya host yang dapat menjalankan perintah ini.");
 }
@@ -79,6 +77,8 @@ function makePublicQuestion(question: QuizQuestion, index: number, total: number
   };
 }
 
+// Host submits its selected question bank once. Full answer keys are written only
+// under /privateRooms; clients cannot read or write that path via database.rules.json.
 export const createRoom = onCall({ region: REGION, maxInstances: 5 }, async (request) => {
   const uid = uidOf(request);
   const data = request.data ?? {};
@@ -146,7 +146,7 @@ export const startGame = onCall({ region: REGION, maxInstances: 5 }, async (requ
   const roomRef = db.ref(`rooms/${pin}`);
   const [metaSnap, privateSnap, playersSnap, stateSnap] = await Promise.all([
     roomRef.child("meta").get(), db.ref(`privateRooms/${pin}`).get(),
-    roomRef.child("players").get(), roomRef.child("public`).get()
+    roomRef.child("players").get(), roomRef.child("public").get()
   ]);
   const meta = metaSnap.val();
   requireHost(meta, uid);
@@ -170,6 +170,7 @@ export const startGame = onCall({ region: REGION, maxInstances: 5 }, async (requ
   return { started: true };
 });
 
+// Only the server reads the answer key and mutates score/streak.
 export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
@@ -184,8 +185,7 @@ export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (
   ]);
   const state = stateSnap.val();
   const privateRoom = privateSnap.val();
-  const player = playerSnap.val();
-  if (!player) throw new HttpsError("permission-denied", "Kamu belum bergabung dengan room.");
+  if (!playerSnap.exists()) throw new HttpsError("permission-denied", "Kamu belum bergabung dengan room.");
   if (!state || state.phase !== "question") throw new HttpsError("failed-precondition", "Pertanyaan tidak sedang aktif.");
   const now = Date.now();
   if (now > Number(state.deadlineAt)) throw new HttpsError("deadline-exceeded", "Waktu menjawab sudah habis.");
@@ -204,8 +204,9 @@ export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (
   const playerRef = roomRef.child(`players/${uid}`);
   const playerTx = await playerRef.transaction((current) => {
     if (!current) return;
-    const nextStreak = isCorrect ? Number(current.streak || 0) + 1 : 0;
-    awarded = isCorrect ? 100 + remainingSeconds * 5 + Math.min(Number(current.streak || 0), 10) * 10 : 0;
+    const currentStreak = Number(current.streak || 0);
+    const nextStreak = isCorrect ? currentStreak + 1 : 0;
+    awarded = isCorrect ? 100 + remainingSeconds * 5 + Math.min(currentStreak, 10) * 10 : 0;
     current.score = Number(current.score || 0) + awarded;
     current.streak = nextStreak;
     current.hasAnswered = true;
@@ -215,17 +216,18 @@ export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (
     await answerRef.remove();
     throw new HttpsError("failed-precondition", "Data pemain tidak dapat diperbarui.");
   }
-  return { accepted: true, scoreDelta: awarded };
+  return { accepted: true };
 });
 
+// Any room member may advance only after the authoritative deadline.
+// This also keeps the game moving if the host disconnects.
 export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
   const roomRef = db.ref(`rooms/${pin}`);
-  const [metaSnap, playerSnap, stateSnap, privateSnap, playersSnap] = await Promise.all([
-    roomRef.child("meta").get(), roomRef.child(`players/${uid}`).get(),
-    roomRef.child("public").get(), db.ref(`privateRooms/${pin}`).get(),
-    roomRef.child("players").get()
+  const [playerSnap, stateSnap, privateSnap, playersSnap] = await Promise.all([
+    roomRef.child(`players/${uid}`).get(), roomRef.child("public").get(),
+    db.ref(`privateRooms/${pin}`).get(), roomRef.child("players").get()
   ]);
   if (!playerSnap.exists()) throw new HttpsError("permission-denied", "Kamu bukan anggota room.");
   const state = stateSnap.val();
@@ -271,4 +273,3 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
   }
   return { phase: nextState?.phase || state.phase, advanced: tx.committed };
 });
-
