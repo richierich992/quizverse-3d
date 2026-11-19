@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>QuizVerse 3D — Player Join</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main id="app">
+  <canvas id="world" aria-label="Arena 3D QuizVerse"></canvas>
+  <header class="topbar"><div class="brand">QUIZVERSE <span>3D LEARNING ARENA</span></div><div class="connection" id="connection">● Menghubungkan...</div></header>
+
+  <section id="roleScreen" class="panel role-panel hidden">
+    <div class="eyebrow">LEARN · EXPLORE · PLAY</div>
+    <h1>Bangun arena<br><em>belajarmu.</em></h1>
+    <p class="muted">Pilih karaktermu, masukkan PIN dari Host, lalu mulai bermain.</p>
+  </section>
+
+  <section id="setupScreen" class="panel setup-panel hidden">
+    <button id="backRole" class="back-link">← Kembali</button>
+    <div class="eyebrow" id="setupEyebrow">HOST CONSOLE</div>
+    <h1 id="setupTitle">Buat arena kuis.</h1>
+
+    <div id="hostFields" class="hidden">
+      <div class="host-setup-head">
+        <div><div class="eyebrow">HOST CONTROL</div><h2>Siapkan permainan</h2></div>
+        <span class="draft-pill"><i></i> Draft otomatis tersimpan</span>
+      </div>
+      <label class="field">Nama kuis<input id="quizTitle" maxlength="80" value="QuizVerse Challenge" placeholder="Contoh: Kuis Pengetahuan Umum"></label>
+      <label class="field duration-field">Waktu per soal
+        <select id="duration"><option value="15">15 detik</option><option value="10">10 detik</option><option value="20">20 detik</option><option value="30">30 detik</option></select>
+      </label>
+
+      <div class="section-rule"></div>
+      <div class="editor-title-row">
+        <div><div class="eyebrow">QUESTION BUILDER</div><h2>Susun pertanyaan</h2></div>
+        <span id="draftQuestionCount" class="count-pill">1 soal</span>
+      </div>
+      <p class="hint">Tulis pertanyaan, isi empat pilihan, lalu tandai jawaban yang benar. Draft tetap ada saat halaman di-refresh selama tab Host belum ditutup.</p>
+      <div id="questionEditorList" class="question-editor-list"></div>
+      <button id="addQuestion" type="button" class="secondary full">＋ Tambah pertanyaan</button>
+
+      <details class="json-import">
+        <summary>Import bank soal JSON (opsional)</summary>
+        <p class="hint">Bila sudah punya file JSON, kamu bisa mengimpornya. Kamu tetap bisa membuat semua soal langsung di halaman ini.</p>
+        <input id="questionFile" type="file" accept=".json,application/json">
+        <div id="fileStatus" class="file-status">Belum ada file diimpor.</div>
+      </details>
+
+      <div id="draftStatus" class="draft-status">Draft disimpan di tab ini.</div>
+      <button id="createRoom" class="primary full">Buat Room PIN</button>
+      <button id="clearDraft" type="button" class="text-button full">Hapus draft & tutup Host Console</button>
+    </div>
+
+    <div id="playerFields" class="hidden">
+      <div id="avatarStudio" class="avatar-studio">
+        <aside id="wardrobeNav" class="wardrobe-rail" aria-label="Kategori avatar"></aside>
+        <section class="wardrobe-browser">
+          <header class="wardrobe-browser-head">
+            <div><div class="eyebrow">AVATAR WARDROBE</div><h2 id="wardrobeTitle">Pilih gaya awal</h2><p id="wardrobeSubtitle">Bangun karakter unik untuk masuk ke arena.</p></div>
+            <span class="wardrobe-count" id="wardrobeCount">06 ITEMS</span>
+          </header>
+          <div id="wardrobeGrid" class="wardrobe-grid"></div>
+          <div class="wardrobe-help"><span>↔</span> Geser koleksi untuk melihat item lainnya</div>
+        </section>
+        <aside class="avatar-preview-panel">
+          <header class="preview-head"><div><span class="live-dot">LIVE PREVIEW</span><h2 id="previewCharacterName">Nova</h2><p id="previewCharacterRole">NEON RUNNER</p></div><span class="preview-orbit">✦</span></header>
+          <div class="preview-stage" id="avatarPreviewStage" aria-label="Preview karakter 3D"><canvas id="avatarPreviewCanvas" aria-label="Preview karakter 3D"></canvas><div class="preview-stage-caption">QUIZVERSE AVATAR LAB <span>● REALTIME</span></div></div>
+          <div class="preview-selection"><span>LOOK AKTIF</span><strong id="selectedCharacterLabel">Nova</strong></div>
+          <div class="preview-fields">
+            <label class="field">Nama pemain<input id="name" maxlength="18" value="Pemain" autocomplete="nickname" placeholder="Nama yang tampil di arena"></label>
+            <label class="field">ROOM PIN<input id="pin" maxlength="6" inputmode="numeric" placeholder="Masukkan 6 digit PIN"></label>
+          </div>
+          <button id="joinRoom" class="primary full">Simpan Karakter & Gabung</button>
+          <button id="resetAvatar" type="button" class="preview-reset">↺ Reset Avatar</button>
+        </aside>
+      </div>
+    </div>
+    <p id="status" class="status">Pastikan koneksi internet aktif.</p>
+  </section>
+
+  <section id="lobbyScreen" class="panel lobby-panel hidden">
+    <div class="eyebrow">ROOM LOBBY</div><h1>Siap bermain?</h1>
+    <div class="pin-card"><small>ROOM PIN</small><strong id="roomPin">000000</strong><button id="copyPin" class="copy-pin">Salin PIN</button></div>
+    <div class="lobby-meta"><span id="quizName">QuizVerse Challenge</span><span id="questionCount">0 pertanyaan</span></div>
+    <div id="playerInvite" class="invite-card hidden">
+      <div><small>LINK KHUSUS PEMAIN</small><span id="playerJoinLink">player.html</span></div>
+      <button id="copyPlayerLink" class="secondary">Salin link pemain</button>
+      <p class="hint">Bagikan link ini dan PIN di atas kepada peserta. Link ini langsung membuka halaman pemain.</p>
+    </div>
+    <h3>Pemain bergabung <span id="playerCount">0</span></h3><div id="roster" class="roster"></div>
+    <button id="startGame" class="primary full hidden">Mulai permainan</button>
+    <p id="hostNote" class="hint">Menunggu host memulai permainan...</p>
+  </section>
+
+  <section id="hud" class="hud hidden">
+    <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span>SKOR <b id="score">0</b></span></div>
+    <div class="question-card"><div class="eyebrow" id="category">PERTANYAAN</div><h2 id="question">Pertanyaan akan muncul di sini.</h2></div>
+    <div class="timer-row"><div class="timer"><i id="bar"></i></div><b id="time">15</b></div>
+    <div id="answers" class="answer-legend"></div>
+    <div id="feedback" class="feedback">Berlari ke platform dengan warna jawabanmu.</div>
+    <div class="hud-bottom"><span>STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span>WASD / Joystick</span></div>
+  </section>
+
+  <div id="touchControls" class="touch-controls hidden"><div id="stick" class="stick">●</div><button id="jump" class="jump-btn">JUMP</button></div>
+
+  <section id="endScreen" class="panel end-panel hidden">
+    <div class="eyebrow">GAME COMPLETED</div><h1>Podium <em>pemenang.</em></h1><div id="podium" class="podium"></div>
+    <button id="returnHome" class="primary full">Kembali ke awal</button>
+  </section>
+  <div class="version">QUIZVERSE 3D · REALTIME LEARNING</div>
+</main>
+<script>
+(() => {
+  function reportBootError(message) {
+    const connection = document.getElementById("connection");
+    if (connection) {
+      connection.textContent = "● Error aplikasi";
+      connection.style.color = "#ff9baa";
+    }
+    const status = document.getElementById("status");
+    if (status) {
+      status.textContent = "Aplikasi gagal dimuat: " + String(message || "Kesalahan JavaScript").slice(0, 220);
+      status.style.color = "#ff9baa";
+    }
+  }
+  window.addEventListener("error", (event) => {
+    if (event.error || event.message) reportBootError(event.error?.message || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    reportBootError(event.reason?.message || event.reason);
+  });
+})();
+</script>
+<script type="module" src="./main.js"></script>
+</body></html>

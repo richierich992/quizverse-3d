@@ -1,0 +1,33 @@
+name: Validate QuizVerse
+
+on:
+  push:
+    branches:
+      - main
+      - feature/server-authoritative-quiz
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install test tools
+        run: npm install --no-audit --no-fund
+      - name: Check browser JavaScript syntax
+        run: npm run check
+      - name: Test Host/Player UI contract
+        run: npm run test:ui
+      - name: Validate Firebase JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('firebase.json','utf8'))"
+      - name: Test Realtime Database Security Rules in emulator
+        run: npm run test:rules
