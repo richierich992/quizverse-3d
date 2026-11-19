@@ -8,8 +8,8 @@
           ".validate": "newData.child('hostUid').val() === auth.uid || data.child('hostUid').val() === auth.uid"
         },
         "public": {
-          ".write": "auth != null && auth.uid === root.child('rooms').child($roomPin).child('meta').child('hostUid').val() && ((!data.exists() && newData.child('phase').val() === 'lobby') || (data.child('phase').val() === 'lobby' && newData.child('phase').val() === 'question' && newData.child('questionIndex').val() === 0 && root.child('answerKeys').child($roomPin).child('current').exists()) || (data.child('phase').val() === 'question' && now >= data.child('deadlineAt').val() && newData.child('phase').val() === 'reveal' && newData.child('correctOption').val() === root.child('answerKeys').child($roomPin).child('current').child('answerIndex').val()) || (data.child('phase').val() === 'reveal' && now >= data.child('revealEndsAt').val() && newData.child('phase').val() === 'question' && newData.child('questionIndex').val() === data.child('questionIndex').val() + 1 && root.child('answerKeys').child($roomPin).child('current').exists()) || (data.child('phase').val() === 'reveal' && now >= data.child('revealEndsAt').val() && newData.child('phase').val() === 'finished'))",
-          ".validate": "newData.hasChildren(['phase','questionIndex','totalQuestions','durationSeconds','question','deadlineAt','correctOption','revealEndsAt'])"
+          ".write": "auth != null && auth.uid === root.child('rooms').child($roomPin).child('meta').child('hostUid').val() && ((!data.exists() && newData.child('phase').val() === 'lobby') || (data.child('phase').val() === 'lobby' && newData.child('phase').val() === 'question' && newData.child('questionIndex').val() === 0 && root.child('answerKeys').child($roomPin).child('questions').child('0').exists()) || (data.child('phase').val() === 'question' && now >= data.child('deadlineAt').val() && newData.child('phase').val() === 'reveal' && newData.child('correctOption').val() === root.child('answerKeys').child($roomPin).child('questions').child(data.child('questionIndex').val()).child('answerIndex').val()) || (data.child('phase').val() === 'reveal' && now >= data.child('revealEndsAt').val() && newData.child('phase').val() === 'question' && newData.child('questionIndex').val() === data.child('questionIndex').val() + 1 && root.child('answerKeys').child($roomPin).child('questions').child(newData.child('questionIndex').val()).exists()) || (data.child('phase').val() === 'reveal' && now >= data.child('revealEndsAt').val() && newData.child('phase').val() === 'finished'))",
+          ".validate": "newData.hasChildren(['phase','questionIndex','totalQuestions','durationSeconds','question'])"
         },
         "players": {
           "$uid": {
@@ -30,10 +30,10 @@
               ".validate": "newData.isNumber() && newData.val() >= -22 && newData.val() <= 22"
             },
             "score": {
-              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (root.child('rooms').child($roomPin).child('public').child('phase').val() === 'reveal' && root.child('submissions').child($roomPin).child('current').child($uid).exists() && root.child('submissions').child($roomPin).child('current').child($uid).child('questionIndex').val() === root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && data.parent().child('lastScoredQuestionIndex').val() < root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && newData.val() === data.val() + (root.child('submissions').child($roomPin).child('current').child($uid).child('answerIndex').val() === root.child('answerKeys').child($roomPin).child('current').child('answerIndex').val() ? 100 : 0)))"
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (root.child('rooms').child($roomPin).child('public').child('phase').val() === 'reveal' && root.child('submissions').child($roomPin).child('current').child($uid).exists() && root.child('submissions').child($roomPin).child('current').child($uid).child('questionIndex').val() === root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && data.parent().child('lastScoredQuestionIndex').val() < root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && newData.val() === data.val() + (root.child('submissions').child($roomPin).child('current').child($uid).child('answerIndex').val() === root.child('answerKeys').child($roomPin).child('questions').child(root.child('rooms').child($roomPin).child('public').child('questionIndex').val()).child('answerIndex').val() ? 100 : 0)))"
             },
             "streak": {
-              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (root.child('rooms').child($roomPin).child('public').child('phase').val() === 'reveal' && data.parent().child('lastScoredQuestionIndex').val() < root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && newData.val() === (root.child('submissions').child($roomPin).child('current').child($uid).exists() && root.child('submissions').child($roomPin).child('current').child($uid).child('answerIndex').val() === root.child('answerKeys').child($roomPin).child('current').child('answerIndex').val() ? data.val() + 1 : 0)))"
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (root.child('rooms').child($roomPin).child('public').child('phase').val() === 'reveal' && data.parent().child('lastScoredQuestionIndex').val() < root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && newData.val() === (root.child('submissions').child($roomPin).child('current').child($uid).exists() && root.child('submissions').child($roomPin).child('current').child($uid).child('answerIndex').val() === root.child('answerKeys').child($roomPin).child('questions').child(root.child('rooms').child($roomPin).child('public').child('questionIndex').val()).child('answerIndex').val() ? data.val() + 1 : 0)))"
             },
             "lastScoredQuestionIndex": {
               ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === -1) || newData.val() === data.val() || (root.child('rooms').child($roomPin).child('public').child('phase').val() === 'reveal' && newData.val() === root.child('rooms').child($roomPin).child('public').child('questionIndex').val() && data.val() < newData.val()))"
@@ -47,11 +47,8 @@
     },
     "answerKeys": {
       "$roomPin": {
-        "current": {
-          ".read": false,
-          ".write": "auth != null && auth.uid === root.child('rooms').child($roomPin).child('meta').child('hostUid').val()",
-          ".validate": "newData.hasChildren(['answerIndex','explanation']) && newData.child('answerIndex').isNumber() && newData.child('answerIndex').val() >= 0 && newData.child('answerIndex').val() <= 3"
-        }
+        ".read": false,
+        ".write": "auth != null && auth.uid === root.child('rooms').child($roomPin).child('meta').child('hostUid').val()"
       }
     },
     "submissions": {
