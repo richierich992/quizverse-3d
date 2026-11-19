@@ -1,0 +1,30 @@
+{
+  "title": "Contoh Kuis QuizVerse",
+  "durationSeconds": 15,
+  "questions": [
+    {
+      "id": "demo-001",
+      "category": "Sains",
+      "question": "Planet yang dikenal sebagai Planet Merah adalah…",
+      "options": ["Venus", "Mars", "Jupiter", "Saturnus"],
+      "answerIndex": 1,
+      "explanation": "Mars tampak merah karena permukaannya mengandung besi oksida."
+    },
+    {
+      "id": "demo-002",
+      "category": "Geografi",
+      "question": "Samudra terbesar di bumi adalah…",
+      "options": ["Atlantik", "Hindia", "Pasifik", "Arktik"],
+      "answerIndex": 2,
+      "explanation": "Samudra Pasifik merupakan samudra terluas."
+    },
+    {
+      "id": "demo-003",
+      "category": "Matematika",
+      "question": "Berapakah hasil dari 12 × 8?",
+      "options": ["86", "92", "96", "108"],
+      "answerIndex": 2,
+      "explanation": "12 dikalikan 8 sama dengan 96."
+    }
+  ]
+}
