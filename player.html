@@ -55,22 +55,28 @@
     </div>
 
     <div id="playerFields" class="hidden">
-      <div class="section-rule"></div><div class="eyebrow">JOIN GAME</div>
-      <label class="field">Nama pemain<input id="name" maxlength="18" value="Pemain" autocomplete="nickname" placeholder="Nama yang tampil di arena"></label>
-
-      <div id="avatarStudio">
-        <div class="avatar-heading"><div><b>Pilih karakter</b><small>Geser kartu atau gunakan tombol panah untuk melihat karakter.</small></div><span class="live-dot">3D AVATAR</span></div>
-        <div class="character-carousel">
-          <button id="characterPrev" class="carousel-arrow" type="button" aria-label="Karakter sebelumnya">‹</button>
-          <div id="characterTrack" class="character-track" aria-label="Pilihan karakter"></div>
-          <button id="characterNext" class="carousel-arrow" type="button" aria-label="Karakter berikutnya">›</button>
-        </div>
-        <div class="character-selected">Dipilih: <b id="selectedCharacterLabel">Nova</b></div>
+      <div id="avatarStudio" class="avatar-studio">
+        <aside id="wardrobeNav" class="wardrobe-rail" aria-label="Kategori avatar"></aside>
+        <section class="wardrobe-browser">
+          <header class="wardrobe-browser-head">
+            <div><div class="eyebrow">AVATAR WARDROBE</div><h2 id="wardrobeTitle">Pilih gaya awal</h2><p id="wardrobeSubtitle">Bangun karakter unik untuk masuk ke arena.</p></div>
+            <span class="wardrobe-count" id="wardrobeCount">06 ITEMS</span>
+          </header>
+          <div id="wardrobeGrid" class="wardrobe-grid"></div>
+          <div class="wardrobe-help"><span>↔</span> Geser koleksi untuk melihat item lainnya</div>
+        </section>
+        <aside class="avatar-preview-panel">
+          <header class="preview-head"><div><span class="live-dot">LIVE PREVIEW</span><h2 id="previewCharacterName">Nova</h2><p id="previewCharacterRole">NEON RUNNER</p></div><span class="preview-orbit">✦</span></header>
+          <div class="preview-stage"><canvas id="avatarPreviewCanvas" aria-label="Preview karakter 3D"></canvas><div class="preview-stage-caption">QUIZVERSE AVATAR LAB <span>● REALTIME</span></div></div>
+          <div class="preview-selection"><span>LOOK AKTIF</span><strong id="selectedCharacterLabel">Nova</strong></div>
+          <div class="preview-fields">
+            <label class="field">Nama pemain<input id="name" maxlength="18" value="Pemain" autocomplete="nickname" placeholder="Nama yang tampil di arena"></label>
+            <label class="field">ROOM PIN<input id="pin" maxlength="6" inputmode="numeric" placeholder="Masukkan 6 digit PIN"></label>
+          </div>
+          <button id="joinRoom" class="primary full">Simpan Karakter & Gabung</button>
+          <button id="resetAvatar" type="button" class="preview-reset">↺ Reset Avatar</button>
+        </aside>
       </div>
-
-      <div class="section-rule"></div>
-      <label class="field">Room PIN<input id="pin" maxlength="6" inputmode="numeric" placeholder="Masukkan 6 digit PIN"></label>
-      <button id="joinRoom" class="primary full">Gabung ke permainan</button>
     </div>
     <p id="status" class="status">Pastikan koneksi internet aktif.</p>
   </section>

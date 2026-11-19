@@ -14,14 +14,44 @@ const PLAYER_ONLY = location.pathname.endsWith("/player.html");
 const HOST_DRAFT_KEY = "quizverse-host-draft-v1";
 const HOST_SESSION_KEY = "quizverse-host-session-v1";
 const CHARACTER_PRESETS = [
-  { name: "Nova", role: "NEON RUNNER", mark: "⚡", avatar: { hair: "spiky", hairColor: "#18263c", face: "cool", skin: "#dfaa7e", shirt: "jersey", shirtColor: "#1ebad6", pants: "jogger", pantsColor: "#243b59", hat: "headphones" } },
-  { name: "Kai", role: "SKY EXPLORER", mark: "✦", avatar: { hair: "short", hairColor: "#754c32", face: "happy", skin: "#f3c9a5", shirt: "jacket", shirtColor: "#ef9b45", pants: "cargo", pantsColor: "#566b45", hat: "cap" } },
-  { name: "Luna", role: "STAR SCHOLAR", mark: "✧", avatar: { hair: "long", hairColor: "#252b38", face: "smile", skin: "#bd8057", shirt: "hoodie", shirtColor: "#9b78e8", pants: "jeans", pantsColor: "#294a70", hat: "none" } },
-  { name: "Rex", role: "ARENA CHAMP", mark: "★", avatar: { hair: "afro", hairColor: "#252b38", face: "happy", skin: "#8b563d", shirt: "jersey", shirtColor: "#e94e69", pants: "shorts", pantsColor: "#273344", hat: "none" } },
-  { name: "Mika", role: "CREATIVE MAKER", mark: "❋", avatar: { hair: "bob", hairColor: "#b84935", face: "wink", skin: "#f3c9a5", shirt: "tee", shirtColor: "#27bd83", pants: "jogger", pantsColor: "#514477", hat: "beanie" } },
-  { name: "Zed", role: "TECH PILOT", mark: "◈", avatar: { hair: "sidepart", hairColor: "#e5bd68", face: "nerd", skin: "#dfaa7e", shirt: "hoodie", shirtColor: "#f0bb3e", pants: "cargo", pantsColor: "#263247", hat: "headphones" } }
+  { name:"Nova",role:"NEON RUNNER",mark:"⚡",avatar:{hair:"spiky",hairColor:"#18263c",face:"cool",skin:"#dfaa7e",shirt:"jersey",shirtColor:"#1ebad6",pants:"jogger",pantsColor:"#243b59",shoes:"sneakers",shoesColor:"#202a38",hat:"headphones"} },
+  { name:"Kai",role:"SKY EXPLORER",mark:"✦",avatar:{hair:"short",hairColor:"#754c32",face:"happy",skin:"#f3c9a5",shirt:"jacket",shirtColor:"#ef9b45",pants:"cargo",pantsColor:"#566b45",shoes:"boots",shoesColor:"#5b392b",hat:"cap"} },
+  { name:"Luna",role:"STAR SCHOLAR",mark:"✧",avatar:{hair:"long",hairColor:"#252b38",face:"smile",skin:"#bd8057",shirt:"hoodie",shirtColor:"#9b78e8",pants:"jeans",pantsColor:"#294a70",shoes:"high-top",shoesColor:"#e8e7df",hat:"none"} },
+  { name:"Rex",role:"ARENA CHAMP",mark:"★",avatar:{hair:"afro",hairColor:"#252b38",face:"happy",skin:"#8b563d",shirt:"jersey",shirtColor:"#e94e69",pants:"shorts",pantsColor:"#273344",shoes:"sneakers",shoesColor:"#f4c542",hat:"none"} },
+  { name:"Mika",role:"CREATIVE MAKER",mark:"❋",avatar:{hair:"bob",hairColor:"#b84935",face:"wink",skin:"#f3c9a5",shirt:"tee",shirtColor:"#27bd83",pants:"jogger",pantsColor:"#514477",shoes:"high-top",shoesColor:"#27bd83",hat:"beanie"} },
+  { name:"Zed",role:"TECH PILOT",mark:"◈",avatar:{hair:"sidepart",hairColor:"#e5bd68",face:"nerd",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#f0bb3e",pants:"cargo",pantsColor:"#263247",shoes:"boots",shoesColor:"#263247",hat:"headphones"} }
 ];
-let selectedCharacterIndex = 0;
+const DEFAULT_AVATAR={...CHARACTER_PRESETS[0].avatar};
+let selectedAvatar={...DEFAULT_AVATAR},selectedLookName="Nova",activeWardrobeCategory="look";
+let previewScene=null,previewCamera=null,previewRenderer=null,previewAvatar=null;
+const WARDROBE_CATEGORIES=[
+ {id:"look",label:"Gaya",icon:"✦",title:"Pilih gaya awal",subtitle:"Mulai dari karakter siap pakai, lalu ubah sesukamu.",groups:[
+  {title:"KARAKTER PILIHAN",items:CHARACTER_PRESETS.map(p=>({label:p.name,detail:p.role,icon:p.mark,preset:p}))}
+ ]},
+ {id:"hair",label:"Rambut",icon:"⌁",title:"Hair studio",subtitle:"Pilih bentuk dan warna rambut.",groups:[
+  {title:"MODEL RAMBUT",items:[["Short cut","▰","short"],["Spiky","✦","spiky"],["Long","♧","long"],["Bob","◒","bob"],["Ponytail","♢","ponytail"],["Curly","❋","curly"],["Afro","✺","afro"],["Side part","◖","sidepart"],["Botak","○","none"]].map(([label,icon,value])=>({label,icon,patch:{hair:value}}))},
+  {title:"WARNA RAMBUT",items:[["Hitam","#252b38"],["Cokelat","#754c32"],["Pirang","#e5bd68"],["Biru","#3988e8"],["Pink","#ed83bd"],["Ungu","#9a79df"],["Silver","#e8e7df"],["Merah","#b84935"]].map(([label,color])=>({label,color,patch:{hairColor:color}}))}
+ ]},
+ {id:"face",label:"Wajah",icon:"☻",title:"Face & skin",subtitle:"Atur ekspresi dan warna kulit karakter.",groups:[
+  {title:"EKSPRESI",items:[["Friendly","☺","smile"],["Happy","☻","happy"],["Cool","◉","cool"],["Wink","😉","wink"],["Surprised","○","surprised"],["Serious","▰","serious"],["Nerd","▣","nerd"],["Sleepy","◡","sleepy"]].map(([label,icon,value])=>({label,icon,patch:{face:value}}))},
+  {title:"WARNA KULIT",items:[["Fair","#f3c9a5"],["Warm","#dfaa7e"],["Tan","#bd8057"],["Brown","#8b563d"],["Deep","#59382e"]].map(([label,color])=>({label,color,patch:{skin:color}}))}
+ ]},
+ {id:"top",label:"Atasan",icon:"▣",title:"Upper wear",subtitle:"Kombinasikan model dan warna atasan.",groups:[
+  {title:"MODEL ATASAN",items:[["T-shirt","👕","tee"],["Hoodie","🧥","hoodie"],["Jersey","⚽","jersey"],["Jacket","◫","jacket"]].map(([label,icon,value])=>({label,icon,patch:{shirt:value}}))},
+  {title:"WARNA ATASAN",items:[["Sky blue","#38bdf8"],["Crimson","#ef5268"],["Emerald","#27bd83"],["Gold","#f0bb3e"],["Purple","#9468df"],["Orange","#f28b42"],["White","#f1f5f9"],["Midnight","#263247"],["Pink","#ed82b7"],["Teal","#168f98"],["Olive","#a6b65b"],["Rust","#a64c38"]].map(([label,color])=>({label,color,patch:{shirtColor:color}}))}
+ ]},
+ {id:"bottom",label:"Bawahan",icon:"▤",title:"Bottomwear",subtitle:"Pilih celana untuk gaya karaktermu.",groups:[
+  {title:"MODEL BAWAHAN",items:[["Jeans","▤","jeans"],["Jogger","▥","jogger"],["Cargo","▦","cargo"],["Shorts","▱","shorts"]].map(([label,icon,value])=>({label,icon,patch:{pants:value}}))},
+  {title:"WARNA BAWAHAN",items:[["Denim","#294a70"],["Charcoal","#273344"],["Slate","#65758a"],["Khaki","#b49b68"],["Olive","#566b45"],["Burgundy","#8b4352"],["Ivory","#dce4ed"],["Purple","#514477"]].map(([label,color])=>({label,color,patch:{pantsColor:color}}))}
+ ]},
+ {id:"shoes",label:"Sepatu",icon:"⌑",title:"Footwear",subtitle:"Lengkapi penampilan dari ujung kepala sampai kaki.",groups:[
+  {title:"MODEL SEPATU",items:[["Sneakers","👟","sneakers"],["High top","🥾","high-top"],["Boots","👢","boots"]].map(([label,icon,value])=>({label,icon,patch:{shoes:value}}))},
+  {title:"WARNA SEPATU",items:[["Midnight","#202a38"],["White","#f1f5f9"],["Gold","#f4c542"],["Crimson","#ef5268"],["Emerald","#27bd83"],["Purple","#9468df"],["Brown","#754c32"],["Teal","#168f98"]].map(([label,color])=>({label,color,patch:{shoesColor:color}}))}
+ ]},
+ {id:"accessories",label:"Aksesori",icon:"◇",title:"Accessories",subtitle:"Tambahkan sentuhan terakhir untuk karakter.",groups:[
+  {title:"AKSESORI KEPALA",items:[["Tanpa aksesori","○","none"],["Baseball cap","🧢","cap"],["Beanie","♧","beanie"],["Crown","♛","crown"],["Headphones","🎧","headphones"]].map(([label,icon,value])=>({label,icon,patch:{hat:value}}))}
+ ]}
+];
 const PAD_POINTS = [
   { x: -7, z: -6 }, { x: 7, z: -6 }, { x: -7, z: 6 }, { x: 7, z: 6 }
 ];
@@ -150,7 +180,7 @@ for (let i = 0; i < 10; i++) {
 }
 
 function appearance() {
-  return { ...CHARACTER_PRESETS[selectedCharacterIndex].avatar };
+  return { ...selectedAvatar };
 }
 function createAvatar(a = {}) {
   const g = new THREE.Group();
@@ -162,8 +192,14 @@ function createAvatar(a = {}) {
   cube(g, 0.25, 0.77, 0.3, shirt, 0.57, 1.1, 0);
   cube(g, 0.33, a.pants === "shorts" ? 0.52 : 0.72, 0.36, pants, -0.22, 0.39, 0);
   cube(g, 0.33, a.pants === "shorts" ? 0.52 : 0.72, 0.36, pants, 0.22, 0.39, 0);
-  cube(g, 0.34, 0.19, 0.46, "#202a38", -0.22, 0.055, 0.01);
-  cube(g, 0.34, 0.19, 0.46, "#202a38", 0.22, 0.055, 0.01);
+  const shoeColor = a.shoesColor || "#202a38";
+  const shoeHeight = a.shoes === "boots" ? 0.28 : (a.shoes === "high-top" ? 0.23 : 0.17);
+  cube(g, 0.36, shoeHeight, 0.5, shoeColor, -0.22, shoeHeight / 2, 0.03);
+  cube(g, 0.36, shoeHeight, 0.5, shoeColor, 0.22, shoeHeight / 2, 0.03);
+  if (a.shoes === "high-top") {
+    cube(g, 0.37, 0.045, 0.51, "#f4f8ff", -0.22, shoeHeight - 0.025, 0.03);
+    cube(g, 0.37, 0.045, 0.51, "#f4f8ff", 0.22, shoeHeight - 0.025, 0.03);
+  }
   if (a.shirt === "hoodie") {
     cube(g, 0.48, 0.17, 0.18, shirt, 0, 1.57, 0.2);
     cube(g, 0.1, 0.28, 0.06, "#d8e4ef", 0, 1.17, -0.245);
@@ -665,56 +701,105 @@ function validateQuestionBank() {
     questions
   };
 }
-function selectCharacter(index, scrollCard = true) {
-  selectedCharacterIndex = (index + CHARACTER_PRESETS.length) % CHARACTER_PRESETS.length;
-  const preset = CHARACTER_PRESETS[selectedCharacterIndex];
-  $("selectedCharacterLabel").textContent = preset.name;
-  $("characterTrack").querySelectorAll(".character-card").forEach((card, cardIndex) => {
-    card.classList.toggle("selected", cardIndex === selectedCharacterIndex);
-    card.setAttribute("aria-pressed", cardIndex === selectedCharacterIndex ? "true" : "false");
-  });
-  if (scrollCard) {
-    const card = $("characterTrack").children[selectedCharacterIndex];
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }
-  if (PLAYER_ONLY) setOwnAvatar(appearance());
+function isWardrobeItemSelected(item) {
+  if (item.preset) return JSON.stringify(selectedAvatar) === JSON.stringify(item.preset.avatar);
+  return Object.entries(item.patch || {}).every(([key,value])=>selectedAvatar[key]===value);
 }
-function renderCharacterCarousel() {
-  const track = $("characterTrack");
-  if (!track) return;
-  track.replaceChildren();
-  CHARACTER_PRESETS.forEach((preset, index) => {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "character-card";
-    card.dataset.characterIndex = String(index);
-    const avatar = preset.avatar;
-    card.innerHTML = `
-      <span class="character-portrait" style="--shirt:${avatar.shirtColor};--skin:${avatar.skin};--hair:${avatar.hairColor};--pants:${avatar.pantsColor}">
-        <i class="avatar-hair"></i><i class="avatar-head"><b></b><b></b></i><i class="avatar-body"></i><i class="avatar-legs"></i><i class="avatar-mark">${preset.mark}</i>
-      </span>
-      <span class="character-name">${escapeHtml(preset.name)}</span>
-      <span class="character-role">${escapeHtml(preset.role)}</span>
-      <span class="character-check">✓</span>`;
-    card.addEventListener("click", () => selectCharacter(index, false));
-    track.appendChild(card);
-  });
-  track.addEventListener("scroll", () => {
-    if (track._selectFrame) return;
-    track._selectFrame = requestAnimationFrame(() => {
-      const center = track.getBoundingClientRect().left + track.clientWidth / 2;
-      let closest = 0, distance = Infinity;
-      [...track.children].forEach((card, index) => {
-        const rect = card.getBoundingClientRect();
-        const delta = Math.abs(rect.left + rect.width / 2 - center);
-        if (delta < distance) { distance = delta; closest = index; }
-      });
-      if (closest !== selectedCharacterIndex) selectCharacter(closest, false);
-      track._selectFrame = 0;
-    });
-  }, { passive: true });
-  selectCharacter(selectedCharacterIndex, false);
+function updateAvatarSelectionLabels() {
+  $("selectedCharacterLabel").textContent=selectedLookName;
+  $("previewCharacterName").textContent=selectedLookName;
+  const preset=CHARACTER_PRESETS.find(p=>p.name===selectedLookName);
+  $("previewCharacterRole").textContent=preset?.role||"CUSTOM AVATAR";
 }
+function refreshAvatarAppearance() {
+  setOwnAvatar(appearance());
+  refreshAvatarPreview();
+  updateAvatarSelectionLabels();
+  renderWardrobeGrid();
+}
+function renderWardrobeNav() {
+  $("wardrobeNav").innerHTML=WARDROBE_CATEGORIES.map(c=>`
+    <button type="button" class="wardrobe-nav-item ${c.id===activeWardrobeCategory?"active":""}" data-wardrobe-category="${c.id}" aria-label="${c.label}" title="${c.label}">
+      <span>${c.icon}</span><small>${c.label}</small>
+    </button>`).join("");
+}
+function renderWardrobeGrid() {
+  const c=WARDROBE_CATEGORIES.find(x=>x.id===activeWardrobeCategory)||WARDROBE_CATEGORIES[0];
+  $("wardrobeTitle").textContent=c.title;
+  $("wardrobeSubtitle").textContent=c.subtitle;
+  $("wardrobeCount").textContent=String(c.groups.reduce((n,g)=>n+g.items.length,0)).padStart(2,"0")+" ITEMS";
+  $("wardrobeGrid").innerHTML=c.groups.map((g,gi)=>`
+    <section class="wardrobe-group">
+      <header class="wardrobe-group-head"><strong>${g.title}</strong><span>${String(g.items.length).padStart(2,"0")}</span></header>
+      <div class="wardrobe-items">${g.items.map((item,ii)=>`
+        <button type="button" class="wardrobe-item ${isWardrobeItemSelected(item)?"selected":""}" data-group-index="${gi}" data-item-index="${ii}" aria-pressed="${isWardrobeItemSelected(item)}">
+          <span class="wardrobe-item-art ${item.color?"is-color":""}" ${item.color?`style="--item-color:${item.color}"`:""}>
+            ${item.color?'<i class="wardrobe-color-chip"></i>':`<b>${item.icon||"✦"}</b>`}
+          </span><span class="wardrobe-item-label">${item.label}</span>${item.detail?`<small>${item.detail}</small>`:""}<span class="wardrobe-item-check">✓</span>
+        </button>`).join("")}</div>
+    </section>`).join("");
+}
+function selectWardrobeItem(gi,ii) {
+  const c=WARDROBE_CATEGORIES.find(x=>x.id===activeWardrobeCategory);
+  const item=c?.groups[gi]?.items[ii]; if(!item)return;
+  if(item.preset){selectedAvatar={...item.preset.avatar};selectedLookName=item.preset.name;}
+  else {Object.assign(selectedAvatar,item.patch||{});selectedLookName="Custom Avatar";}
+  refreshAvatarAppearance();
+}
+function selectWardrobeCategory(id) {
+  if(!WARDROBE_CATEGORIES.some(x=>x.id===id))return;
+  activeWardrobeCategory=id;renderWardrobeNav();renderWardrobeGrid();
+}
+function resetWardrobeAvatar() {
+  selectedAvatar={...DEFAULT_AVATAR};selectedLookName="Nova";activeWardrobeCategory="look";
+  renderWardrobeNav();refreshAvatarAppearance();
+}
+function setupWardrobeInteractions() {
+  $("wardrobeNav").addEventListener("click",e=>{
+    const button=e.target.closest("[data-wardrobe-category]");
+    if(button)selectWardrobeCategory(button.dataset.wardrobeCategory);
+  });
+  $("wardrobeGrid").addEventListener("click",e=>{
+    const button=e.target.closest("[data-group-index][data-item-index]");
+    if(button)selectWardrobeItem(Number(button.dataset.groupIndex),Number(button.dataset.itemIndex));
+  });
+  $("resetAvatar").addEventListener("click",resetWardrobeAvatar);
+}
+function resizeAvatarPreview() {
+  if(!previewRenderer||!$("avatarPreviewCanvas"))return;
+  const canvas=$("avatarPreviewCanvas"),w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight);
+  previewRenderer.setSize(w,h,false);previewCamera.aspect=w/h;previewCamera.updateProjectionMatrix();
+}
+function refreshAvatarPreview() {
+  if(!previewScene)return;
+  if(previewAvatar)previewScene.remove(previewAvatar);
+  previewAvatar=createAvatar(appearance());previewAvatar.position.y=0.03;previewScene.add(previewAvatar);
+}
+function initAvatarPreview() {
+  if(previewRenderer){refreshAvatarPreview();resizeAvatarPreview();return;}
+  const canvas=$("avatarPreviewCanvas");
+  previewScene=new THREE.Scene();previewCamera=new THREE.PerspectiveCamera(34,1,.1,80);
+  previewRenderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:"low-power"});
+  previewRenderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75));previewRenderer.outputColorSpace=THREE.SRGBColorSpace;
+  previewScene.add(new THREE.HemisphereLight("#d9f4ff","#26334d",2.2));
+  const key=new THREE.DirectionalLight("#fff",2.6);key.position.set(-4,7,5);previewScene.add(key);
+  const rim=new THREE.PointLight("#48dfff",85,15);rim.position.set(3.5,3.5,-2);previewScene.add(rim);
+  const warm=new THREE.PointLight("#d18cff",35,12);warm.position.set(-3,2.3,1.5);previewScene.add(warm);
+  const backdrop=new THREE.Mesh(new THREE.CircleGeometry(3.3,64),new THREE.MeshBasicMaterial({color:"#174367",transparent:true,opacity:.38,side:THREE.DoubleSide}));
+  backdrop.position.set(0,2.05,-2.5);previewScene.add(backdrop);
+  const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(1.25,1.45,.22,48),new THREE.MeshStandardMaterial({color:"#183852",metalness:.6,roughness:.32,emissive:"#0c2537",emissiveIntensity:.35}));
+  pedestal.position.y=-.1;previewScene.add(pedestal);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.36,.035,10,64),new THREE.MeshStandardMaterial({color:"#63e4ff",emissive:"#1ba6df",emissiveIntensity:1.2,metalness:.5}));
+  ring.rotation.x=Math.PI/2;ring.position.y=.02;previewScene.add(ring);
+  const glow=new THREE.Mesh(new THREE.CircleGeometry(1.9,64),new THREE.MeshBasicMaterial({color:"#248cc0",transparent:true,opacity:.12}));
+  glow.rotation.x=-Math.PI/2;glow.position.y=.025;previewScene.add(glow);
+  const gemMat=new THREE.MeshStandardMaterial({color:"#8cecff",emissive:"#237caf",emissiveIntensity:.8,metalness:.25});
+  for(let i=0;i<8;i++){const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.09+(i%3)*.035),gemMat);const a=i/8*Math.PI*2;gem.position.set(Math.cos(a)*2.1,1.1+(i%3)*.53,-.45+Math.sin(a)*.35);previewScene.add(gem);}
+  previewCamera.position.set(4.1,3.25,7.1);previewCamera.lookAt(0,1.2,0);
+  refreshAvatarPreview();resizeAvatarPreview();
+  if(window.ResizeObserver){const observer=new ResizeObserver(resizeAvatarPreview);observer.observe(canvas);}
+}
+
 function restoreHostSession() {
   const saved = sessionStorage.getItem(HOST_SESSION_KEY);
   if (!saved) return Promise.resolve(false);
@@ -870,28 +955,30 @@ $("returnHome").addEventListener("click", () => {
   }
 });
 $("name").addEventListener("change", () => syncProfile().catch((e) => status(explainError(e), true)));
-$("characterPrev").addEventListener("click", () => selectCharacter(selectedCharacterIndex - 1));
-$("characterNext").addEventListener("click", () => selectCharacter(selectedCharacterIndex + 1));
 
 function initializePlayerEntry() {
   $("roleScreen").classList.add("hidden");
-  $("setupScreen").classList.remove("hidden");
+  $("setupScreen").classList.add("player-studio-shell");
   $("backRole").classList.add("hidden");
+  $("setupEyebrow").classList.add("hidden");
+  $("setupTitle").classList.add("hidden");
   $("hostFields").classList.add("hidden");
   $("playerFields").classList.remove("hidden");
-  $("setupEyebrow").textContent = "PLAYER ENTRY";
-  $("setupTitle").textContent = "Pilih karaktermu.";
   const pin = new URLSearchParams(location.search).get("pin") || "";
   if (/^\d{6}$/.test(pin)) $("pin").value = pin;
   showScreen("setupScreen");
+  setupWardrobeInteractions();
+  renderWardrobeNav();
+  renderWardrobeGrid();
+  updateAvatarSelectionLabels();
   setOwnAvatar(appearance());
-  status("Pilih karakter, isi nama, lalu masukkan PIN dari Host.");
+  initAvatarPreview();
+  status("Pilih outfit, isi nama dan PIN, lalu simpan karakter untuk masuk arena.");
 }
 
 // Load draft on each Host-page refresh. sessionStorage survives reloads and is
 // scoped to the tab, so a fresh tab or a closed tab starts a clean draft.
 loadHostDraft();
-renderCharacterCarousel();
 if (PLAYER_ONLY) {
   initializePlayerEntry();
 } else {
@@ -1042,6 +1129,10 @@ function animate() {
     camera.position.z += (playerMesh.position.z + 19 - camera.position.z) * 0.045;
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
+  if (previewRenderer && previewScene) {
+    if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
+    previewRenderer.render(previewScene, previewCamera);
+  }
   const t = performance.now() * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
   renderer.render(scene, camera);
@@ -1052,5 +1143,6 @@ addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  resizeAvatarPreview();
 });
 connection("Gratis · Firebase Spark", true);
