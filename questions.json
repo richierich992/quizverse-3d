@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "title": "Kuis Pengetahuan Umum",
+  "durationSeconds": 15,
+  "questions": [
+    {
+      "id": "q001",
+      "category": "Sains",
+      "question": "Planet yang dikenal sebagai Planet Merah adalah…",
+      "options": ["Venus", "Mars", "Jupiter", "Saturnus"],
+      "answerIndex": 1,
+      "explanation": "Mars tampak kemerahan karena mineral besi oksida pada permukaannya."
+    },
+    {
+      "id": "q002",
+      "category": "Geografi",
+      "question": "Samudra terbesar di bumi adalah…",
+      "options": ["Samudra Atlantik", "Samudra Hindia", "Samudra Pasifik", "Samudra Arktik"],
+      "answerIndex": 2,
+      "explanation": "Samudra Pasifik merupakan samudra terluas di bumi."
+    },
+    {
+      "id": "q003",
+      "category": "Matematika",
+      "question": "Berapakah hasil dari 12 × 8?",
+      "options": ["86", "92", "96", "108"],
+      "answerIndex": 2,
+      "explanation": "12 dikalikan 8 sama dengan 96."
+    },
+    {
+      "id": "q004",
+      "category": "Biologi",
+      "question": "Organ tumbuhan yang paling utama menyerap air dari tanah adalah…",
+      "options": ["Daun", "Bunga", "Batang", "Akar"],
+      "answerIndex": 3,
+      "explanation": "Akar menyerap air dan mineral dari tanah."
+    },
+    {
+      "id": "q005",
+      "category": "Sejarah",
+      "question": "Proklamasi kemerdekaan Indonesia dibacakan pada tanggal…",
+      "options": ["1 Juni 1945", "17 Agustus 1945", "10 November 1945", "27 Desember 1949"],
+      "answerIndex": 1,
+      "explanation": "Proklamasi kemerdekaan Indonesia dibacakan pada 17 Agustus 1945."
+    },
+    {
+      "id": "q006",
+      "category": "Sains",
+      "question": "Air mendidih pada suhu berapa pada tekanan udara normal?",
+      "options": ["0°C", "50°C", "100°C", "150°C"],
+      "answerIndex": 2,
+      "explanation": "Pada tekanan 1 atmosfer, titik didih air sekitar 100°C."
+    },
+    {
+      "id": "q007",
+      "category": "Bahasa",
+      "question": "Sinonim kata 'cermat' yang paling tepat adalah…",
+      "options": ["Teliti", "Lalai", "Cepat", "Ragu"],
+      "answerIndex": 0,
+      "explanation": "Cermat memiliki makna teliti atau berhati-hati."
+    },
+    {
+      "id": "q008",
+      "category": "Teknologi",
+      "question": "Kepanjangan dari CPU adalah…",
+      "options": ["Computer Personal Unit", "Central Processing Unit", "Central Program Utility", "Control Process User"],
+      "answerIndex": 1,
+      "explanation": "CPU adalah Central Processing Unit, bagian utama pemrosesan komputer."
+    }
+  ]
+}
