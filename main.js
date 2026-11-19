@@ -131,6 +131,7 @@ function mat(color, roughness = 0.72) {
   return sharedMaterials.get(key);
 }
 const roundedGeometryCache = new Map();
+const sharedAvatarGeometries = new Set();
 function roundedBoxGeometry(width, height, depth, radius = 0.16) {
   const key = [width, height, depth, radius].join("|");
   if (roundedGeometryCache.has(key)) return roundedGeometryCache.get(key);
@@ -155,6 +156,7 @@ function roundedBoxGeometry(width, height, depth, radius = 0.16) {
   });
   geometry.translate(0, 0, -depth / 2);
   geometry.computeVertexNormals();
+  sharedAvatarGeometries.add(geometry);
   roundedGeometryCache.set(key, geometry);
   return geometry;
 }
@@ -541,6 +543,20 @@ function animateAvatar(mesh, time, moving = false) {
   rig.eyes.forEach((eye) => { eye.scale.y = blinkScale; });
 }
 
+function disposeAvatar(mesh) {
+  if (!mesh) return;
+  const released = new Set();
+  mesh.traverse((node) => {
+    if (node.geometry && !sharedAvatarGeometries.has(node.geometry) && !released.has(node.geometry)) {
+      released.add(node.geometry);
+      node.geometry.dispose();
+    }
+    if (node.userData?.isAvatarNameTag && node.material) {
+      node.material.map?.dispose();
+      node.material.dispose();
+    }
+  });
+}
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
   const label = String(name || "Pemain").trim().slice(0, 18) || "Pemain";
@@ -558,12 +574,16 @@ function setAvatarNameTag(mesh, name) {
   tag.material.depthWrite = false;
   tag.renderOrder = 20;
   tag.userData.label = label;
+  tag.userData.isAvatarNameTag = true;
   mesh.add(tag);
   mesh.userData.nameTag = tag;
 }
 function setOwnAvatar(a) {
   ownAvatar = a;
-  if (playerMesh) scene.remove(playerMesh);
+  if (playerMesh) {
+    scene.remove(playerMesh);
+    disposeAvatar(playerMesh);
+  }
   playerMesh = createAvatar(a);
   setAvatarNameTag(playerMesh, $("name")?.value || "Pemain");
   playerMesh.position.set(ownPosition.x, 0, ownPosition.z);
@@ -588,7 +608,10 @@ function stopListeners() {
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
-  Object.values(remotePlayers).forEach((p) => scene.remove(p.mesh));
+  Object.values(remotePlayers).forEach((p) => {
+    scene.remove(p.mesh);
+    disposeAvatar(p.mesh);
+  });
   remotePlayers = {};
 }
 function dbPath(path) { return ref(db, path); }
@@ -607,7 +630,10 @@ function updateRemoteAvatar(id, data) {
   const name = String(data.name || "Pemain");
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
-    if (entry) scene.remove(entry.mesh);
+    if (entry) {
+      scene.remove(entry.mesh);
+      disposeAvatar(entry.mesh);
+    }
     const mesh = createAvatar(data.avatar || {});
     mesh.position.set(x, 0, z);
     setAvatarNameTag(mesh, name);
@@ -645,7 +671,11 @@ function renderPlayers(players) {
     if (playerId !== uid) updateRemoteAvatar(playerId, person);
   });
   Object.keys(remotePlayers).forEach((id) => {
-    if (!playerData[id]) { scene.remove(remotePlayers[id].mesh); delete remotePlayers[id]; }
+    if (!playerData[id]) {
+      scene.remove(remotePlayers[id].mesh);
+      disposeAvatar(remotePlayers[id].mesh);
+      delete remotePlayers[id];
+    }
   });
   const me = playerData[uid];
   if (me) {
@@ -1148,11 +1178,7 @@ function refreshAvatarPreview() {
   if (!previewScene) return;
   if (previewAvatar) {
     previewScene.remove(previewAvatar);
-    // Avatar materials are cached and shared by all players; dispose only this
-    // preview instance's geometries when its appearance is replaced.
-    previewAvatar.traverse((node) => {
-      if (node.geometry) node.geometry.dispose();
-    });
+    disposeAvatar(previewAvatar);
   }
   previewAvatar = createAvatar(appearance());
   previewAvatar.position.y = 0.03;
