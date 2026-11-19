@@ -189,203 +189,292 @@ function createAvatar(a = {}) {
   const hair = a.hairColor || "#252b38";
   const pants = a.pantsColor || "#294a70";
   const shoeColor = a.shoesColor || "#202a38";
+  const sphereGeometry = new THREE.SphereGeometry(1, 24, 18);
 
-  const orb = (color, x, y, z, sx, sy, sz, roughness = 0.76) => {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 24, 18),
-      mat(color, roughness)
-    );
+  const sphere = (parent, color, x, y, z, sx, sy, sz, roughness = 0.72) => {
+    const mesh = new THREE.Mesh(sphereGeometry, mat(color, roughness));
     mesh.position.set(x, y, z);
     mesh.scale.set(sx, sy, sz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    g.add(mesh);
+    parent.add(mesh);
     return mesh;
   };
-  const softBox = (w, h, d, color, x, y, z, radius = 0.04) => {
+  const capsule = (parent, color, radius, length, x, y, z, roughness = 0.72) => {
     const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, d, 2, 2, 2),
-      mat(color)
+      new THREE.CapsuleGeometry(radius, length, 5, 14),
+      mat(color, roughness)
     );
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    g.add(mesh);
+    parent.add(mesh);
     return mesh;
   };
-  const tube = (points, color, radius = 0.018) => {
-    const curve = new THREE.CatmullRomCurve3(points.map(([x,y,z]) => new THREE.Vector3(x,y,z)));
+  const box = (parent, color, w, h, d, x, y, z, roughness = 0.68) => {
     const mesh = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, 20, radius, 8, false),
-      mat(color)
+      new THREE.BoxGeometry(w, h, d, 2, 2, 2),
+      mat(color, roughness)
     );
-    g.add(mesh);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+  const tube = (parent, points, color, radius = 0.014) => {
+    const curve = new THREE.CatmullRomCurve3(
+      points.map(([x, y, z]) => new THREE.Vector3(x, y, z))
+    );
+    const mesh = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 18, radius, 8, false),
+      mat(color, 0.6)
+    );
+    mesh.castShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+  const torus = (parent, color, radius, tubeRadius, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const mesh = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, tubeRadius, 10, 28),
+      mat(color, 0.58)
+    );
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    mesh.castShadow = true;
+    parent.add(mesh);
     return mesh;
   };
 
-  // Rounded, compact body proportions inspired by playful classroom-game avatars.
-  // The character faces +Z. All facial details are deliberately placed on +Z.
-  orb(shirt, 0, 1.12, 0, 0.47, 0.55, 0.34);
-  orb(skin, 0, 1.61, 0, 0.19, 0.20, 0.19); // neck
-  orb(shirt, -0.48, 1.20, 0, 0.18, 0.27, 0.18);
-  orb(shirt, 0.48, 1.20, 0, 0.18, 0.27, 0.18);
+  // Proportions: large expressive head, compact torso and articulated limbs.
+  // All face details point toward +Z so they remain visible in the arena and preview.
+  const torso = new THREE.Group();
+  torso.position.set(0, 1.29, 0);
+  g.add(torso);
 
-  // Hands
-  orb(skin, -0.50, 0.88, 0.045, 0.15, 0.16, 0.15);
-  orb(skin, 0.50, 0.88, 0.045, 0.15, 0.16, 0.15);
+  capsule(torso, shirt, 0.37, 0.43, 0, 0, 0, 0.78).scale.z = 0.82;
+  sphere(torso, pants, 0, -0.39, 0, 0.34, 0.20, 0.27);
+  torus(torso, a.shirtAccent || "#eaf7ff", 0.19, 0.025, 0, 0.43, 0, Math.PI / 2);
 
-  // Legs, shoes and a slightly oversized head.
-  const legHeight = a.pants === "shorts" ? 0.40 : 0.48;
-  const legColor = pants;
-  const leftLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, legHeight, 5, 12), mat(legColor));
-  leftLeg.position.set(-0.21, 0.43, 0);
-  leftLeg.castShadow = true;
-  g.add(leftLeg);
-  const rightLeg = leftLeg.clone();
-  rightLeg.position.x = 0.21;
-  g.add(rightLeg);
+  // Neck and layered collar.
+  capsule(g, skin, 0.13, 0.12, 0, 1.75, 0, 0.82);
+  sphere(torso, a.shirtAccent || "#eaf7ff", 0, 0.44, 0.18, 0.17, 0.09, 0.12);
 
-  orb(shoeColor, -0.22, 0.13, 0.13, 0.23, a.shoes === "boots" ? 0.18 : 0.13, 0.34);
-  orb(shoeColor, 0.22, 0.13, 0.13, 0.23, a.shoes === "boots" ? 0.18 : 0.13, 0.34);
-  if (a.shoes === "high-top") {
-    orb("#f4f8ff", -0.22, 0.25, 0.12, 0.17, 0.035, 0.19);
-    orb("#f4f8ff", 0.22, 0.25, 0.12, 0.17, 0.035, 0.19);
-  }
-
-  // Outfit details on the front side (+Z).
+  // Outfit construction and recognizable details.
   if (a.shirt === "hoodie") {
-    orb(shirt, 0, 1.48, -0.23, 0.30, 0.25, 0.15);
-    tube([[-0.045,1.40,0.324],[0,1.30,0.346],[0.045,1.40,0.324]], "#eaf7ff", 0.012);
-    orb("#eaf7ff", -0.07, 1.04, 0.32, 0.025, 0.045, 0.014);
-    orb("#eaf7ff", 0.07, 1.04, 0.32, 0.025, 0.045, 0.014);
+    sphere(torso, shirt, 0, 0.20, -0.24, 0.29, 0.30, 0.15);
+    box(torso, a.shirtAccent || "#dbeafe", 0.40, 0.17, 0.045, 0, -0.25, 0.315);
+    tube(torso, [[-0.055,0.39,0.29],[-0.04,0.16,0.33],[-0.02,-0.06,0.34]], "#f8fafc", 0.012);
+    tube(torso, [[0.055,0.39,0.29],[0.04,0.16,0.33],[0.02,-0.06,0.34]], "#f8fafc", 0.012);
+    sphere(torso, "#f8fafc", -0.08, 0.02, 0.35, 0.018, 0.025, 0.012);
+    sphere(torso, "#f8fafc", 0.08, 0.02, 0.35, 0.018, 0.025, 0.012);
   } else if (a.shirt === "jersey") {
-    softBox(0.12, 0.32, 0.025, "#f5f8ff", 0, 1.17, 0.342);
-    orb("#f5d25b", 0, 1.38, 0.344, 0.09, 0.055, 0.018);
+    box(torso, "#f7fbff", 0.075, 0.58, 0.035, 0, 0, 0.315);
+    box(torso, a.shirtAccent || "#f6cf58", 0.44, 0.045, 0.035, 0, 0.28, 0.295);
+    box(torso, a.shirtAccent || "#f6cf58", 0.44, 0.045, 0.035, 0, -0.29, 0.295);
+    sphere(torso, "#ffffff", 0, -0.01, 0.35, 0.075, 0.08, 0.018);
+    sphere(torso, a.shirtAccent || "#f6cf58", 0, -0.01, 0.372, 0.035, 0.04, 0.012);
   } else if (a.shirt === "jacket") {
-    softBox(0.055, 0.66, 0.025, "#f1f5f9", 0, 1.15, 0.342);
-    softBox(0.14, 0.20, 0.025, "#ffffff", -0.19, 1.48, 0.30);
-    softBox(0.14, 0.20, 0.025, "#ffffff", 0.19, 1.48, 0.30);
+    box(torso, "#f4f7fb", 0.055, 0.66, 0.04, 0, -0.01, 0.315);
+    box(torso, a.shirtAccent || "#e8eef5", 0.15, 0.18, 0.035, -0.20, 0.22, 0.29);
+    box(torso, a.shirtAccent || "#e8eef5", 0.15, 0.18, 0.035, 0.20, 0.22, 0.29);
+    for (let i = 0; i < 3; i++) sphere(torso, "#f9fbff", 0, 0.19 - i * 0.16, 0.35, 0.018, 0.018, 0.012);
   } else {
-    orb("#ffffff", 0, 1.16, 0.337, 0.075, 0.075, 0.018);
-    orb(a.shirtAccent || "#f5d25b", 0, 1.16, 0.358, 0.035, 0.035, 0.012);
+    sphere(torso, a.shirtAccent || "#f5d25b", 0, -0.01, 0.33, 0.075, 0.075, 0.02);
+    sphere(torso, "#ffffff", 0, -0.01, 0.352, 0.026, 0.026, 0.012);
+  }
+  if (a.shirt === "hoodie") {
+    // Kangaroo-pocket seams and soft cuff-like accents.
+    tube(torso, [[-0.19,-0.22,0.31],[-0.16,-0.31,0.34],[0.16,-0.31,0.34],[0.19,-0.22,0.31]], a.shirtAccent || "#eaf2fb", 0.012);
   }
 
-  if (a.pants === "cargo") {
-    orb(a.pantsAccent || "#b8c8d5", -0.34, 0.48, 0.15, 0.09, 0.12, 0.035);
-    orb(a.pantsAccent || "#b8c8d5", 0.34, 0.48, 0.15, 0.09, 0.12, 0.035);
-  }
+  // Articulated arms: shoulder, sleeve, forearm and hand are grouped for animation.
+  const makeArm = (side) => {
+    const arm = new THREE.Group();
+    arm.position.set(side * 0.43, 1.48, 0);
+    g.add(arm);
+    sphere(arm, shirt, 0, -0.02, 0, 0.19, 0.20, 0.19);
+    capsule(arm, shirt, 0.145, 0.25, 0, -0.22, 0, 0.78);
+    capsule(arm, shirt, 0.125, 0.25, 0, -0.49, 0.025, 0.78);
+    torus(arm, a.shirtAccent || "#eaf2fb", 0.122, 0.018, 0, -0.58, 0.025, 0);
+    sphere(arm, skin, 0, -0.70, 0.055, 0.125, 0.13, 0.12);
+    // Tiny thumb gives the hand a readable silhouette.
+    sphere(arm, skin, side * -0.095, -0.69, 0.12, 0.055, 0.075, 0.06);
+    return arm;
+  };
+  const leftArm = makeArm(-1);
+  const rightArm = makeArm(1);
 
-  // Large soft head with visible cheeks, ears and facial expression.
-  orb(skin, 0, 2.02, 0, 0.59, 0.64, 0.51);
-  orb(skin, -0.55, 1.99, -0.005, 0.13, 0.17, 0.12);
-  orb(skin, 0.55, 1.99, -0.005, 0.13, 0.17, 0.12);
+  // Legs are separate pivots so walking can have a visible, natural stride.
+  const makeLeg = (side) => {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.19, 0.83, 0);
+    g.add(leg);
+    capsule(leg, pants, 0.15, a.pants === "shorts" ? 0.20 : 0.29, 0, -0.16, 0, 0.82);
+    capsule(leg, pants, 0.125, 0.22, 0, -0.45, 0.015, 0.82);
+    if (a.pants === "cargo") {
+      box(leg, a.pantsAccent || "#bac8d5", 0.075, 0.16, 0.035, side * 0.13, -0.30, 0.12);
+      tube(leg, [[side*0.10,-0.24,0.145],[side*0.17,-0.24,0.145],[side*0.17,-0.37,0.145]], a.pantsAccent || "#bac8d5", 0.008);
+    } else if (a.pants === "jeans") {
+      tube(leg, [[side*0.105,-0.08,0.12],[side*0.12,-0.38,0.13],[side*0.11,-0.57,0.12]], "#7596bd", 0.009);
+    }
+    // Layered sneaker/boot: sole, upper, toe and laces.
+    sphere(leg, "#f3f6fa", 0, -0.72, 0.085, 0.205, 0.085, 0.30);
+    sphere(leg, shoeColor, 0, -0.66, 0.10, 0.19, a.shoes === "boots" ? 0.18 : 0.13, 0.28);
+    sphere(leg, a.shoesAccent || "#e9f1fa", 0, -0.70, 0.335, 0.13, 0.055, 0.025);
+    for (let i = 0; i < 3; i++) {
+      tube(leg, [[-0.075,-0.62-i*0.035,0.30],[0,-0.60-i*0.035,0.32],[0.075,-0.62-i*0.035,0.30]], a.shoesAccent || "#f4f8fc", 0.009);
+    }
+    if (a.shoes === "high-top" || a.shoes === "boots") {
+      torus(leg, a.shoesAccent || "#f4f8fc", 0.13, 0.018, 0, -0.54, 0.06, 0);
+    }
+    return leg;
+  };
+  const leftLeg = makeLeg(-1);
+  const rightLeg = makeLeg(1);
 
-  // Eye whites, irises, pupils and highlights. Camera/front is +Z.
-  for (const x of [-0.19, 0.19]) {
-    orb("#ffffff", x, 2.08, 0.438, 0.112, 0.135, 0.066, 0.35);
-    const irisColor = a.eyeColor || "#4d9de0";
-    orb(irisColor, x + 0.012, 2.075, 0.493, 0.066, 0.082, 0.035, 0.38);
-    orb("#142239", x + 0.018, 2.075, 0.522, 0.037, 0.052, 0.022, 0.28);
-    orb("#ffffff", x - 0.012, 2.112, 0.541, 0.018, 0.023, 0.012, 0.2);
-  }
+  // Head, ears and face are kept together for subtle idle glances.
+  const head = new THREE.Group();
+  head.position.set(0, 2.08, 0);
+  g.add(head);
+  sphere(head, skin, 0, 0, 0, 0.53, 0.57, 0.47);
+  sphere(head, skin, -0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
+  sphere(head, skin, 0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
+  sphere(head, a.earAccent || skin, -0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
+  sphere(head, a.earAccent || skin, 0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
 
-  // Eyebrows vary slightly by expression.
   const browColor = a.hair && a.hair !== "none" ? hair : "#604537";
-  for (const x of [-0.19, 0.19]) {
-    const brow = orb(browColor, x, 2.27, 0.43, 0.13, 0.035, 0.035);
+  for (const x of [-0.175, 0.175]) {
+    sphere(head, "#ffffff", x, 0.035, 0.405, 0.105, 0.132, 0.055, 0.34);
+    sphere(head, a.eyeColor || "#4d9de0", x + 0.012, 0.025, 0.451, 0.061, 0.078, 0.027, 0.36);
+    sphere(head, "#142239", x + 0.018, 0.024, 0.473, 0.034, 0.047, 0.018, 0.28);
+    sphere(head, "#ffffff", x - 0.008, 0.060, 0.488, 0.016, 0.020, 0.009, 0.2);
+    const brow = sphere(head, browColor, x, 0.218, 0.412, 0.13, 0.035, 0.03);
     brow.rotation.z = (x < 0 ? 1 : -1) * (a.face === "surprised" ? 0.18 : 0.07);
   }
-
-  // Nose and soft blush cheeks.
-  orb("#d88f79", 0, 1.94, 0.505, 0.055, 0.06, 0.035);
-  orb("#f08d9b", -0.38, 1.88, 0.405, 0.085, 0.045, 0.025);
-  orb("#f08d9b", 0.38, 1.88, 0.405, 0.085, 0.045, 0.025);
+  sphere(head, "#d88f79", 0, -0.095, 0.475, 0.052, 0.058, 0.035);
+  sphere(head, "#f08d9b", -0.34, -0.16, 0.375, 0.075, 0.04, 0.018);
+  sphere(head, "#f08d9b", 0.34, -0.16, 0.375, 0.075, 0.04, 0.018);
 
   if (a.face === "surprised") {
-    orb("#54273b", 0, 1.77, 0.49, 0.075, 0.095, 0.035);
-    orb("#ee8091", 0, 1.73, 0.523, 0.034, 0.028, 0.012);
-  } else if (a.face === "serious") {
-    softBox(0.20, 0.026, 0.025, "#613e43", 0, 1.78, 0.49);
-  } else if (a.face === "sleepy") {
-    softBox(0.18, 0.035, 0.025, "#26364a", 0, 1.79, 0.49);
-  } else {
-    tube([[-0.13,1.82,0.482],[-0.075,1.77,0.51],[0,1.755,0.518],[0.075,1.77,0.51],[0.13,1.82,0.482]],
-      a.face === "cool" ? "#663e4a" : "#8d4c51", 0.019);
-  }
-
-  if (a.face === "nerd" || a.glasses) {
-    for (const x of [-0.19, 0.19]) {
-      const frame = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.018, 8, 24), mat("#26364b"));
-      frame.position.set(x, 2.08, 0.50);
-      g.add(frame);
+    sphere(head, "#57263d", 0, -0.27, 0.433, 0.07, 0.09, 0.03);
+    sphere(head, "#ef8295", 0, -0.30, 0.459, 0.031, 0.022, 0.01);
+  } else if (a.face === "serious" || a.face === "sleepy") {
+    box(head, "#633e48", 0.19, 0.026, 0.025, 0, -0.275, 0.43);
+    if (a.face === "sleepy") {
+      box(head, browColor, 0.17, 0.038, 0.026, -0.175, 0.04, 0.464);
+      box(head, browColor, 0.17, 0.038, 0.026, 0.175, 0.04, 0.464);
     }
-    softBox(0.12, 0.025, 0.025, "#26364b", 0, 2.09, 0.51);
+  } else {
+    tube(head, [[-0.125,-0.23,0.418],[-0.075,-0.285,0.445],[0,-0.30,0.45],[0.075,-0.285,0.445],[0.125,-0.23,0.418]],
+      a.face === "cool" ? "#663e4a" : "#8d4c51", 0.018);
   }
   if (a.face === "wink") {
-    // Add a cheeky eyelid over the left eye while keeping the other eye open.
-    softBox(0.17, 0.035, 0.028, browColor, -0.19, 2.08, 0.525);
+    box(head, browColor, 0.17, 0.034, 0.025, -0.175, 0.03, 0.464);
+  }
+  if (a.face === "nerd" || a.glasses || a.face === "cool") {
+    const frameColor = a.face === "cool" ? "#182d43" : "#29384e";
+    for (const x of [-0.175, 0.175]) {
+      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.018, 8, 24), mat(frameColor, 0.45));
+      lens.position.set(x, 0.035, 0.455);
+      head.add(lens);
+      if (a.face === "cool") sphere(head, "#31506d", x, 0.035, 0.45, 0.095, 0.095, 0.012, 0.32);
+    }
+    tube(head, [[-0.05,0.05,0.46],[0,0.065,0.48],[0.05,0.05,0.46]], frameColor, 0.014);
   }
 
-  // Hair silhouettes are layered over the crown, never over the eyes.
+  // Hair silhouettes: layered volume, side locks and recognizable presets.
   if (a.hair && a.hair !== "none") {
-    orb(hair, 0, 2.50, -0.045, 0.57, 0.25, 0.49);
+    sphere(head, hair, 0, 0.40, -0.045, 0.52, 0.23, 0.46);
     if (a.hair === "spiky") {
-      for (let i = 0; i < 5; i++) {
-        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.34, 10), mat(hair));
-        spike.position.set(-0.34 + i * 0.17, 2.70 + (i % 2) * 0.035, -0.02);
-        spike.rotation.z = (i - 2) * -0.15;
-        g.add(spike);
+      for (let i = 0; i < 6; i++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 10), mat(hair));
+        spike.position.set(-0.33 + i * 0.132, 0.60 + (i % 2) * 0.045, -0.02);
+        spike.rotation.z = (i - 2.5) * -0.15;
+        spike.castShadow = true;
+        head.add(spike);
       }
     } else if (a.hair === "long" || a.hair === "bob") {
-      orb(hair, -0.47, 2.03, 0.015, 0.15, 0.49, 0.24);
-      orb(hair, 0.47, 2.03, 0.015, 0.15, 0.49, 0.24);
-      if (a.hair === "bob") orb(hair, 0, 1.74, 0.24, 0.48, 0.13, 0.22);
+      sphere(head, hair, -0.45, -0.14, 0.015, 0.14, 0.43, 0.20);
+      sphere(head, hair, 0.45, -0.14, 0.015, 0.14, 0.43, 0.20);
+      if (a.hair === "bob") sphere(head, hair, 0, -0.39, 0.20, 0.42, 0.13, 0.19);
     } else if (a.hair === "ponytail") {
-      orb(hair, 0.36, 2.18, -0.40, 0.16, 0.37, 0.15);
-      orb(hair, 0.36, 1.90, -0.42, 0.13, 0.18, 0.12);
+      sphere(head, hair, 0.36, 0.02, -0.38, 0.15, 0.33, 0.14);
+      sphere(head, hair, 0.36, -0.22, -0.40, 0.13, 0.16, 0.12);
     } else if (a.hair === "curly" || a.hair === "afro") {
-      const count = a.hair === "afro" ? 17 : 10;
+      const count = a.hair === "afro" ? 20 : 12;
       for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2;
-        const radius = a.hair === "afro" ? 0.42 : 0.35;
-        orb(hair, Math.cos(angle) * radius, 2.49 + Math.sin(i * 2.1) * 0.075,
-          -0.035 + Math.sin(angle) * 0.31, 0.17, 0.16, 0.16);
+        const radius = a.hair === "afro" ? 0.40 : 0.34;
+        sphere(head, hair, Math.cos(angle) * radius, 0.37 + Math.sin(i * 2.1) * 0.065,
+          -0.035 + Math.sin(angle) * 0.30, 0.15, 0.15, 0.15);
       }
     } else if (a.hair === "sidepart") {
-      orb(hair, -0.20, 2.57, 0.32, 0.34, 0.13, 0.18);
-      orb(hair, 0.12, 2.58, 0.12, 0.29, 0.11, 0.24);
+      sphere(head, hair, -0.19, 0.49, 0.25, 0.31, 0.12, 0.18);
+      sphere(head, hair, 0.13, 0.51, 0.12, 0.28, 0.10, 0.22);
+    } else if (a.hair === "short") {
+      sphere(head, hair, -0.25, 0.30, 0.28, 0.29, 0.13, 0.20);
     }
   }
 
-  // Hats and accessories sit above the hair.
+  // Headwear and accessories.
   if (a.hat === "cap") {
-    orb(a.hatColor || "#e4edf7", 0, 2.65, -0.01, 0.59, 0.16, 0.52);
-    orb(a.hatColor || "#e4edf7", 0, 2.59, 0.40, 0.48, 0.055, 0.27);
+    sphere(head, a.hatColor || "#e4edf7", 0, 0.53, -0.01, 0.55, 0.15, 0.47);
+    sphere(head, a.hatColor || "#e4edf7", 0, 0.46, 0.37, 0.43, 0.045, 0.25);
+    sphere(head, a.hatAccent || "#f6d365", 0, 0.52, 0.47, 0.085, 0.035, 0.018);
   } else if (a.hat === "beanie") {
-    orb(a.hatColor || "#e25778", 0, 2.62, -0.02, 0.57, 0.22, 0.50);
-    softBox(0.86, 0.09, 0.68, a.hatColor || "#e25778", 0, 2.49, 0);
+    sphere(head, a.hatColor || "#e25778", 0, 0.52, -0.02, 0.53, 0.22, 0.46);
+    box(head, a.hatColor || "#e25778", 0.82, 0.085, 0.66, 0, 0.39, 0);
+    sphere(head, a.hatAccent || "#f8e7eb", 0, 0.75, -0.02, 0.07, 0.07, 0.07);
   } else if (a.hat === "crown") {
-    softBox(0.48, 0.12, 0.38, "#f2c94c", 0, 2.64, 0);
+    box(head, "#f2c94c", 0.47, 0.11, 0.33, 0, 0.55, 0);
     for (let i = -1; i <= 1; i++) {
-      const point = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.20, 8), mat("#ffdc70"));
-      point.position.set(i * 0.16, 2.80, 0);
-      g.add(point);
+      const point = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.18, 8), mat("#ffdc70"));
+      point.position.set(i * 0.15, 0.69, 0);
+      head.add(point);
     }
   } else if (a.hat === "headphones") {
-    const bandCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.49,2.17,0), new THREE.Vector3(-0.49,2.55,0),
-      new THREE.Vector3(0,2.72,0), new THREE.Vector3(0.49,2.55,0),
-      new THREE.Vector3(0.49,2.17,0)
+    const band = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.47,0.12,0), new THREE.Vector3(-0.48,0.42,0),
+      new THREE.Vector3(0,0.63,-0.01), new THREE.Vector3(0.48,0.42,0),
+      new THREE.Vector3(0.47,0.12,0)
     ]);
-    g.add(new THREE.Mesh(new THREE.TubeGeometry(bandCurve,24,0.045,8,false),mat("#263c55")));
-    orb("#263c55",-0.52,2.04,0.02,0.10,0.20,0.14);
-    orb("#263c55",0.52,2.04,0.02,0.10,0.20,0.14);
-    orb(a.hatAccent || "#55dfff",-0.57,2.04,0.12,0.035,0.075,0.035);
-    orb(a.hatAccent || "#55dfff",0.57,2.04,0.12,0.035,0.075,0.035);
+    head.add(new THREE.Mesh(new THREE.TubeGeometry(band, 24, 0.043, 8, false), mat("#263c55")));
+    sphere(head, "#263c55", -0.50, -0.02, 0.01, 0.105, 0.19, 0.14);
+    sphere(head, "#263c55", 0.50, -0.02, 0.01, 0.105, 0.19, 0.14);
+    sphere(head, a.hatAccent || "#55dfff", -0.55, -0.02, 0.11, 0.035, 0.075, 0.035);
+    sphere(head, a.hatAccent || "#55dfff", 0.55, -0.02, 0.11, 0.035, 0.075, 0.035);
   }
 
+  // Small silhouette accents make the avatar read better at game-camera distance.
+  sphere(g, a.shirtAccent || "#f5d25b", -0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
+  sphere(g, a.shirtAccent || "#f5d25b", 0.39, 1.48, 0.15, 0.045, 0.045, 0.035);
+
+  g.userData.rig = { torso, head, leftArm, rightArm, leftLeg, rightLeg };
+  g.userData.moving = false;
   return g;
 }
+
+function animateAvatar(mesh, time, moving = false) {
+  const rig = mesh?.userData?.rig;
+  if (!rig) return;
+  const t = time * 0.001;
+  const stride = t * 10.5;
+  const walk = moving ? 1 : 0;
+  const swing = Math.sin(stride) * walk;
+  rig.leftArm.rotation.x = swing * 0.62 + Math.sin(t * 2.2) * 0.025;
+  rig.rightArm.rotation.x = -swing * 0.62 + Math.sin(t * 2.2 + 0.8) * 0.025;
+  rig.leftArm.rotation.z = -0.035;
+  rig.rightArm.rotation.z = 0.035;
+  rig.leftLeg.rotation.x = -swing * 0.72;
+  rig.rightLeg.rotation.x = swing * 0.72;
+  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.022 : Math.sin(t * 2.0) * 0.012);
+  rig.torso.rotation.z = Math.sin(t * 1.5) * 0.012 + swing * 0.018;
+  rig.head.rotation.x = Math.sin(t * 1.35) * 0.018 - Math.abs(swing) * 0.018;
+  rig.head.rotation.y = Math.sin(t * 0.72) * 0.026;
+  rig.head.rotation.z = Math.sin(t * 1.1) * 0.014;
+}
+
 function setOwnAvatar(a) {
   ownAvatar = a;
   if (playerMesh) scene.remove(playerMesh);
@@ -426,14 +515,19 @@ async function syncProfile() {
 }
 function updateRemoteAvatar(id, data) {
   const signature = JSON.stringify(data.avatar || {});
+  const x = Number(data.x || 0);
+  const z = Number(data.z || 0);
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
     if (entry) scene.remove(entry.mesh);
-    entry = { mesh: createAvatar(data.avatar || {}), signature };
+    entry = { mesh: createAvatar(data.avatar || {}), signature, lastMoveAt: 0 };
     remotePlayers[id] = entry;
     scene.add(entry.mesh);
   }
-  entry.mesh.position.set(Number(data.x || 0), 0, Number(data.z || 0));
+  if (Math.hypot(x - entry.mesh.position.x, z - entry.mesh.position.z) > 0.035) {
+    entry.lastMoveAt = performance.now();
+  }
+  entry.mesh.position.set(x, 0, z);
 }
 function renderPlayers(players) {
   playerData = players || {};
@@ -1244,8 +1338,13 @@ function moveInput() {
   return len > 1 ? { x: x / len, z: z / len } : { x, z };
 }
 function movePlayer(dt) {
-  if (!playerMesh || activeState?.phase !== "question") return;
+  if (!playerMesh) return;
+  if (activeState?.phase !== "question") {
+    playerMesh.userData.moving = false;
+    return;
+  }
   const input = moveInput();
+  playerMesh.userData.moving = Math.abs(input.x) + Math.abs(input.z) > 0.04;
   const speed = 7.2;
   ownPosition.x = THREE.MathUtils.clamp(ownPosition.x + input.x * speed * dt, -21, 21);
   ownPosition.z = THREE.MathUtils.clamp(ownPosition.z + input.z * speed * dt, -21, 21);
@@ -1316,11 +1415,19 @@ function animate() {
     camera.position.z += (playerMesh.position.z + 19 - camera.position.z) * 0.045;
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
-  const t = performance.now() * 0.001;
+  const now = performance.now();
+  if (playerMesh) animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving));
+  Object.values(remotePlayers).forEach((entry) => {
+    animateAvatar(entry.mesh, now, now - Number(entry.lastMoveAt || 0) < 280);
+  });
+  const t = now * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
   renderer.render(scene, camera);
   if (previewRenderer && previewScene) {
-    if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
+    if (previewAvatar) {
+      animateAvatar(previewAvatar, now, false);
+      previewAvatar.rotation.y = Math.sin(now * 0.00035) * 0.16;
+    }
     previewRenderer.render(previewScene, previewCamera);
   }
 }
