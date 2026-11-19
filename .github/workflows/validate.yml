@@ -1,0 +1,27 @@
+name: Validate QuizVerse
+
+on:
+  push:
+    branches:
+      - main
+      - feature/server-authoritative-quiz
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check browser JavaScript syntax
+        run: npm run check
+      - name: Install Cloud Functions dependencies
+        run: npm --prefix functions install --no-audit --no-fund
+      - name: Compile Cloud Functions
+        run: npm --prefix functions run build
