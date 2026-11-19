@@ -343,3 +343,44 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
  .round-rank-number{flex-basis:20px;font-size:9px}
  .round-rank-name,.round-rank-score{font-size:8px}
 }
+
+
+/* Host spectator: in-arena camera and a light game HUD, not a separate dashboard. */
+#app.host-spectator .hud{
+  width:min(700px,94vw);
+  background:rgba(5,17,31,.68);
+  border-color:#7eb9d944;
+  box-shadow:0 12px 38px #0004,inset 0 1px #ffffff0b;
+  pointer-events:none;
+}
+#app.host-spectator #spectatorBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin-left:auto;
+  padding:6px 9px;
+  border:1px solid #68dfb755;
+  border-radius:20px;
+  color:#8df0c8;
+  background:#10382f99;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:1px;
+}
+#app.host-spectator .player-only-hud{display:none!important}
+#app.host-spectator #spectatorViewLabel{
+  display:inline;
+  color:#8df0c8;
+  font-weight:800;
+  letter-spacing:.8px;
+}
+#app.host-spectator .round-leaderboard{
+  background:rgba(8,24,42,.84);
+  box-shadow:none;
+}
+@media(max-width:640px){
+  #app.host-spectator .hud{top:8px;width:96vw;padding:10px 12px}
+  #app.host-spectator .hud-top{gap:6px;flex-wrap:wrap}
+  #app.host-spectator #spectatorBadge{font-size:7px;padding:5px 7px}
+  #app.host-spectator .hud-bottom{font-size:8px}
+}
