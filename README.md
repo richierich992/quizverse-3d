@@ -73,9 +73,18 @@ Ketika Host membuat room, hanya teks soal dan opsi yang dipublikasikan ke room. 
 Jangan menerbitkan endpoint publik yang mengirim answer key ke browser pemain.
 
 ## GitHub Pages
-Repository → Settings → Pages → Deploy from a branch → branch `main` atau branch fitur saat pengujian → `/(root)` → Save.
 
-Di Firebase Authentication → Settings → Authorized domains, pastikan `richierich992.github.io` ditambahkan.
+Workflow deployment sudah tersedia di `.github/workflows/deploy.yml`. Workflow menerbitkan situs statis dari branch `feature/server-authoritative-quiz` untuk pengujian dan dari `main` setelah perubahan di-merge.
+
+**Aktifkan Pages satu kali sebelum deployment pertama:**
+1. Buka repository GitHub → **Settings** → **Pages**.
+2. Pada **Build and deployment → Source**, pilih **GitHub Actions** (bukan Deploy from a branch).
+3. Simpan pengaturan bila diminta. Push berikutnya ke branch fitur atau `main` akan menjalankan workflow deployment.
+4. Buka tab **Actions** → workflow **Deploy QuizVerse to GitHub Pages** untuk melihat hasil dan URL situs. Jika workflow pertama kali gagal karena Pages belum diaktifkan, setelah mengubah Source ke GitHub Actions jalankan ulang job yang gagal.
+
+Saat PR fitur di-merge ke `main`, workflow otomatis menerbitkan versi `main`. Jangan menambahkan proteksi environment `github-pages` yang hanya mengizinkan `main` sebelum pengujian branch fitur selesai.
+
+Di Firebase Authentication → Settings → Authorized domains, pastikan `richierich992.github.io` ditambahkan. Rules Realtime Database harus sudah dipublikasikan sebelum membuat room.
 
 ## Menjalankan lokal
 ```bash
