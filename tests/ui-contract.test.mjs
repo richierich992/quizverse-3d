@@ -65,7 +65,7 @@ assert.match(main, /g\.userData\.rig = \{ torso, head, leftArm, rightArm, leftLe
 assert.match(main, /function animateAvatar\(mesh, time, moving = false\)/, "Avatar has a shared animation controller");
 assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinking");
 assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
-assert.match(main, /entry\.mesh\.rotation\.y = Math\.atan2\(dx, dz\)/, "Remote players face their movement direction");
+assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
 assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
 const previewRefresh = main.slice(main.indexOf("function refreshAvatarPreview"), main.indexOf("function initAvatarPreview"));
 assert.match(previewRefresh, /if \(node\.geometry\) node\.geometry\.dispose\(\)/, "Replaced preview geometry is released");
