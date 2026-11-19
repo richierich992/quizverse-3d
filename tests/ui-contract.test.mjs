@@ -12,7 +12,9 @@ assert.match(index, /id="questionEditorList"/, "Host has an inline question edit
 assert.match(index, /id="addQuestion"/, "Host can add questions");
 assert.match(index, /id="clearDraft"/, "Host can explicitly clear a draft");
 assert.match(player, /id="joinRoom"/, "Player page offers joining");
-assert.doesNotMatch(player, /id="chooseHost"/, "Player page must not offer Host entry");
+assert.match(player, /class="role-grid host-only hidden"/, "Player page keeps any Host UI hidden");
+assert.match(main, /location\.pathname\.endsWith\("\/player\.html"\)/, "Player route is selected by its dedicated URL");
+assert.match(main, /if \(PLAYER_ONLY\) \{\s*initializePlayerEntry\(\)/, "Player route opens directly into join setup");
 assert.match(player, /player.html|Player Join/, "Separate Player page exists");
 assert.match(player, /id="characterTrack"/, "Player page has the character carousel");
 assert.match(main, /HOST_DRAFT_KEY/);

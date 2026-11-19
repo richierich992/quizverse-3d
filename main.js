@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = ["#f34f68", "#328df4", "#f4c542", "#27c88b"];
 const COLOR_NAMES = ["MERAH", "BIRU", "KUNING", "HIJAU"];
 
-const PLAYER_ONLY = /(?:^|\\/)player\\.html$/.test(location.pathname);
+const PLAYER_ONLY = location.pathname.endsWith("/player.html");
 const HOST_DRAFT_KEY = "quizverse-host-draft-v1";
 const HOST_SESSION_KEY = "quizverse-host-session-v1";
 const CHARACTER_PRESETS = [
@@ -719,7 +719,7 @@ function restoreHostSession() {
   if (!saved) return Promise.resolve(false);
   return (async () => {
     const session = JSON.parse(saved);
-    if (!/^\\d{6}$/.test(String(session.pin || ""))) throw new Error("Data sesi Host tidak valid.");
+    if (!/^\d{6}$/.test(String(session.pin || "")) throw new Error("Data sesi Host tidak valid.");
     await ensureFirebase();
     const pin = String(session.pin);
     const [metaSnap, publicSnap] = await Promise.all([
@@ -881,7 +881,7 @@ function initializePlayerEntry() {
   $("setupEyebrow").textContent = "PLAYER ENTRY";
   $("setupTitle").textContent = "Pilih karaktermu.";
   const pin = new URLSearchParams(location.search).get("pin") || "";
-  if (/^\\d{6}$/.test(pin)) $("pin").value = pin;
+  if (/^\d{6}$/.test(pin)) $("pin").value = pin;
   showScreen("setupScreen");
   renderCharacterCarousel();
   setOwnAvatar(appearance());
