@@ -428,9 +428,14 @@ async function joinRoom() {
     await ensureFirebase();
     const metaSnap = await get(dbPath(`rooms/${pin}/meta`));
     const meta = metaSnap.val();
+    const playersSnap = await get(dbPath(`rooms/${pin}/players`));
+    const players = playersSnap.val() || {};
     const existingPlayer = await get(dbPath(`rooms/${pin}/players/${uid}`));
     if (!meta || !["lobby", "playing"].includes(meta.status) || (meta.status === "playing" && !existingPlayer.exists())) {
       throw new Error("Room tidak ditemukan, sudah selesai, atau permainan sudah dimulai.");
+    }
+    if (!existingPlayer.exists() && Object.keys(players).length >= Number(meta.maxPlayers || 40)) {
+      throw new Error("Room sudah penuh (maksimal 40 pemain).");
     }
     roomPin = pin;
     isHost = false;
