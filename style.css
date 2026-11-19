@@ -10,6 +10,8 @@ button{cursor:pointer}
 .brand{font:800 17px 'Space Grotesk',sans-serif;letter-spacing:2.5px;color:#eaf8ff;text-shadow:0 2px 18px #42caff55}
 .brand span{display:block;font:600 8px 'DM Sans',sans-serif;letter-spacing:3px;color:#86a4c1;margin-top:3px}
 .connection{font-size:10px;letter-spacing:.5px;color:#8fa9c5;background:#08192bcc;border:1px solid var(--line);border-radius:20px;padding:8px 12px}
+.runtime-error{position:absolute;z-index:8;top:63px;right:22px;width:min(390px,calc(100vw - 36px));color:#ffdce1;background:rgba(44,13,27,.96);border:1px solid #ff789055;border-radius:11px;padding:8px 11px;box-shadow:0 12px 35px #0008;font-size:10px;line-height:1.5;backdrop-filter:blur(14px)}
+.runtime-error summary{cursor:pointer;font-weight:800;letter-spacing:.3px;color:#ffb5c1;outline:none}.runtime-error pre{max-height:34vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 2px;color:#ffe9ed;font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
 .panel{position:absolute;z-index:4;left:clamp(18px,4vw,64px);top:50%;transform:translateY(-50%);width:min(490px,calc(100vw - 36px));max-height:calc(100dvh - 44px);overflow:auto;padding:27px;border:1px solid var(--line);border-radius:22px;background:var(--panel);box-shadow:0 25px 100px #0008,inset 0 1px #ffffff0a;backdrop-filter:blur(22px);scrollbar-width:thin;scrollbar-color:#355674 transparent}
 .hidden{display:none!important}
 .eyebrow{font-size:9px;font-weight:800;letter-spacing:2.5px;color:#72dfff}
