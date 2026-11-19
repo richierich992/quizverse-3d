@@ -547,7 +547,7 @@ function disposeAvatar(mesh) {
   if (!mesh) return;
   const released = new Set();
   mesh.traverse((node) => {
-    if (node.geometry && !sharedAvatarGeometries.has(node.geometry) && !released.has(node.geometry)) {
+    if (node.geometry && !node.isSprite && !sharedAvatarGeometries.has(node.geometry) && !released.has(node.geometry)) {
       released.add(node.geometry);
       node.geometry.dispose();
     }
