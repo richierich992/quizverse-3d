@@ -24,6 +24,10 @@ assert.match(player, /id="roundLeaderboard"/, "Players see a live standings pane
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
 assert.match(main, /function createArenaFloorTexture\(\)/, "Arena floor has a procedural textured composite finish");
+assert.match(main, /function answerBaySurfaceAt\(x, z\)/, "Raised answer podium surface height is shared by all clients");
+assert.match(main, /const groundHeight = answerBaySurfaceAt\(ownPosition\.x, ownPosition\.z\)/, "Local player stands on raised answer podiums");
+assert.match(main, /targetX: x, targetY: y, targetZ: z/, "Remote player avatar receives the matching podium height");
+assert.match(main, /entry\.mesh\.position\.y \+= \(Number\(entry\.targetY \|\| 0\) - entry\.mesh\.position\.y\) \* remoteBlend/, "Remote player avatar smoothly follows podium height changes");
 assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclosed indoor competition venue");
 assert.match(main, /createArenaScreenTexture\(\)/, "Arena includes a custom competition display screen");
 assert.match(main, /arenaRing\(23\.65, 0\.075, arenaMaterial\.lightCyan/, "Arena perimeter has a finished illuminated rim");
