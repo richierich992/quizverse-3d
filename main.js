@@ -98,7 +98,7 @@ function explainError(error) {
 // -------------------- Three.js arena --------------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#07111f");
-scene.fog = new THREE.Fog("#07111f", 30, 78);
+scene.fog = new THREE.Fog("#0a1724", 38, 86);
 const camera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.1, 120);
 camera.position.set(0, 9.2, 18.5);
 camera.lookAt(0, 0.85, 0);
@@ -108,26 +108,88 @@ const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true }
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-scene.add(new THREE.HemisphereLight("#bfeaff", "#19283d", 1.9));
-const sun = new THREE.DirectionalLight("#ffffff", 2.4);
-sun.position.set(-10, 20, 12);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+scene.add(new THREE.HemisphereLight("#d8eaff", "#172432", 1.45));
+const sun = new THREE.DirectionalLight("#fff4df", 2.8);
+sun.position.set(-12, 22, 13);
 sun.castShadow = true;
+sun.shadow.mapSize.set(1536, 1536);
+sun.shadow.camera.left = -28;
+sun.shadow.camera.right = 28;
+sun.shadow.camera.top = 26;
+sun.shadow.camera.bottom = -26;
+sun.shadow.bias = -0.00018;
 scene.add(sun);
-const fill = new THREE.PointLight("#3dbcf5", 75, 35);
-fill.position.set(10, 8, -10);
+const fill = new THREE.PointLight("#67c9ff", 58, 42, 2);
+fill.position.set(12, 9, -11);
 scene.add(fill);
+const warmFill = new THREE.PointLight("#ffbd82", 26, 30, 2);
+warmFill.position.set(-14, 7, 8);
+scene.add(warmFill);
 
+function createArenaFloorTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#263745";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Large, subtle composite-floor panels instead of a bright editor-style grid.
+  for (let y = 0; y < 512; y += 128) {
+    for (let x = 0; x < 512; x += 128) {
+      ctx.fillStyle = ((x + y) / 128) % 2 ? "#2c3e4c" : "#293b49";
+      ctx.fillRect(x + 1, y + 1, 126, 126);
+      ctx.strokeStyle = "rgba(190,218,235,0.075)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, 124, 124);
+    }
+  }
+
+  // Fine, deterministic surface grain keeps the floor from reading as a flat color.
+  let seed = 92821;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let i = 0; i < 15000; i++) {
+    const x = random() * 512;
+    const y = random() * 512;
+    const light = random() > 0.52;
+    ctx.fillStyle = light ? "rgba(220,235,245,0.055)" : "rgba(3,10,18,0.08)";
+    ctx.fillRect(x, y, 1 + random() * 2, 1);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  return texture;
+}
+const arenaFloorTexture = createArenaFloorTexture();
 const floor = new THREE.Mesh(
-  new THREE.CylinderGeometry(25, 25, 0.55, 64),
-  new THREE.MeshStandardMaterial({ color: "#14283b", roughness: 0.82 })
+  new THREE.CylinderGeometry(25, 25, 0.72, 96),
+  new THREE.MeshStandardMaterial({
+    color: "#bdc8d1", map: arenaFloorTexture, roughness: 0.84, metalness: 0.12
+  })
 );
-floor.position.y = -0.34;
+floor.position.y = -0.36;
 floor.receiveShadow = true;
 scene.add(floor);
-const grid = new THREE.GridHelper(50, 50, "#315c79", "#1c3953");
-grid.position.y = -0.055;
-scene.add(grid);
+
+// Layered steel plinth makes the arena feel like a physical venue, not a floating disk.
+const arenaPlinth = new THREE.Mesh(
+  new THREE.CylinderGeometry(25.25, 25.25, 0.48, 96),
+  new THREE.MeshStandardMaterial({ color: "#111e2b", roughness: 0.46, metalness: 0.72 })
+);
+arenaPlinth.position.y = -0.82;
+arenaPlinth.receiveShadow = true;
+scene.add(arenaPlinth);
 
 const sharedMaterials = new Map();
 function mat(color, roughness = 0.72) {
@@ -192,20 +254,256 @@ function labelSprite(text, color) {
   sprite.scale.set(4.8, 1.2, 1);
   return sprite;
 }
+
+const arenaMaterial = {
+  wall: new THREE.MeshStandardMaterial({ color: "#1b2b39", roughness: 0.78, metalness: 0.22 }),
+  wallLight: new THREE.MeshStandardMaterial({ color: "#314657", roughness: 0.58, metalness: 0.42 }),
+  steel: new THREE.MeshStandardMaterial({ color: "#25394a", roughness: 0.34, metalness: 0.82 }),
+  steelDark: new THREE.MeshStandardMaterial({ color: "#101f2c", roughness: 0.48, metalness: 0.72 }),
+  seat: new THREE.MeshStandardMaterial({ color: "#263f52", roughness: 0.56, metalness: 0.28 }),
+  seatAccent: new THREE.MeshStandardMaterial({ color: "#34566b", roughness: 0.46, metalness: 0.22 }),
+  lightCyan: new THREE.MeshStandardMaterial({ color: "#8beaff", emissive: "#29b9e8", emissiveIntensity: 1.6, roughness: 0.28 }),
+  lightWarm: new THREE.MeshStandardMaterial({ color: "#ffe1ae", emissive: "#de8b3f", emissiveIntensity: 1.1, roughness: 0.3 })
+};
+
+function arenaBox(width, height, depth, material, x, y, z, options = {}) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = options.castShadow !== false;
+  mesh.receiveShadow = options.receiveShadow !== false;
+  scene.add(mesh);
+  return mesh;
+}
+function arenaBeam(start, end, radius, material) {
+  const a = new THREE.Vector3(...start);
+  const b = new THREE.Vector3(...end);
+  const direction = new THREE.Vector3().subVectors(b, a);
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, direction.length(), 10),
+    material
+  );
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+function arenaRing(radius, tubeRadius, material, y) {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, tubeRadius, 10, 120),
+    material
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = y;
+  ring.receiveShadow = true;
+  scene.add(ring);
+  return ring;
+}
+function createArenaScreenTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 320;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, 1024, 320);
+  gradient.addColorStop(0, "#0c263b");
+  gradient.addColorStop(0.55, "#163d56");
+  gradient.addColorStop(1, "#101f39");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 1024, 320);
+  ctx.strokeStyle = "rgba(123,225,255,.30)";
+  ctx.lineWidth = 5;
+  ctx.strokeRect(12, 12, 1000, 296);
+  ctx.strokeStyle = "rgba(123,225,255,.12)";
+  ctx.lineWidth = 2;
+  for (let x = 30; x < 1024; x += 64) {
+    ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 300); ctx.stroke();
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "#53cfff";
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = "#effaff";
+  ctx.font = "800 78px Arial";
+  ctx.fillText("QUIZVERSE", 512, 125);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#86dfff";
+  ctx.font = "700 24px Arial";
+  ctx.letterSpacing = "9px";
+  ctx.fillText("LEARNING COMPETITION ARENA", 512, 214);
+  ctx.fillStyle = "rgba(218,242,255,.58)";
+  ctx.font = "600 15px Arial";
+  ctx.fillText("THINK  ·  MOVE  ·  ANSWER", 512, 266);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function buildArenaArchitecture() {
+  // Enclosing walls and a framed end-stage provide real spatial scale.
+  arenaBox(50, 11.5, 1.0, arenaMaterial.wall, 0, 5.25, -24.55);
+  arenaBox(1.0, 10.5, 48, arenaMaterial.wall, -24.55, 4.9, 0);
+  arenaBox(1.0, 10.5, 48, arenaMaterial.wall, 24.55, 4.9, 0);
+  arenaBox(50, 0.42, 0.72, arenaMaterial.steel, 0, 10.85, -23.92);
+  arenaBox(0.72, 10.2, 0.8, arenaMaterial.steel, -22.8, 5, -23.8);
+  arenaBox(0.72, 10.2, 0.8, arenaMaterial.steel, 22.8, 5, -23.8);
+
+  // Repeated wall ribs, acoustic panels and vertical light strips.
+  for (let x = -21; x <= 21; x += 3.5) {
+    arenaBox(0.16, 9.4, 0.18, arenaMaterial.wallLight, x, 5, -23.92, { castShadow: false });
+  }
+  for (const x of [-19, -12, 12, 19]) {
+    arenaBox(0.10, 8.5, 0.10, arenaMaterial.lightCyan, x, 5.25, -23.78, { castShadow: false, receiveShadow: false });
+  }
+
+  // Central illuminated scoreboard / identity screen.
+  arenaBox(13.0, 4.0, 0.55, arenaMaterial.steelDark, 0, 6.2, -23.72);
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(12.1, 3.22),
+    new THREE.MeshBasicMaterial({ map: createArenaScreenTexture(), toneMapped: false })
+  );
+  screen.position.set(0, 6.2, -23.425);
+  scene.add(screen);
+  arenaBox(13.5, 0.16, 0.12, arenaMaterial.lightCyan, 0, 8.28, -23.36, { castShadow: false, receiveShadow: false });
+  arenaBox(13.5, 0.16, 0.12, arenaMaterial.steel, 0, 4.12, -23.36);
+
+  // Heavy corner pylons and roof trusses establish an indoor venue silhouette.
+  for (const side of [-1, 1]) {
+    for (const z of [-18, 0, 18]) {
+      const x = side * 21.7;
+      const column = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.36, 10.2, 14),
+        arenaMaterial.steel
+      );
+      column.position.set(x, 5.05, z);
+      column.castShadow = true;
+      column.receiveShadow = true;
+      scene.add(column);
+      arenaBox(0.8, 0.32, 0.8, arenaMaterial.steelDark, x, 0.35, z);
+      arenaBox(0.34, 7.8, 0.12, arenaMaterial.lightCyan, x, 5.0, z, { castShadow: false, receiveShadow: false });
+    }
+  }
+  for (const z of [-20, -10, 0, 10, 20]) {
+    arenaBeam([-21.7, 10.35, z], [21.7, 10.35, z], 0.13, arenaMaterial.steel);
+  }
+  for (const side of [-1, 1]) {
+    arenaBeam([side * 21.7, 10.35, -20], [side * 21.7, 10.35, 20], 0.13, arenaMaterial.steel);
+    arenaBeam([side * 21.7, 9.65, -20], [side * 21.7, 9.65, 20], 0.055, arenaMaterial.wallLight);
+  }
+  arenaRing(19.8, 0.10, arenaMaterial.steel, 10.18);
+  arenaRing(18.8, 0.035, arenaMaterial.lightCyan, 10.18);
+
+  // A small, stepped grandstand on each side, facing the answer field.
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 3; row++) {
+      const x = side * (14.2 + row * 1.28);
+      const y = 0.56 + row * 0.42;
+      arenaBox(0.94, 0.24, 13.6, arenaMaterial.seat, x, y, 0);
+      arenaBox(0.18, 0.62, 13.6, arenaMaterial.seatAccent, x + side * 0.38, y + 0.31, 0);
+      arenaBox(0.16, 0.10, 12.8, arenaMaterial.lightCyan, x - side * 0.38, y - 0.04, 0, { castShadow: false, receiveShadow: false });
+    }
+    for (const z of [-7.2, 7.2]) {
+      arenaBox(0.95, 0.85, 0.26, arenaMaterial.steel, side * 18.5, 1.75, z);
+    }
+  }
+
+  // Curved floor markings and safety lines replace the bright editor grid.
+  arenaRing(10.9, 0.028, arenaMaterial.wallLight, 0.012);
+  arenaRing(20.8, 0.045, arenaMaterial.steel, 0.014);
+  arenaRing(23.65, 0.075, arenaMaterial.lightCyan, 0.018);
+  for (const x of [-11.0, 11.0]) {
+    arenaBox(0.045, 0.012, 12.5, arenaMaterial.wallLight, x, 0.013, 0, { castShadow: false, receiveShadow: false });
+  }
+
+  // Overhead fixtures and soft colored pools of light on the four answer bays.
+  const bayLights = ["#f45c78", "#4e9dff", "#f6d16a", "#40d5a0"];
+  PAD_POINTS.forEach((point, index) => {
+    const housing = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.38, 0.52, 0.42, 16),
+      arenaMaterial.steelDark
+    );
+    housing.position.set(point.x, 9.65, point.z);
+    housing.castShadow = true;
+    scene.add(housing);
+    const lens = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.34, 0.08, 16),
+      new THREE.MeshBasicMaterial({ color: bayLights[index] })
+    );
+    lens.position.set(point.x, 9.40, point.z);
+    scene.add(lens);
+    const pool = new THREE.PointLight(bayLights[index], 22, 19, 2);
+    pool.position.set(point.x, 8.9, point.z);
+    scene.add(pool);
+  });
+
+  // Soft architectural wash lights along the side walls.
+  for (const side of [-1, 1]) {
+    for (const z of [-12, 12]) {
+      const wallLight = new THREE.PointLight("#78d9ff", 18, 14, 2);
+      wallLight.position.set(side * 21.5, 7.3, z);
+      scene.add(wallLight);
+    }
+  }
+}
+buildArenaArchitecture();
+
 const pads = PAD_POINTS.map((p, index) => {
   const group = new THREE.Group();
-  const platform = new THREE.Mesh(
-    new THREE.BoxGeometry(7.1, 0.42, 7.1),
-    new THREE.MeshStandardMaterial({
-      color: COLORS[index], roughness: 0.42, metalness: 0.08,
-      emissive: COLORS[index], emissiveIntensity: 0.18
-    })
+  const base = new THREE.Mesh(
+    roundedBoxGeometry(7.62, 0.58, 7.62, 0.48),
+    arenaMaterial.steelDark
   );
-  platform.position.y = 0.18;
-  platform.castShadow = true; platform.receiveShadow = true;
+  base.position.y = 0.12;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const lowerTrim = new THREE.Mesh(
+    roundedBoxGeometry(7.38, 0.12, 7.38, 0.38),
+    arenaMaterial.lightCyan
+  );
+  lowerTrim.position.y = 0.39;
+  lowerTrim.castShadow = false;
+  group.add(lowerTrim);
+
+  const platformMaterial = new THREE.MeshStandardMaterial({
+    color: COLORS[index],
+    roughness: 0.31,
+    metalness: 0.18,
+    emissive: COLORS[index],
+    emissiveIntensity: 0.10
+  });
+  const platform = new THREE.Mesh(
+    roundedBoxGeometry(7.08, 0.30, 7.08, 0.34),
+    platformMaterial
+  );
+  platform.position.y = 0.57;
+  platform.castShadow = true;
+  platform.receiveShadow = true;
   group.add(platform);
+
+  const topInset = new THREE.Mesh(
+    roundedBoxGeometry(6.72, 0.035, 6.72, 0.26),
+    new THREE.MeshStandardMaterial({ color: COLORS[index], roughness: 0.48, metalness: 0.08 })
+  );
+  topInset.position.y = 0.735;
+  topInset.castShadow = false;
+  group.add(topInset);
+
+  // Small illuminated corner studs make each bay read as a built platform.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const stud = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.075, 0.075, 0.12, 10),
+        arenaMaterial.lightCyan
+      );
+      stud.position.set(sx * 3.35, 0.78, sz * 3.35);
+      group.add(stud);
+    }
+  }
+
   const tag = labelSprite(String.fromCharCode(65 + index) + " · " + COLOR_NAMES[index], COLORS[index]);
-  tag.position.set(0, 1.05, 0);
+  tag.position.set(0, 1.48, 0);
   group.add(tag);
   group.position.set(p.x, 0, p.z);
   scene.add(group);
