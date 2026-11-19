@@ -14,11 +14,11 @@ const PLAYER_ONLY = location.pathname.endsWith("/player.html");
 const HOST_DRAFT_KEY = "quizverse-host-draft-v1";
 const HOST_SESSION_KEY = "quizverse-host-session-v1";
 const CHARACTER_PRESETS = [
-  { name:"Nova",role:"SUNSHINE EXPLORER",mark:"✦",avatar:{hair:"spiky",hairColor:"#315b78",face:"happy",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#48c9d5",shirtAccent:"#ffe38a",pants:"jogger",pantsColor:"#536b91",shoes:"sneakers",shoesColor:"#f7fbff",hat:"headphones",hatAccent:"#ff9eb8"} },
-  { name:"Kai",role:"CLOUD ADVENTURER",mark:"☁",avatar:{hair:"short",hairColor:"#754c32",face:"smile",skin:"#f3c9a5",shirt:"jacket",shirtColor:"#ffad68",shirtAccent:"#fff0a5",pants:"cargo",pantsColor:"#7e9b73",shoes:"sneakers",shoesColor:"#fff4df",hat:"cap"} },
-  { name:"Luna",role:"RAINBOW DREAMER",mark:"✧",avatar:{hair:"long",hairColor:"#463454",face:"smile",skin:"#bd8057",shirt:"hoodie",shirtColor:"#aa91ee",shirtAccent:"#ffd0e9",pants:"jeans",pantsColor:"#668bc0",shoes:"high-top",shoesColor:"#f7eaf5",hat:"none"} },
-  { name:"Rex",role:"HAPPY CHAMPION",mark:"★",avatar:{hair:"curly",hairColor:"#342a35",face:"happy",skin:"#8b563d",shirt:"jersey",shirtColor:"#ff7184",shirtAccent:"#ffe18a",pants:"shorts",pantsColor:"#475b83",shoes:"sneakers",shoesColor:"#f4c542",hat:"none"} },
-  { name:"Mika",role:"COLOUR CREATOR",mark:"❋",avatar:{hair:"bob",hairColor:"#b84962",face:"wink",skin:"#f3c9a5",shirt:"tee",shirtColor:"#62d6a2",shirtAccent:"#fff2a3",pants:"jogger",pantsColor:"#7564a8",shoes:"high-top",shoesColor:"#fff0f6",hat:"beanie"} },
+  { name:"Nova",role:"SUNSHINE EXPLORER",mark:"✦",avatar:{hair:"curly",hairColor:"#315b78",face:"happy",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#48c9d5",shirtAccent:"#ffe38a",pants:"jogger",pantsColor:"#536b91",shoes:"sneakers",shoesColor:"#f7fbff",hat:"bunny-ears",hatAccent:"#ff9eb8"} },
+  { name:"Kai",role:"CLOUD ADVENTURER",mark:"☁",avatar:{hair:"short",hairColor:"#754c32",face:"smile",skin:"#f3c9a5",shirt:"jacket",shirtColor:"#ffad68",shirtAccent:"#fff0a5",pants:"cargo",pantsColor:"#7e9b73",shoes:"sneakers",shoesColor:"#fff4df",hat:"bear-ears",hatAccent:"#f7b7a5"} },
+  { name:"Luna",role:"RAINBOW DREAMER",mark:"✧",avatar:{hair:"long",hairColor:"#463454",face:"happy",skin:"#bd8057",shirt:"hoodie",shirtColor:"#aa91ee",shirtAccent:"#ffd0e9",pants:"jeans",pantsColor:"#668bc0",shoes:"high-top",shoesColor:"#f7eaf5",hat:"bow",hatAccent:"#ff9bc8"} },
+  { name:"Rex",role:"HAPPY CHAMPION",mark:"★",avatar:{hair:"curly",hairColor:"#342a35",face:"happy",skin:"#8b563d",shirt:"jersey",shirtColor:"#ff7184",shirtAccent:"#ffe18a",pants:"shorts",pantsColor:"#475b83",shoes:"sneakers",shoesColor:"#f4c542",hat:"cat-ears",hatAccent:"#ffb7c9"} },
+  { name:"Mika",role:"COLOUR CREATOR",mark:"❋",avatar:{hair:"bob",hairColor:"#b84962",face:"wink",skin:"#f3c9a5",shirt:"tee",shirtColor:"#62d6a2",shirtAccent:"#fff2a3",pants:"jogger",pantsColor:"#7564a8",shoes:"high-top",shoesColor:"#fff0f6",hat:"flower-clip",hatAccent:"#ffe36e"} },
   { name:"Zed",role:"LITTLE INVENTOR",mark:"◈",avatar:{hair:"sidepart",hairColor:"#ba9251",face:"nerd",skin:"#dfaa7e",shirt:"hoodie",shirtColor:"#ffd16b",shirtAccent:"#ffffff",pants:"cargo",pantsColor:"#53657f",shoes:"sneakers",shoesColor:"#edf5ff",hat:"headphones",hatAccent:"#75dff0"} }
 ];
 const DEFAULT_AVATAR={...CHARACTER_PRESETS[0].avatar};
@@ -29,7 +29,7 @@ const WARDROBE_CATEGORIES=[
   {title:"KARAKTER PILIHAN",items:CHARACTER_PRESETS.map(p=>({label:p.name,detail:p.role,icon:p.mark,preset:p}))}
  ]},
  {id:"hair",label:"Rambut",icon:"⌁",title:"Hair studio",subtitle:"Pilih bentuk dan warna rambut.",groups:[
-  {title:"MODEL RAMBUT",items:[["Short cut","▰","short"],["Spiky","✦","spiky"],["Long","♧","long"],["Bob","◒","bob"],["Ponytail","♢","ponytail"],["Curly","❋","curly"],["Afro","✺","afro"],["Side part","◖","sidepart"],["Botak","○","none"]].map(([label,icon,value])=>({label,icon,patch:{hair:value}}))},
+  {title:"MODEL RAMBUT",items:[["Short cut","▰","short"],["Soft tufts","✦","spiky"],["Long","♧","long"],["Bob","◒","bob"],["Ponytail","♢","ponytail"],["Curly","❋","curly"],["Afro","✺","afro"],["Side part","◖","sidepart"],["Botak","○","none"]].map(([label,icon,value])=>({label,icon,patch:{hair:value}}))},
   {title:"WARNA RAMBUT",items:[["Hitam","#252b38"],["Cokelat","#754c32"],["Pirang","#e5bd68"],["Biru","#3988e8"],["Pink","#ed83bd"],["Ungu","#9a79df"],["Silver","#e8e7df"],["Merah","#b84935"]].map(([label,color])=>({label,color,patch:{hairColor:color}}))}
  ]},
  {id:"face",label:"Wajah",icon:"☻",title:"Face & skin",subtitle:"Atur ekspresi dan warna kulit karakter.",groups:[
@@ -49,7 +49,7 @@ const WARDROBE_CATEGORIES=[
   {title:"WARNA SEPATU",items:[["Midnight","#202a38"],["White","#f1f5f9"],["Gold","#f4c542"],["Crimson","#ef5268"],["Emerald","#27bd83"],["Purple","#9468df"],["Brown","#754c32"],["Teal","#168f98"]].map(([label,color])=>({label,color,patch:{shoesColor:color}}))}
  ]},
  {id:"accessories",label:"Aksesori",icon:"◇",title:"Accessories",subtitle:"Tambahkan sentuhan terakhir untuk karakter.",groups:[
-  {title:"AKSESORI KEPALA",items:[["Tanpa aksesori","○","none"],["Baseball cap","🧢","cap"],["Beanie","♧","beanie"],["Crown","♛","crown"],["Headphones","🎧","headphones"]].map(([label,icon,value])=>({label,icon,patch:{hat:value}}))}
+  {title:"AKSESORI KEPALA",items:[["Tanpa aksesori","○","none"],["Telinga kelinci","🐰","bunny-ears"],["Telinga kucing","🐱","cat-ears"],["Telinga beruang","🐻","bear-ears"],["Pita lucu","🎀","bow"],["Jepit bunga","🌼","flower-clip"],["Baseball cap","🧢","cap"],["Beanie","♧","beanie"],["Crown","♛","crown"],["Headphones","🎧","headphones"]].map(([label,icon,value])=>({label,icon,patch:{hat:value}}))}
  ]}
 ];
 const PAD_POINTS = [
@@ -295,7 +295,7 @@ function createAvatar(a = {}) {
   torso.position.set(0, 1.29, 0);
   g.add(torso);
 
-  const torsoBody = capsule(torso, shirt, 0.33, 0.40, 0, 0, 0, 0.82);
+  const torsoBody = capsule(torso, shirt, 0.35, 0.34, 0, 0, 0, 0.84);
   torsoBody.scale.z = 0.88;
   sphere(torso, pants, 0, -0.39, 0, 0.34, 0.20, 0.27);
   torus(torso, a.shirtAccent || "#eaf7ff", 0.19, 0.025, 0, 0.43, 0, Math.PI / 2);
@@ -347,7 +347,7 @@ function createAvatar(a = {}) {
     capsule(arm, shirt, 0.145, 0.25, 0, -0.22, 0, 0.78);
     capsule(arm, shirt, 0.125, 0.25, 0, -0.49, 0.025, 0.78);
     torus(arm, a.shirtAccent || "#eaf2fb", 0.122, 0.018, 0, -0.58, 0.025, 0);
-    sphere(arm, skin, 0, -0.70, 0.055, 0.125, 0.13, 0.12);
+    sphere(arm, skin, 0, -0.70, 0.055, 0.145, 0.145, 0.135);
     // Tiny thumb gives the hand a readable silhouette.
     sphere(arm, skin, side * -0.095, -0.69, 0.12, 0.055, 0.075, 0.06);
     return arm;
@@ -385,19 +385,19 @@ function createAvatar(a = {}) {
 
   // Soft chibi head and friendly face. The face looks toward +Z.
   const head = new THREE.Group();
-  head.position.set(0, 2.08, 0);
+  head.position.set(0, 2.10, 0);
   g.add(head);
-  const headBase = sphere(head, skin, 0, 0, 0, 0.56, 0.60, 0.48, 0.82);
+  const headBase = sphere(head, skin, 0, 0, 0, 0.64, 0.68, 0.54, 0.82);
 
   // Small round ears with warm pink inner detail.
   for (const side of [-1, 1]) {
-    sphere(head, skin, side * 0.525, -0.015, -0.005, 0.145, 0.17, 0.105);
-    sphere(head, "#e99a91", side * 0.56, -0.025, 0.072, 0.055, 0.082, 0.022);
+    sphere(head, skin, side * 0.595, -0.015, -0.005, 0.16, 0.19, 0.12);
+    sphere(head, "#e99a91", side * 0.625, -0.025, 0.085, 0.065, 0.095, 0.024);
   }
 
   const browColor = a.hair && a.hair !== "none" ? hair : "#78534a";
   const eyes = [];
-  for (const x of [-0.19, 0.19]) {
+  for (const x of [-0.205, 0.205]) {
     const eye = new THREE.Group();
     eye.position.x = x;
     eye.userData.openScale = a.face === "wink" && x < 0 ? 0.18 : 1;
@@ -405,41 +405,47 @@ function createAvatar(a = {}) {
     head.add(eye);
 
     // Big glossy eyes with two highlights make the expression feel lively.
-    sphere(eye, "#ffffff", 0, 0.035, 0.414, 0.132, 0.158, 0.060, 0.3);
-    sphere(eye, a.eyeColor || "#55a9db", 0.012, 0.018, 0.466, 0.083, 0.101, 0.032, 0.3);
-    sphere(eye, "#182b48", 0.018, 0.012, 0.493, 0.052, 0.067, 0.022, 0.26);
-    sphere(eye, "#ffffff", -0.018, 0.063, 0.513, 0.027, 0.031, 0.012, 0.2);
-    sphere(eye, "#ffffff", 0.040, -0.018, 0.512, 0.012, 0.014, 0.008, 0.2);
+    sphere(eye, "#ffffff", 0, 0.045, 0.455, 0.15, 0.185, 0.064, 0.3);
+    sphere(eye, a.eyeColor || "#55a9db", 0.012, 0.025, 0.514, 0.096, 0.117, 0.036, 0.3);
+    sphere(eye, "#182b48", 0.018, 0.018, 0.545, 0.061, 0.079, 0.024, 0.26);
+    sphere(eye, "#ffffff", -0.020, 0.073, 0.568, 0.032, 0.037, 0.014, 0.2);
+    sphere(eye, "#ffffff", 0.045, -0.020, 0.568, 0.015, 0.018, 0.009, 0.2);
     eyes.push(eye);
 
     // Gentle curved eyebrows, never angled into an angry expression.
     tube(head, [
-      [x - 0.092, 0.235, 0.405],
-      [x, 0.266, 0.423],
-      [x + 0.092, 0.235, 0.405]
+      [x - 0.105, 0.265, 0.452],
+      [x, 0.298, 0.472],
+      [x + 0.105, 0.265, 0.452]
     ], browColor, 0.018);
   }
 
   // Button nose, blush and a wide friendly smile.
-  sphere(head, "#e9a08c", 0, -0.105, 0.451, 0.052, 0.043, 0.032, 0.7);
-  sphere(head, "#f28f9e", -0.345, -0.165, 0.372, 0.105, 0.060, 0.018, 0.76);
-  sphere(head, "#f28f9e", 0.345, -0.165, 0.372, 0.105, 0.060, 0.018, 0.76);
-  sphere(head, "#ffd9cf", -0.345, -0.151, 0.389, 0.026, 0.012, 0.008, 0.55);
-  sphere(head, "#ffd9cf", 0.345, -0.151, 0.389, 0.026, 0.012, 0.008, 0.55);
+  sphere(head, "#e9a08c", 0, -0.105, 0.505, 0.058, 0.048, 0.034, 0.7);
+  sphere(head, "#fff0e8", -0.018, -0.085, 0.535, 0.018, 0.012, 0.008, 0.48);
+  sphere(head, "#f28f9e", -0.385, -0.165, 0.425, 0.125, 0.073, 0.022, 0.76);
+  sphere(head, "#f28f9e", 0.385, -0.165, 0.425, 0.125, 0.073, 0.022, 0.76);
+  sphere(head, "#ffd9cf", -0.392, -0.147, 0.448, 0.030, 0.014, 0.009, 0.55);
+  sphere(head, "#ffd9cf", 0.378, -0.147, 0.448, 0.030, 0.014, 0.009, 0.55);
+  for (const side of [-1, 1]) {
+    sphere(head, "#df7189", side * 0.43, -0.18, 0.444, 0.014, 0.014, 0.008, 0.58);
+    sphere(head, "#df7189", side * 0.35, -0.19, 0.445, 0.012, 0.012, 0.008, 0.58);
+  }
 
   if (a.face === "surprised") {
-    sphere(head, "#8f465c", 0, -0.285, 0.448, 0.070, 0.082, 0.025, 0.5);
-    sphere(head, "#f3a0ad", 0, -0.319, 0.471, 0.036, 0.022, 0.012, 0.5);
+    sphere(head, "#8f465c", 0, -0.285, 0.502, 0.074, 0.086, 0.027, 0.5);
+    sphere(head, "#f3a0ad", 0, -0.321, 0.527, 0.040, 0.024, 0.014, 0.5);
   } else {
     tube(head, [
-      [-0.145, -0.235, 0.445],
-      [-0.090, -0.285, 0.452],
-      [0, -0.302, 0.458],
-      [0.090, -0.285, 0.452],
-      [0.145, -0.235, 0.445]
+      [-0.16, -0.235, 0.495],
+      [-0.10, -0.292, 0.505],
+      [0, -0.31, 0.512],
+      [0.10, -0.292, 0.505],
+      [0.16, -0.235, 0.495]
     ], "#9a5361", 0.022);
     if (a.face === "happy" || a.face === "wink") {
-      sphere(head, "#fffaf5", 0, -0.278, 0.465, 0.078, 0.020, 0.009, 0.4);
+      sphere(head, "#fffaf5", 0, -0.282, 0.527, 0.082, 0.022, 0.010, 0.4);
+      sphere(head, "#f39ab0", 0, -0.319, 0.528, 0.047, 0.022, 0.012, 0.5);
     }
   }
 
@@ -448,11 +454,11 @@ function createAvatar(a = {}) {
     const frameColor = "#55aebc";
     for (const x of [-0.19, 0.19]) {
       const lens = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.014, 8, 28), mat(frameColor, 0.42));
-      lens.position.set(x, 0.035, 0.475);
+      lens.position.set(x, 0.045, 0.525);
       head.add(lens);
       // Leave the lens open so the big expressive eyes remain visible.
     }
-    tube(head, [[-0.045,0.045,0.475],[0,0.062,0.495],[0.045,0.045,0.475]], frameColor, 0.014);
+    tube(head, [[-0.05,0.055,0.525],[0,0.075,0.545],[0.05,0.055,0.525]], frameColor, 0.014);
   }
 
   // Hair is built from soft overlapping curls and rounded locks; no sharp spikes.
@@ -530,6 +536,41 @@ function createAvatar(a = {}) {
     sphere(head, "#263c55", 0.50, -0.02, 0.01, 0.105, 0.19, 0.14);
     sphere(head, a.hatAccent || "#55dfff", -0.55, -0.02, 0.11, 0.035, 0.075, 0.035);
     sphere(head, a.hatAccent || "#55dfff", 0.55, -0.02, 0.11, 0.035, 0.075, 0.035);
+  } else if (a.hat === "bunny-ears") {
+    for (const side of [-1, 1]) {
+      const tilt = -side * 0.16;
+      const ear = sphere(head, a.hatColor || hair, side * 0.25, 0.70, -0.055, 0.135, 0.35, 0.115);
+      ear.rotation.z = tilt;
+      const inner = sphere(head, a.hatAccent || "#f5a2bd", side * 0.25, 0.70, 0.052, 0.063, 0.255, 0.018);
+      inner.rotation.z = tilt;
+    }
+    sphere(head, a.hatColor || hair, 0, 0.47, 0.22, 0.16, 0.12, 0.11);
+  } else if (a.hat === "cat-ears") {
+    for (const side of [-1, 1]) {
+      const ear = sphere(head, a.hatColor || hair, side * 0.34, 0.61, -0.045, 0.19, 0.23, 0.13);
+      ear.rotation.z = -side * 0.28;
+      const inner = sphere(head, a.hatAccent || "#f5a2bd", side * 0.34, 0.62, 0.075, 0.085, 0.13, 0.025);
+      inner.rotation.z = -side * 0.28;
+    }
+  } else if (a.hat === "bear-ears") {
+    for (const side of [-1, 1]) {
+      sphere(head, a.hatColor || hair, side * 0.46, 0.49, -0.075, 0.19, 0.19, 0.14);
+      sphere(head, a.hatAccent || "#f5a2bd", side * 0.46, 0.49, 0.055, 0.105, 0.105, 0.025);
+    }
+  } else if (a.hat === "bow") {
+    const bowColor = a.hatAccent || "#ff9bc8";
+    const leftLoop = sphere(head, bowColor, -0.43, 0.32, 0.29, 0.17, 0.115, 0.07);
+    leftLoop.rotation.z = -0.32;
+    const rightLoop = sphere(head, bowColor, -0.27, 0.32, 0.29, 0.17, 0.115, 0.07);
+    rightLoop.rotation.z = 0.32;
+    sphere(head, "#fff1f6", -0.35, 0.32, 0.355, 0.055, 0.065, 0.025);
+  } else if (a.hat === "flower-clip") {
+    const petalColor = a.hatAccent || "#ffe36e";
+    for (let i = 0; i < 5; i++) {
+      const angle = i / 5 * Math.PI * 2;
+      sphere(head, petalColor, 0.42 + Math.cos(angle) * 0.105, 0.30 + Math.sin(angle) * 0.105, 0.31, 0.085, 0.085, 0.055);
+    }
+    sphere(head, "#fff4b8", 0.42, 0.30, 0.38, 0.075, 0.075, 0.035);
   }
 
   // Small silhouette accents make the avatar read better at game-camera distance.
@@ -566,11 +607,11 @@ function animateAvatar(mesh, time, moving = false) {
   rig.rightArm.rotation.z = (airborne ? -0.42 : 0.035) + swing * 0.10;
   rig.leftLeg.rotation.x = airborne ? -0.42 : -swing * 0.78;
   rig.rightLeg.rotation.x = airborne ? -0.42 : swing * 0.78;
-  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.035 : Math.sin(t * 2.5) * 0.024);
+  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.05 : Math.sin(t * 3.1) * 0.04);
   rig.torso.rotation.z = Math.sin(t * 1.5) * 0.018 + swing * 0.018;
   rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
   rig.head.rotation.y = Math.sin(t * 0.72) * 0.035;
-  rig.head.rotation.z = Math.sin(t * 1.1) * 0.022;
+  rig.head.rotation.z = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.55) * 0.012;
   // A quick, staggered blink keeps the faces from looking like static dolls.
   const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
   let blinkScale = 1;
@@ -605,7 +646,7 @@ function setAvatarNameTag(mesh, name) {
   }
   const tag = labelSprite(label, "#58d6ff");
   tag.scale.set(1.92, 0.48, 1);
-  tag.position.set(0, 3.12, 0);
+  tag.position.set(0, 3.48, 0);
   tag.material.depthTest = false;
   tag.material.depthWrite = false;
   tag.renderOrder = 20;
