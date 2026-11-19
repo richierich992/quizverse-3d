@@ -1973,10 +1973,24 @@ function movePlayer(dt) {
   playerMesh.position.x = ownPosition.x;
   playerMesh.position.z = ownPosition.z;
   if (Math.abs(input.x) + Math.abs(input.z) > 0.04) playerMesh.rotation.y = Math.atan2(input.x, input.z);
+  // Answer bays are raised podiums. Keep players standing on their top surface
+  // while they are inside the answer area, then return to the main floor.
+  const onAnswerBay = pads.some((pad) =>
+    Math.abs(ownPosition.x - pad.x) <= 3.15 &&
+    Math.abs(ownPosition.z - pad.z) <= 3.15
+  );
+  const groundHeight = onAnswerBay ? 0.753 : 0;
+
   if (jumpVelocity !== 0 || !grounded) {
     playerMesh.position.y += jumpVelocity * dt;
     jumpVelocity -= 22 * dt;
-    if (playerMesh.position.y <= 0) { playerMesh.position.y = 0; jumpVelocity = 0; grounded = true; }
+    if (playerMesh.position.y <= groundHeight) {
+      playerMesh.position.y = groundHeight;
+      jumpVelocity = 0;
+      grounded = true;
+    }
+  } else {
+    playerMesh.position.y = groundHeight;
   }
 
   if (!answerBusy) {
