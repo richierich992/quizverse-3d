@@ -110,7 +110,8 @@ export const createRoom = onCall({ region: REGION, maxInstances: 5 }, async (req
     uid, name, avatar, x: 0, z: 0, score: 0, streak: 0, connected: true, hasAnswered: false
   };
   updates[`privateRooms/${roomPin}`] = {
-    hostUid: uid, questions, durationSeconds, createdAt: now, answers: {}
+    hostUid: uid, questions, durationSeconds, createdAt: now,
+    rounds: { "0": { locked: false, answers: {} } }
   };
   await db.ref().update(updates);
   return { roomPin, title, totalQuestions: questions.length };
@@ -170,7 +171,8 @@ export const startGame = onCall({ region: REGION, maxInstances: 5 }, async (requ
   return { started: true };
 });
 
-// Answers are held privately until the round closes. No score or correctness feedback is returned yet.
+// Answers are held in a server-only round node. The same transaction path is
+// used to lock the round at the deadline, preventing late submissions racing the timer.
 export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
@@ -187,26 +189,44 @@ export const submitAnswer = onCall({ region: REGION, maxInstances: 20 }, async (
   const privateRoom = privateSnap.val();
   if (!playerSnap.exists()) throw new HttpsError("permission-denied", "Kamu belum bergabung dengan room.");
   if (!state || state.phase !== "question") throw new HttpsError("failed-precondition", "Pertanyaan tidak sedang aktif.");
-  const now = Date.now();
-  if (now > Number(state.deadlineAt)) throw new HttpsError("deadline-exceeded", "Waktu menjawab sudah habis.");
+  if (Date.now() > Number(state.deadlineAt)) throw new HttpsError("deadline-exceeded", "Waktu menjawab sudah habis.");
   const questionIndex = Number(state.questionIndex);
   const question = privateRoom?.questions?.[questionIndex] as QuizQuestion | undefined;
   if (!question) throw new HttpsError("not-found", "Pertanyaan tidak ditemukan.");
 
+  const now = Date.now();
   const remainingSeconds = Math.max(0, Math.floor((Number(state.deadlineAt) - now) / 1000));
-  const answerRef = db.ref(`privateRooms/${pin}/answers/${questionIndex}/${uid}`);
-  const answerTx = await answerRef.transaction((current) => current === null ? {
-    answerIndex,
-    isCorrect: answerIndex === question.answerIndex,
-    remainingSeconds,
-    submittedAt: now
-  } : undefined);
-  if (!answerTx.committed) throw new HttpsError("already-exists", "Jawaban sudah dikirim.");
+  const roundRef = db.ref(`privateRooms/${pin}/rounds/${questionIndex}`);
+  const answerTx = await roundRef.transaction((current) => {
+    if (!current || current.locked === true) return;
+    const answers = current.answers ?? {};
+    if (answers[uid]) return;
+    return {
+      ...current,
+      answers: {
+        ...answers,
+        [uid]: {
+          answerIndex,
+          isCorrect: answerIndex === question.answerIndex,
+          remainingSeconds,
+          submittedAt: now
+        }
+      }
+    };
+  });
+  if (!answerTx.committed) {
+    const latest = (await roomRef.child("public").get()).val();
+    if (!latest || latest.phase !== "question" || Date.now() > Number(latest.deadlineAt)) {
+      throw new HttpsError("deadline-exceeded", "Waktu menjawab sudah habis.");
+    }
+    throw new HttpsError("already-exists", "Jawaban sudah dikirim.");
+  }
   return { accepted: true };
 });
 
 // Any room member may advance only after the authoritative deadline.
-// A scoring phase makes score settlement retryable if a function invocation is interrupted.
+// The round node is atomically locked before scores are settled, so a submission
+// cannot slip in after the server closes the timer.
 export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (request) => {
   const uid = uidOf(request);
   const pin = cleanText(request.data?.roomPin, 6);
@@ -220,15 +240,20 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
   const privateRoom = privateSnap.val();
   const questions = privateRoom?.questions as QuizQuestion[] | undefined;
   if (!state || !questions?.length) throw new HttpsError("not-found", "Game tidak ditemukan.");
-  const now = Date.now();
   const publicRef = roomRef.child("public");
 
-  // First caller closes the question. A transaction prevents multiple callers
-  // from starting score settlement or moving the same round more than once.
-  if (state.phase === "question" && now >= Number(state.deadlineAt)) {
+  if (state.phase === "question" && Date.now() >= Number(state.deadlineAt)) {
+    const questionIndex = Number(state.questionIndex);
+    const roundRef = db.ref(`privateRooms/${pin}/rounds/${questionIndex}`);
+    await roundRef.transaction((current) => {
+      if (!current) return { locked: true, answers: {} };
+      if (current.locked === true) return current;
+      return { ...current, locked: true };
+    });
+    const closeAt = Date.now();
     await publicRef.transaction((current) => {
-      if (!current || current.phase !== "question" || now < Number(current.deadlineAt)) return;
-      return { ...current, phase: "scoring", scoringStartedAt: now, updatedAt: now };
+      if (!current || current.phase !== "question" || closeAt < Number(current.deadlineAt)) return;
+      return { ...current, phase: "scoring", scoringStartedAt: closeAt, updatedAt: closeAt };
     });
   }
 
@@ -237,12 +262,16 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
     const questionIndex = Number(latestState.questionIndex);
     const question = questions[questionIndex];
     if (!question) throw new HttpsError("not-found", "Pertanyaan tidak ditemukan.");
-    const answers = privateRoom.answers?.[questionIndex] ?? {};
-    const players = playersSnap.val() ?? {};
+    const [roundSnap, freshPlayersSnap] = await Promise.all([
+      db.ref(`privateRooms/${pin}/rounds/${questionIndex}`).get(),
+      roomRef.child("players").get()
+    ]);
+    const answers = roundSnap.val()?.answers ?? {};
+    const players = freshPlayersSnap.val() ?? {};
 
-    // Each player stores lastScoredQuestionIndex atomically with their score,
-    // making repeated settlement calls idempotent.
-    await Promise.all(Object.entries(players).map(async ([playerId, playerData]: [string, any]) => {
+    // Per-player transaction is idempotent. If a function invocation retries,
+    // lastScoredQuestionIndex prevents awarding the same round twice.
+    await Promise.all(Object.keys(players).map(async (playerId) => {
       const answer = answers[playerId];
       const playerRef = roomRef.child(`players/${playerId}`);
       await playerRef.transaction((current) => {
@@ -290,6 +319,8 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
       if (finalState?.phase === "finished") await roomRef.child("meta/status").set("finished");
       latestState = finalState;
     } else {
+      const nextRoundRef = db.ref(`privateRooms/${pin}/rounds/${nextIndex}`);
+      await nextRoundRef.transaction((current) => current ?? { locked: false, answers: {} });
       const nextAt = Date.now();
       await publicRef.transaction((current) => {
         if (!current || current.phase !== "reveal" || Date.now() < Number(current.revealEndsAt)) return;
@@ -300,6 +331,12 @@ export const advanceGame = onCall({ region: REGION, maxInstances: 10 }, async (r
         };
       });
       latestState = (await publicRef.get()).val();
+      if (latestState?.phase === "question") {
+        const reset: Record<string, boolean> = {};
+        const freshPlayers = (await roomRef.child("players").get()).val() ?? {};
+        for (const playerId of Object.keys(freshPlayers)) reset[`rooms/${pin}/players/${playerId}/hasAnswered`] = false;
+        if (Object.keys(reset).length) await db.ref().update(reset);
+      }
     }
   }
   return { phase: latestState?.phase || state.phase, advanced: latestState?.phase !== state.phase };
