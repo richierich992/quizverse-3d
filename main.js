@@ -56,6 +56,14 @@ const PAD_POINTS = [
   { x: -7, z: -6 }, { x: 7, z: -6 }, { x: -7, z: 6 }, { x: 7, z: 6 }
 ];
 
+const ANSWER_BAY_SURFACE_Y = 0.753;
+function answerBaySurfaceAt(x, z) {
+  const inside = PAD_POINTS.some((point) =>
+    Math.abs(x - point.x) <= 3.15 && Math.abs(z - point.z) <= 3.15
+  );
+  return inside ? ANSWER_BAY_SURFACE_Y : 0;
+}
+
 let app = null, auth = null, db = null, uid = "";
 let roomPin = "", isHost = false, questionBank = null;
 let activeState = null, playerData = {}, remotePlayers = {}, ownAvatar = null;
@@ -1009,6 +1017,7 @@ function updateRemoteAvatar(id, data) {
   const signature = JSON.stringify(data.avatar || {});
   const x = Number(data.x || 0);
   const z = Number(data.z || 0);
+  const y = answerBaySurfaceAt(x, z);
   const name = String(data.name || "Pemain");
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
@@ -1017,11 +1026,11 @@ function updateRemoteAvatar(id, data) {
       disposeAvatar(entry.mesh);
     }
     const mesh = createAvatar(data.avatar || {});
-    mesh.position.set(x, 0, z);
+    mesh.position.set(x, y, z);
     setAvatarNameTag(mesh, name);
     entry = {
       mesh, signature, lastMoveAt: 0,
-      lastX: x, lastZ: z, targetX: x, targetZ: z,
+      lastX: x, lastZ: z, targetX: x, targetY: y, targetZ: z,
       targetYaw: 0
     };
     remotePlayers[id] = entry;
@@ -1038,6 +1047,7 @@ function updateRemoteAvatar(id, data) {
   entry.lastX = x;
   entry.lastZ = z;
   entry.targetX = x;
+  entry.targetY = y;
   entry.targetZ = z;
 }
 function renderPlayers(players) {
@@ -1975,11 +1985,7 @@ function movePlayer(dt) {
   if (Math.abs(input.x) + Math.abs(input.z) > 0.04) playerMesh.rotation.y = Math.atan2(input.x, input.z);
   // Answer bays are raised podiums. Keep players standing on their top surface
   // while they are inside the answer area, then return to the main floor.
-  const onAnswerBay = pads.some((pad) =>
-    Math.abs(ownPosition.x - pad.x) <= 3.15 &&
-    Math.abs(ownPosition.z - pad.z) <= 3.15
-  );
-  const groundHeight = onAnswerBay ? 0.753 : 0;
+  const groundHeight = answerBaySurfaceAt(ownPosition.x, ownPosition.z);
 
   if (jumpVelocity !== 0 || !grounded) {
     playerMesh.position.y += jumpVelocity * dt;
@@ -2097,6 +2103,7 @@ function animate() {
     const dx = entry.targetX - entry.mesh.position.x;
     const dz = entry.targetZ - entry.mesh.position.z;
     entry.mesh.position.x += dx * remoteBlend;
+    entry.mesh.position.y += (Number(entry.targetY || 0) - entry.mesh.position.y) * remoteBlend;
     entry.mesh.position.z += dz * remoteBlend;
     if (Math.abs(dx) + Math.abs(dz) < 0.006) {
       entry.mesh.position.x = entry.targetX;
