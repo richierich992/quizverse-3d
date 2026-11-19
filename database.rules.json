@@ -12,7 +12,7 @@
         "players": {
           "$uid": {
             ".write": "auth != null && auth.uid === $uid",
-            ".validate": "newData.hasChildren(['uid','name','avatar','x','z','score','streak','connected','hasAnswered'])",
+            ".validate": "newData.hasChildren(['uid','name','avatar','x','z','score','streak','lastScoredQuestionIndex','connected','hasAnswered'])",
             "uid": {
               ".validate": "newData.isString() && newData.val() === auth.uid"
             },
@@ -32,6 +32,9 @@
               ".validate": "newData.isNumber() && newData.val() === data.val()"
             },
             "streak": {
+              ".validate": "newData.isNumber() && newData.val() === data.val()"
+            },
+            "lastScoredQuestionIndex": {
               ".validate": "newData.isNumber() && newData.val() === data.val()"
             },
             "connected": {
