@@ -1,17 +1,52 @@
 {
   "rules": {
     "rooms": {
-      "$room": {
+      "$roomPin": {
         ".read": "auth != null",
         "meta": {
-          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || data.child('hostId').val() === auth.uid)"
+          ".write": false
+        },
+        "public": {
+          ".write": false
         },
         "players": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid"
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['uid','name','avatar','x','z','score','streak','connected','hasAnswered'])",
+            "uid": {
+              ".validate": "newData.isString() && newData.val() === auth.uid"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 18"
+            },
+            "avatar": {
+              ".validate": "newData.hasChildren(['hair','hairColor','face','skin','shirt','shirtColor','pants','pantsColor','hat'])"
+            },
+            "x": {
+              ".validate": "newData.isNumber() && newData.val() >= -22 && newData.val() <= 22"
+            },
+            "z": {
+              ".validate": "newData.isNumber() && newData.val() >= -22 && newData.val() <= 22"
+            },
+            "score": {
+              ".validate": "newData.isNumber() && newData.val() === data.val()"
+            },
+            "streak": {
+              ".validate": "newData.isNumber() && newData.val() === data.val()"
+            },
+            "connected": {
+              ".validate": "newData.isBoolean()"
+            },
+            "hasAnswered": {
+              ".validate": "newData.val() === data.val()"
+            }
           }
         }
       }
+    },
+    "privateRooms": {
+      ".read": false,
+      ".write": false
     }
   }
 }
