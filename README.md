@@ -4,14 +4,14 @@ Game kuis edukasi 3D berbasis browser. Client menggunakan Three.js, Firebase Ano
 
 ## Arsitektur Spark
 - **Host** membuka `index.html`, menyusun soal langsung di halaman (import JSON hanya opsional), membuat Room PIN, dan menjaga tab Host tetap terbuka sampai permainan selesai. Draft soal disimpan di `sessionStorage`, sehingga aman saat refresh dan otomatis berakhir saat tab Host ditutup.
-- **Player** memakai link khusus `player.html?pin=123456`, mengisi nama, menggeser carousel karakter visual, lalu masuk ke arena. Halaman Player tidak menampilkan pilihan menjadi Host.
+- **Player** memakai link khusus `player.html?pin=123456`, mengisi nama, lalu memilih outfit di Avatar Wardrobe: kategori gaya, rambut, wajah, atasan, bawahan, sepatu, dan aksesori. Pilihan langsung memperbarui preview 3D. Halaman Player tidak menampilkan pilihan menjadi Host.
 - **Realtime Database** menyimpan room, soal aktif yang sudah disanitasi (tanpa kunci), posisi/avatar, jawaban pribadi, dan skor.
 - **Realtime Database Security Rules** menyembunyikan answer keys, hanya menerima satu jawaban per pemain per ronde sebelum deadline, serta memvalidasi perubahan skor terhadap kunci jawaban tersembunyi. Pemeriksaan aturan terjadi di Firebase, bukan hanya di JavaScript client.
 
 **Catatan model free:** tidak ada Cloud Functions. Browser Host bertindak sebagai pengatur pergantian ronde. Jika tab Host ditutup atau koneksi Host putus, timer tidak akan otomatis memajukan ronde berikutnya. Buka game dari browser Host di komputer/proyektor dan biarkan tab itu tetap aktif selama sesi.
 
 ## File penting
-- `index.html`: Host Console; `player.html`: pintu masuk khusus Player; `style.css` dan `main.js`: UI bersama dan arena Three.js.
+- `index.html`: Host Console; `player.html`: pintu masuk khusus Player; `style.css` dan `main.js`: UI bersama, Avatar Wardrobe 3D, dan arena Three.js.
 - `firebase-config.js`: konfigurasi Web app QuizVerse.
 - `database.rules.json`: rules Spark untuk memisahkan room publik, answer keys privat, dan submission per pemilik.
 - `admin/Code.gs`: ekspor bank soal Google Sheets menjadi file JSON privat di Google Drive.
