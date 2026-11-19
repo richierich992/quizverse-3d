@@ -89,5 +89,5 @@ Firebase Spark tidak memerlukan payment method untuk mulai digunakan. Realtime D
 - Game menggunakan polling realtime Firebase untuk posisi avatar; batasi jumlah pemain dan frekuensi update supaya kuota download tidak cepat habis.
 - Host wajib tetap online untuk memajukan timer dan ronde.
 - Rules melakukan validasi server-side untuk submission dan skor, tetapi Host tetap dipercaya untuk memilih isi kuis dan memulai/transisi ronde. Jangan gunakan desain ini untuk ujian berisiko tinggi atau kompetisi berhadiah.
-- Belum ada pengujian dua perangkat atau uji Rules melalui Firebase Emulator; jalankan tes manual setelah mem-publish Rules.
+- GitHub Actions sudah menguji Rules di Firebase Emulator: kunci privat, jawaban ganda, jawaban setelah deadline, reveal, skor/streak sah, perubahan skor palsu, serta larangan pemain baru masuk setelah game dimulai. Uji browser dua perangkat dan integrasi ke project Firebase asli masih perlu dilakukan.
 - Fase peti/kristal, power-up, obby, eliminasi penuh, serta admin bank soal berbasis web belum termasuk MVP.
