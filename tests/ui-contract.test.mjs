@@ -80,6 +80,7 @@ assert.match(css, /\.mini-avatar-head/, "Mini avatar thumbnails have visible fac
 assert.match(main, /animateAvatar\(previewAvatar, now, false\)/, "Live avatar preview animates while idle");
 assert.match(main, /Object\.values\(remotePlayers\)\.forEach/, "Remote avatars receive independent animation updates");
 assert.match(main, /function findSpawnPosition\(players = \{\}\)/, "New players receive a separated arena spawn point");
+assert.match(main, /for \(let i = 0; i < 160; i\+\+\)/, "Spawn allocator has enough candidate points for a full room");
 assert.match(main, /findSpawnPosition\(players\)/, "Join flow allocates non-overlapping player spawn points");
 assert.match(main, /x: ownPosition\.x, z: ownPosition\.z/, "New player records persist their allocated spawn position");
 assert.match(main, /const savedProfile = existingPlayer\.val\(\) \|\| \{\}/, "Reconnect restores the player's last saved coordinates");
