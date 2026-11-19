@@ -827,6 +827,26 @@ async function makeRoom() {
   }
 }
 
+function findSpawnPosition(players = {}) {
+  const occupied = Object.values(players || {}).map((person) => ({
+    x: Number(person?.x || 0),
+    z: Number(person?.z || 0)
+  }));
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < 40; i++) {
+    const radius = 13 + Math.sqrt(i) * 0.82;
+    const angle = i * goldenAngle;
+    const candidate = {
+      x: Math.cos(angle) * radius,
+      z: Math.sin(angle) * radius
+    };
+    const clearPlayers = occupied.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 2.2);
+    const clearPlatforms = PAD_POINTS.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 5.2);
+    if (clearPlayers && clearPlatforms) return candidate;
+  }
+  // The room cap is 40; this fallback is only defensive if stored coordinates are malformed.
+  return { x: 0, z: 0 };
+}
 async function createOwnPlayer() {
   const playerRef = dbPath(`rooms/${roomPin}/players/${uid}`);
   const profile = {
@@ -840,7 +860,7 @@ async function createOwnPlayer() {
     await update(playerRef, profile);
   } else {
     await set(playerRef, {
-      uid, ...profile, x: 0, z: 0, score: 0, streak: 0,
+      uid, ...profile, x: ownPosition.x, z: ownPosition.z, score: 0, streak: 0,
       lastScoredQuestionIndex: -1
     });
   }
@@ -863,7 +883,10 @@ async function joinRoom() {
     }
     roomPin = pin;
     isHost = false;
-    ownPosition = { x: 0, z: 0 };
+    const savedProfile = existingPlayer.val() || {};
+    ownPosition = existingPlayer.exists()
+      ? { x: Number(savedProfile.x || 0), z: Number(savedProfile.z || 0) }
+      : findSpawnPosition(players);
     await createOwnPlayer();
     setOwnAvatar(appearance());
     await enterLobby();
