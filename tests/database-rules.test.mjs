@@ -56,6 +56,7 @@ try {
 
   await assertFails(get(ref(p1, `answerKeys/${pin}/questions`)));
 
+
   const deadline0 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
     id: "q0", category: "Test", question: "Question one?", options: ["A", "B", "C", "D"]
@@ -63,6 +64,9 @@ try {
 
   const submission1 = `submissions/${pin}/current/player-1`;
   const submission2 = `submissions/${pin}/current/player-2`;
+  console.log("DEBUG deadline", deadline0, "localNow", Date.now());
+  console.log("DEBUG public", JSON.stringify((await get(ref(p1, `${base}/public`))).val()));
+  console.log("DEBUG player", JSON.stringify((await get(ref(p1, `${base}/players/player-1`))).val()));
   await assertSucceeds(set(ref(p1, submission1), { questionIndex: 0, answerIndex: 1 }));
   await assertFails(set(ref(p1, submission1), { questionIndex: 0, answerIndex: 0 }));
   await assertSucceeds(get(ref(p1, submission1)));
