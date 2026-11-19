@@ -587,18 +587,18 @@ function saveHostDraft() {
   } catch (error) {
     setDraftStatus("Draft tidak dapat disimpan oleh browser ini: " + error.message);
   }
-  $("draftQuestionCount").textContent = questionBank.questions.length + (questionBank.questions.length === 1 ? " soal" : " soal");
+  $("draftQuestionCount").textContent = questionBank.questions.length + " soal";
 }
 function renderQuestionEditor() {
   const list = $("questionEditorList");
   if (!list || !questionBank) return;
   list.innerHTML = questionBank.questions.map((q, qi) => {
     const options = (q.options || ["", "", "", ""]).map((value, oi) => `
-      <label class="option-edit option-${"ABCD"[oi]}">
+      <div class="option-edit option-${"ABCD"[oi]}">
         <input type="radio" name="correct-${qi}" value="${oi}" data-question-index="${qi}" data-field="answerIndex" ${Number(q.answerIndex) === oi ? "checked" : ""} aria-label="Tandai opsi ${"ABCD"[oi]} sebagai jawaban benar">
         <span class="option-letter">${"ABCD"[oi]}</span>
         <input type="text" maxlength="180" placeholder="Tulis pilihan ${"ABCD"[oi]}" value="${escapeHtml(value)}" data-question-index="${qi}" data-option-index="${oi}" data-field="option">
-      </label>`).join("");
+      </div>`).join("");
     return `
       <article class="question-editor" data-question-card="${qi}">
         <div class="question-editor-head">
@@ -742,7 +742,7 @@ function restoreHostSession() {
   })();
 }
 
-$("chooseHost").addEventListener("click", () => {
+$("chooseHost")?.addEventListener("click", () => {
   $("hostFields").classList.remove("hidden");
   $("playerFields").classList.add("hidden");
   $("setupEyebrow").textContent = "HOST CONSOLE";
@@ -883,7 +883,6 @@ function initializePlayerEntry() {
   const pin = new URLSearchParams(location.search).get("pin") || "";
   if (/^\d{6}$/.test(pin)) $("pin").value = pin;
   showScreen("setupScreen");
-  renderCharacterCarousel();
   setOwnAvatar(appearance());
   status("Pilih karakter, isi nama, lalu masukkan PIN dari Host.");
 }

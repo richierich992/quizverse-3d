@@ -68,7 +68,7 @@ Ketika Host membuat room, hanya teks soal dan opsi yang dipublikasikan ke room. 
 2. Buka Extensions → Apps Script.
 3. Tempel isi `admin/Code.gs`.
 4. Jalankan `exportPrivateQuestionBank()` saat login sebagai admin.
-5. Apps Script membuat file JSON privat di Google Drive. Unduh file tersebut, lalu unggah dari panel Host.
+5. Apps Script membuat file JSON privat di Google Drive. Unduh file tersebut, lalu gunakan opsi **Import bank soal JSON** pada Host Console bila ingin mengimpor.
 
 Jangan menerbitkan endpoint publik yang mengirim answer key ke browser pemain.
 

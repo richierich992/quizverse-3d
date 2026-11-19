@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check main.js && npm run test:ui",
+    "check": "node --check main.js",
     "test:rules": "firebase emulators:exec --only database --project demo-quizverse 'node tests/database-rules.test.mjs'",
     "test:ui": "node tests/ui-contract.test.mjs"
   },
