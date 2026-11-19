@@ -404,13 +404,22 @@ async function makeRoom() {
 }
 
 async function createOwnPlayer() {
-  await set(dbPath(`rooms/${roomPin}/players/${uid}`), {
-    uid,
+  const playerRef = dbPath(`rooms/${roomPin}/players/${uid}`);
+  const profile = {
     name: $("name").value.trim().slice(0, 18) || (isHost ? "Host" : "Pemain"),
     avatar: appearance(),
-    x: 0, z: 0, score: 0, streak: 0,
-    lastScoredQuestionIndex: -1, connected: true
-  });
+    connected: true
+  };
+  const existing = await get(playerRef);
+  if (existing.exists()) {
+    // Rejoining preserves the score and scoring cursor; only refresh the profile.
+    await update(playerRef, profile);
+  } else {
+    await set(playerRef, {
+      uid, ...profile, x: 0, z: 0, score: 0, streak: 0,
+      lastScoredQuestionIndex: -1
+    });
+  }
 }
 async function joinRoom() {
   try {
