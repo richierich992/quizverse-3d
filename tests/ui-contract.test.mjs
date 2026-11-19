@@ -18,7 +18,7 @@ assert.match(main, /if \(PLAYER_ONLY\) \{\s*initializePlayerEntry\(\)/, "Player 
 assert.match(player, /player.html|Player Join/, "Separate Player page exists");
 assert.match(player, /id="wardrobeNav"/, "Player has a category rail");
 assert.match(player, /id="wardrobeGrid"/, "Player has an outfit item grid");
-assert.match(player, /id="avatarPreviewStage"/, "Player has a 3D avatar viewport");
+assert.match(player, /id="avatarPreviewCanvas"/, "Player has a dedicated 3D preview canvas");
 assert.match(player, /id="resetAvatar"/, "Player can reset avatar");
 assert.match(main, /HOST_DRAFT_KEY/);
 assert.match(main, /sessionStorage\.setItem\(HOST_DRAFT_KEY/);
@@ -34,8 +34,8 @@ assert.match(main, /function renderWardrobeGrid/);
 assert.match(main, /function renderWardrobeNav/);
 assert.match(main, /function initAvatarPreview/);
 assert.match(main, /function renderAvatarPreview/);
-assert.match(main, /renderer\.setScissorTest\(true\)/, "Avatar preview shares the main WebGL context");
-assert.doesNotMatch(main, /previewRenderer|new THREE\.WebGLRenderer\(\{canvas,alpha/, "No second WebGL renderer is created");
+assert.match(main, /previewRenderer = new THREE\.WebGLRenderer/, "Avatar preview has a renderer inside its visible UI panel");
+assert.match(main, /catch \(error\) \{[\s\S]*?Preview 3D tidak tersedia/, "Preview failure is handled without stopping the app");
 assert.match(main, /function resetWardrobeAvatar/);
 assert.match(main, /shoesColor/);
 assert.match(main, /WARDROBE_CATEGORIES/, "Wardrobe category data is available");
@@ -48,5 +48,5 @@ assert.match(player, /reportBootError/, "Player page reports JavaScript boot err
 assert.match(main, /connection\("Aplikasi siap · Firebase Spark", true\)/, "Successful module initialization clears loading status");
 assert.match(css, /\.wardrobe-rail/);
 assert.match(css, /\.wardrobe-items/);
-assert.match(css, /#avatarPreviewStage/);
+assert.match(css, /#avatarPreviewCanvas/);
 console.log("PASS: separate Host/Player entry, session draft persistence, inline question builder, and 3D avatar wardrobe.");

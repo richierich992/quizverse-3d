@@ -23,7 +23,7 @@ const CHARACTER_PRESETS = [
 ];
 const DEFAULT_AVATAR={...CHARACTER_PRESETS[0].avatar};
 let selectedAvatar={...DEFAULT_AVATAR},selectedLookName="Nova",activeWardrobeCategory="look";
-let previewScene=null,previewCamera=null,previewAvatar=null,previewResizeObserver=null;
+let previewScene=null,previewCamera=null,previewRenderer=null,previewAvatar=null,previewResizeObserver=null;
 const WARDROBE_CATEGORIES=[
  {id:"look",label:"Gaya",icon:"✦",title:"Pilih gaya awal",subtitle:"Mulai dari karakter siap pakai, lalu ubah sesukamu.",groups:[
   {title:"KARAKTER PILIHAN",items:CHARACTER_PRESETS.map(p=>({label:p.name,detail:p.role,icon:p.mark,preset:p}))}
@@ -766,11 +766,12 @@ function setupWardrobeInteractions() {
   $("resetAvatar").addEventListener("click",resetWardrobeAvatar);
 }
 function resizeAvatarPreview() {
-  const stage = $("avatarPreviewStage");
-  if (!previewCamera || !stage) return;
-  const rect = stage.getBoundingClientRect();
+  if (!previewRenderer || !$("avatarPreviewCanvas")) return;
+  const canvas = $("avatarPreviewCanvas");
+  const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, rect.width);
   const height = Math.max(1, rect.height);
+  previewRenderer.setSize(width, height, false);
   previewCamera.aspect = width / height;
   previewCamera.updateProjectionMatrix();
 }
@@ -791,18 +792,31 @@ function refreshAvatarPreview() {
   previewScene.add(previewAvatar);
 }
 function initAvatarPreview() {
-  if (previewScene) {
+  if (previewRenderer) {
     refreshAvatarPreview();
     resizeAvatarPreview();
     return;
   }
+  const canvas = $("avatarPreviewCanvas");
+  try {
+    // Dedicated canvas is placed inside the preview panel, above its backdrop.
+    // If a browser cannot allocate another WebGL context, the rest of the app remains usable.
+    previewRenderer = new THREE.WebGLRenderer({
+      canvas, alpha: true, antialias: true, powerPreference: "low-power"
+    });
+  } catch (error) {
+    console.error("Avatar preview WebGL unavailable:", error);
+    $("avatarPreviewStage").classList.add("preview-unavailable");
+    $("avatarPreviewStage").dataset.previewError = String(error?.message || error);
+    status("Preview 3D tidak tersedia di browser ini. Kamu masih bisa memilih avatar.");
+    return;
+  }
+  previewRenderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  previewRenderer.setClearColor(0x07111f, 0);
+  previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  // Use the app's existing WebGL context. A second WebGLRenderer can fail on
-  // devices/browser GPU limits and halt the whole Player module.
   previewScene = new THREE.Scene();
-  previewScene.background = null;
   previewCamera = new THREE.PerspectiveCamera(34, 1, 0.1, 80);
-
   previewScene.add(new THREE.HemisphereLight("#d9f4ff", "#26334d", 2.2));
   const keyLight = new THREE.DirectionalLight("#ffffff", 2.6);
   keyLight.position.set(-4, 7, 5);
@@ -851,7 +865,6 @@ function initAvatarPreview() {
     gem.position.set(Math.cos(angle) * 2.1, 1.1 + (i % 3) * 0.53, -0.45 + Math.sin(angle) * 0.35);
     previewScene.add(gem);
   }
-
   previewCamera.position.set(4.1, 3.25, 7.1);
   previewCamera.lookAt(0, 1.2, 0);
   refreshAvatarPreview();
@@ -862,34 +875,6 @@ function initAvatarPreview() {
     previewResizeObserver.observe($("avatarPreviewStage"));
   }
 }
-function renderAvatarPreview() {
-  const stage = $("avatarPreviewStage");
-  if (!previewScene || !previewCamera || !stage) return;
-  const stageRect = stage.getBoundingClientRect();
-  const canvasRect = renderer.domElement.getBoundingClientRect();
-  if (stageRect.width < 2 || stageRect.height < 2 || canvasRect.width < 2 || canvasRect.height < 2) return;
-
-  // Three.js viewport/scissor coordinates are measured from the canvas bottom-left.
-  const x = stageRect.left - canvasRect.left;
-  const y = canvasRect.bottom - stageRect.bottom;
-  const width = stageRect.width;
-  const height = stageRect.height;
-  const size = renderer.getSize(new THREE.Vector2());
-  const oldAutoClear = renderer.autoClear;
-
-  renderer.autoClear = false;
-  renderer.setScissorTest(true);
-  renderer.setViewport(x, y, width, height);
-  renderer.setScissor(x, y, width, height);
-  renderer.clearDepth();
-  if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
-  renderer.render(previewScene, previewCamera);
-
-  renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, size.x, size.y);
-  renderer.autoClear = oldAutoClear;
-}
-
 function restoreHostSession() {
   const saved = sessionStorage.getItem(HOST_SESSION_KEY);
   if (!saved) return Promise.resolve(false);
@@ -1162,7 +1147,10 @@ function animate() {
   const t = performance.now() * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
   renderer.render(scene, camera);
-  renderAvatarPreview();
+  if (previewRenderer && previewScene) {
+    if (previewAvatar) previewAvatar.rotation.y = Math.sin(performance.now() * 0.00035) * 0.16;
+    previewRenderer.render(previewScene, previewCamera);
+  }
 }
 animate();
 
