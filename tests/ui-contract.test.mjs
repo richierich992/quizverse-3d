@@ -85,7 +85,7 @@ assert.match(main, /findSpawnPosition\(players\)/, "Join flow allocates non-over
 assert.match(main, /x: ownPosition\.x, z: ownPosition\.z/, "New player records persist their allocated spawn position");
 assert.match(main, /const savedProfile = existingPlayer\.val\(\) \|\| \{\}/, "Reconnect restores the player's last saved coordinates");
 assert.match(main, /const headBase = sphere\(head, skin, 0, 0, 0, 0\.64, 0\.68, 0\.54/, "Avatar head uses a larger plush chibi sphere rather than a rigid block");
-assert.match(main, /const torsoBody = capsule\(torso, shirt, 0\.33, 0\.40/, "Avatar body uses a rounded capsule silhouette");
+assert.match(main, /const torsoBody = capsule\(torso, shirt, 0\.35, 0\.34/, "Avatar body uses a fuller rounded capsule silhouette");
 assert.match(main, /new THREE\.SphereGeometry\(1, 32, 24\)/, "Mascot surfaces use smooth geometry");
 assert.match(main, /0\.15, 0\.185, 0\.064/, "Mascot has oversized expressive eye whites");
 assert.match(main, /0\.096, 0\.117, 0\.036/, "Mascot has bright oversized irises");
