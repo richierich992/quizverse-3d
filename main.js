@@ -130,6 +130,34 @@ function mat(color, roughness = 0.72) {
   }
   return sharedMaterials.get(key);
 }
+const roundedGeometryCache = new Map();
+function roundedBoxGeometry(width, height, depth, radius = 0.16) {
+  const key = [width, height, depth, radius].join("|");
+  if (roundedGeometryCache.has(key)) return roundedGeometryCache.get(key);
+  const r = Math.min(radius, width * 0.46, height * 0.46);
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfW + r, -halfH);
+  shape.lineTo(halfW - r, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + r);
+  shape.lineTo(halfW, halfH - r);
+  shape.quadraticCurveTo(halfW, halfH, halfW - r, halfH);
+  shape.lineTo(-halfW + r, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - r);
+  shape.lineTo(-halfW, -halfH + r);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + r, -halfH);
+  const bevel = Math.min(0.028, r * 0.16, depth * 0.08);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth, steps: 1, bevelEnabled: true,
+    bevelSegments: 3, bevelSize: bevel, bevelThickness: bevel,
+    curveSegments: 5
+  });
+  geometry.translate(0, 0, -depth / 2);
+  geometry.computeVertexNormals();
+  roundedGeometryCache.set(key, geometry);
+  return geometry;
+}
 function cube(parent, w, h, d, color, x, y, z) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
   mesh.position.set(x, y, z);
@@ -205,6 +233,14 @@ function createAvatar(a = {}) {
     parent.add(mesh);
     return mesh;
   };
+  const roundedBox = (parent, color, w, h, d, radius, x, y, z, roughness = 0.72) => {
+    const mesh = new THREE.Mesh(roundedBoxGeometry(w, h, d, radius), mat(color, roughness));
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
   const capsule = (parent, color, radius, length, x, y, z, roughness = 0.72) => {
     const mesh = new THREE.Mesh(
       new THREE.CapsuleGeometry(radius, length, 5, 14),
@@ -257,7 +293,7 @@ function createAvatar(a = {}) {
   torso.position.set(0, 1.29, 0);
   g.add(torso);
 
-  capsule(torso, shirt, 0.37, 0.43, 0, 0, 0, 0.78).scale.z = 0.82;
+  roundedBox(torso, shirt, 0.80, 0.98, 0.60, 0.22, 0, 0, 0, 0.78);
   sphere(torso, pants, 0, -0.39, 0, 0.34, 0.20, 0.27);
   torus(torso, a.shirtAccent || "#eaf7ff", 0.19, 0.025, 0, 0.43, 0, Math.PI / 2);
 
@@ -292,6 +328,12 @@ function createAvatar(a = {}) {
     // Kangaroo-pocket seams and soft cuff-like accents.
     tube(torso, [[-0.19,-0.22,0.31],[-0.16,-0.31,0.34],[0.16,-0.31,0.34],[0.19,-0.22,0.31]], a.shirtAccent || "#eaf2fb", 0.012);
   }
+  // A small shoulder patch and chest badge give each outfit a team-uniform feel.
+  for (const side of [-1, 1]) {
+    roundedBox(torso, a.shirtAccent || "#f5d25b", 0.12, 0.20, 0.035, 0.035, side * 0.31, 0.28, 0.302, 0.58);
+  }
+  roundedBox(torso, "#162b40", 0.38, 0.07, 0.035, 0.025, 0, -0.43, 0.302, 0.6);
+  roundedBox(torso, a.shirtAccent || "#f5d25b", 0.09, 0.085, 0.045, 0.02, 0, -0.43, 0.33, 0.42);
 
   // Articulated arms: shoulder, sleeve, forearm and hand are grouped for animation.
   const makeArm = (side) => {
@@ -342,7 +384,7 @@ function createAvatar(a = {}) {
   const head = new THREE.Group();
   head.position.set(0, 2.08, 0);
   g.add(head);
-  sphere(head, skin, 0, 0, 0, 0.53, 0.57, 0.47);
+  roundedBox(head, skin, 1.02, 1.08, 0.74, 0.24, 0, 0, 0, 0.78);
   sphere(head, skin, -0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
   sphere(head, skin, 0.51, -0.035, -0.005, 0.13, 0.17, 0.12);
   sphere(head, a.earAccent || skin, -0.53, -0.04, 0.055, 0.055, 0.085, 0.035);
@@ -396,6 +438,13 @@ function createAvatar(a = {}) {
   // Hair silhouettes: layered volume, side locks and recognizable presets.
   if (a.hair && a.hair !== "none") {
     sphere(head, hair, 0, 0.40, -0.045, 0.52, 0.23, 0.46);
+    if (a.hair === "spiky" || a.hair === "short" || a.hair === "sidepart") {
+      sphere(head, hair, -0.20, 0.27, 0.31, 0.30, 0.13, 0.18);
+      sphere(head, hair, 0.14, 0.31, 0.27, 0.28, 0.11, 0.17);
+    } else if (a.hair === "long" || a.hair === "bob") {
+      sphere(head, hair, -0.20, 0.28, 0.30, 0.26, 0.11, 0.17);
+      sphere(head, hair, 0.12, 0.30, 0.28, 0.23, 0.10, 0.16);
+    }
     if (a.hair === "spiky") {
       for (let i = 0; i < 6; i++) {
         const spike = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 10), mat(hair));
@@ -472,15 +521,16 @@ function animateAvatar(mesh, time, moving = false) {
   const stride = t * 10.5;
   const walk = moving ? 1 : 0;
   const swing = Math.sin(stride) * walk;
-  rig.leftArm.rotation.x = swing * 0.62 + Math.sin(t * 2.2) * 0.025;
-  rig.rightArm.rotation.x = -swing * 0.62 + Math.sin(t * 2.2 + 0.8) * 0.025;
-  rig.leftArm.rotation.z = -0.035;
-  rig.rightArm.rotation.z = 0.035;
-  rig.leftLeg.rotation.x = -swing * 0.72;
-  rig.rightLeg.rotation.x = swing * 0.72;
+  const airborne = mesh.position.y > 0.16;
+  rig.leftArm.rotation.x = swing * 0.68 + Math.sin(t * 2.2) * 0.035;
+  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.035;
+  rig.leftArm.rotation.z = (airborne ? 0.42 : -0.035) - swing * 0.10;
+  rig.rightArm.rotation.z = (airborne ? -0.42 : 0.035) + swing * 0.10;
+  rig.leftLeg.rotation.x = airborne ? -0.42 : -swing * 0.78;
+  rig.rightLeg.rotation.x = airborne ? -0.42 : swing * 0.78;
   rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.022 : Math.sin(t * 2.0) * 0.012);
   rig.torso.rotation.z = Math.sin(t * 1.5) * 0.012 + swing * 0.018;
-  rig.head.rotation.x = Math.sin(t * 1.35) * 0.018 - Math.abs(swing) * 0.018;
+  rig.head.rotation.x = Math.sin(t * 1.35) * 0.022 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
   rig.head.rotation.y = Math.sin(t * 0.72) * 0.026;
   rig.head.rotation.z = Math.sin(t * 1.1) * 0.014;
   // A quick, staggered blink keeps the faces from looking like static dolls.
@@ -491,10 +541,31 @@ function animateAvatar(mesh, time, moving = false) {
   rig.eyes.forEach((eye) => { eye.scale.y = blinkScale; });
 }
 
+function setAvatarNameTag(mesh, name) {
+  if (!mesh) return;
+  const label = String(name || "Pemain").trim().slice(0, 18) || "Pemain";
+  const current = mesh.userData.nameTag;
+  if (current?.userData.label === label) return;
+  if (current) {
+    mesh.remove(current);
+    current.material?.map?.dispose();
+    current.material?.dispose();
+  }
+  const tag = labelSprite(label, "#58d6ff");
+  tag.scale.set(1.92, 0.48, 1);
+  tag.position.set(0, 3.34, 0);
+  tag.material.depthTest = false;
+  tag.material.depthWrite = false;
+  tag.renderOrder = 20;
+  tag.userData.label = label;
+  mesh.add(tag);
+  mesh.userData.nameTag = tag;
+}
 function setOwnAvatar(a) {
   ownAvatar = a;
   if (playerMesh) scene.remove(playerMesh);
   playerMesh = createAvatar(a);
+  setAvatarNameTag(playerMesh, $("name")?.value || "Pemain");
   playerMesh.position.set(ownPosition.x, 0, ownPosition.z);
   scene.add(playerMesh);
   syncProfile().catch(() => {});
@@ -533,22 +604,33 @@ function updateRemoteAvatar(id, data) {
   const signature = JSON.stringify(data.avatar || {});
   const x = Number(data.x || 0);
   const z = Number(data.z || 0);
+  const name = String(data.name || "Pemain");
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
     if (entry) scene.remove(entry.mesh);
-    entry = { mesh: createAvatar(data.avatar || {}), signature, lastMoveAt: 0, lastX: x, lastZ: z };
+    const mesh = createAvatar(data.avatar || {});
+    mesh.position.set(x, 0, z);
+    setAvatarNameTag(mesh, name);
+    entry = {
+      mesh, signature, lastMoveAt: 0,
+      lastX: x, lastZ: z, targetX: x, targetZ: z,
+      targetYaw: 0
+    };
     remotePlayers[id] = entry;
     scene.add(entry.mesh);
+  } else {
+    setAvatarNameTag(entry.mesh, name);
   }
   const dx = x - entry.lastX;
   const dz = z - entry.lastZ;
   if (Math.hypot(dx, dz) > 0.035) {
     entry.lastMoveAt = performance.now();
-    entry.mesh.rotation.y = Math.atan2(dx, dz);
+    entry.targetYaw = Math.atan2(dx, dz);
   }
   entry.lastX = x;
   entry.lastZ = z;
-  entry.mesh.position.set(x, 0, z);
+  entry.targetX = x;
+  entry.targetZ = z;
 }
 function renderPlayers(players) {
   playerData = players || {};
@@ -1314,7 +1396,10 @@ $("returnHome").addEventListener("click", () => {
     showScreen("roleScreen");
   }
 });
-$("name").addEventListener("change", () => syncProfile().catch((e) => status(explainError(e), true)));
+$("name").addEventListener("change", () => {
+  if (playerMesh) setAvatarNameTag(playerMesh, $("name").value);
+  syncProfile().catch((e) => status(explainError(e), true));
+});
 
 function initializePlayerEntry() {
   $("roleScreen").classList.add("hidden");
@@ -1436,8 +1521,27 @@ function animate() {
   }
   const now = performance.now();
   if (playerMesh) animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving));
+  const remoteBlend = 1 - Math.exp(-16 * dt);
   Object.values(remotePlayers).forEach((entry) => {
-    animateAvatar(entry.mesh, now, now - Number(entry.lastMoveAt || 0) < 280);
+    const dx = entry.targetX - entry.mesh.position.x;
+    const dz = entry.targetZ - entry.mesh.position.z;
+    entry.mesh.position.x += dx * remoteBlend;
+    entry.mesh.position.z += dz * remoteBlend;
+    if (Math.abs(dx) + Math.abs(dz) < 0.006) {
+      entry.mesh.position.x = entry.targetX;
+      entry.mesh.position.z = entry.targetZ;
+    }
+    const yawDelta = Math.atan2(
+      Math.sin(entry.targetYaw - entry.mesh.rotation.y),
+      Math.cos(entry.targetYaw - entry.mesh.rotation.y)
+    );
+    entry.mesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
+    const distanceToTarget = Math.hypot(
+      entry.targetX - entry.mesh.position.x,
+      entry.targetZ - entry.mesh.position.z
+    );
+    const moving = distanceToTarget > 0.025 && now - Number(entry.lastMoveAt || 0) < 600;
+    animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
