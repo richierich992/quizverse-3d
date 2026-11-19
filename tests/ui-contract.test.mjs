@@ -58,3 +58,9 @@ assert.match(css, /\.wardrobe-rail/);
 assert.match(css, /\.wardrobe-items/);
 assert.match(css, /#avatarPreviewCanvas/);
 console.log("PASS: separate Host/Player entry, session draft persistence, inline question builder, and 3D avatar wardrobe.");
+
+assert.match(main, /Eye whites, irises, pupils and highlights\. Camera\/front is \+Z\./, "Avatar face orientation is explicit");
+assert.match(main, /orb\("#ffffff", x, 2\.08, 0\.438/, "Avatar has visible eye whites on the front side");
+assert.match(main, /TubeGeometry\(curve, 20, radius/, "Avatar uses curved mouth/facial details");
+assert.match(main, /new THREE\.CapsuleGeometry\(0\.15, legHeight/, "Avatar limbs use rounded geometry");
+assert.match(css, /border-radius:17px/, "Wardrobe cards use softer rounded styling");
