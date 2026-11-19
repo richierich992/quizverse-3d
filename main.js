@@ -9,6 +9,19 @@ import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
 const $ = (id) => document.getElementById(id);
 const COLORS = ["#f34f68", "#328df4", "#f4c542", "#27c88b"];
 const COLOR_NAMES = ["MERAH", "BIRU", "KUNING", "HIJAU"];
+
+const PLAYER_ONLY = /(?:^|\\/)player\\.html$/.test(location.pathname);
+const HOST_DRAFT_KEY = "quizverse-host-draft-v1";
+const HOST_SESSION_KEY = "quizverse-host-session-v1";
+const CHARACTER_PRESETS = [
+  { name: "Nova", role: "NEON RUNNER", mark: "⚡", avatar: { hair: "spiky", hairColor: "#18263c", face: "cool", skin: "#dfaa7e", shirt: "jersey", shirtColor: "#1ebad6", pants: "jogger", pantsColor: "#243b59", hat: "headphones" } },
+  { name: "Kai", role: "SKY EXPLORER", mark: "✦", avatar: { hair: "short", hairColor: "#754c32", face: "happy", skin: "#f3c9a5", shirt: "jacket", shirtColor: "#ef9b45", pants: "cargo", pantsColor: "#566b45", hat: "cap" } },
+  { name: "Luna", role: "STAR SCHOLAR", mark: "✧", avatar: { hair: "long", hairColor: "#252b38", face: "smile", skin: "#bd8057", shirt: "hoodie", shirtColor: "#9b78e8", pants: "jeans", pantsColor: "#294a70", hat: "none" } },
+  { name: "Rex", role: "ARENA CHAMP", mark: "★", avatar: { hair: "afro", hairColor: "#252b38", face: "happy", skin: "#8b563d", shirt: "jersey", shirtColor: "#e94e69", pants: "shorts", pantsColor: "#273344", hat: "none" } },
+  { name: "Mika", role: "CREATIVE MAKER", mark: "❋", avatar: { hair: "bob", hairColor: "#b84935", face: "wink", skin: "#f3c9a5", shirt: "tee", shirtColor: "#27bd83", pants: "jogger", pantsColor: "#514477", hat: "beanie" } },
+  { name: "Zed", role: "TECH PILOT", mark: "◈", avatar: { hair: "sidepart", hairColor: "#e5bd68", face: "nerd", skin: "#dfaa7e", shirt: "hoodie", shirtColor: "#f0bb3e", pants: "cargo", pantsColor: "#263247", hat: "headphones" } }
+];
+let selectedCharacterIndex = 0;
 const PAD_POINTS = [
   { x: -7, z: -6 }, { x: 7, z: -6 }, { x: -7, z: 6 }, { x: 7, z: 6 }
 ];
@@ -137,12 +150,7 @@ for (let i = 0; i < 10; i++) {
 }
 
 function appearance() {
-  const value = (id) => $(id).value;
-  return {
-    hair: value("hair"), hairColor: value("hairColor"), face: value("face"),
-    skin: value("skin"), shirt: value("shirt"), shirtColor: value("shirtColor"),
-    pants: value("pants"), pantsColor: value("pantsColor"), hat: value("hat")
-  };
+  return { ...CHARACTER_PRESETS[selectedCharacterIndex].avatar };
 }
 function createAvatar(a = {}) {
   const g = new THREE.Group();
@@ -277,8 +285,15 @@ function lobbyFromState(state) {
   $("quizName").textContent = state.title || "QuizVerse Quiz";
   $("questionCount").textContent = Number(state.totalQuestions || 0) + " pertanyaan";
   $("roomLabel").textContent = "ROOM " + roomPin;
-  $("hostNote").textContent = isHost ? "Kamu adalah host. Mulai saat pemain siap." : "Menunggu host memulai permainan...";
+  $("hostNote").textContent = isHost ? "Host Console aktif. Bagikan link pemain dan PIN, lalu mulai saat semua siap." : "Menunggu host memulai permainan...";
   $("startGame").classList.toggle("hidden", !isHost || state.phase !== "lobby");
+  $("playerInvite").classList.toggle("hidden", !isHost);
+  if (isHost) $("playerJoinLink").textContent = playerInviteUrl();
+}
+function playerInviteUrl() {
+  const url = new URL("./player.html", location.href);
+  url.searchParams.set("pin", roomPin);
+  return url.href;
 }
 function subscribeRoom() {
   stopListeners();
@@ -319,7 +334,8 @@ function subscribeRoom() {
 }
 async function enterLobby() {
   subscribeRoom();
-  await onDisconnect(dbPath(`rooms/${roomPin}/players/${uid}/connected`)).set(false);
+  // Host is a controller, not a roster player; only Players need a player disconnect hook.
+  if (!isHost) await onDisconnect(dbPath(`rooms/${roomPin}/players/${uid}/connected`)).set(false);
   showScreen("lobbyScreen");
 }
 
@@ -355,7 +371,7 @@ function renderQuestion(state) {
 
 async function makeRoom() {
   try {
-    if (!questionBank?.questions?.length) throw new Error("Pilih file bank soal JSON terlebih dahulu.");
+    const cleaned = validateQuestionBank();
     await ensureFirebase();
     status("Membuat room...");
     let pin = "";
@@ -369,16 +385,10 @@ async function makeRoom() {
     roomPin = pin;
     isHost = true;
     ownPosition = { x: 0, z: 0 };
-    const title = $("quizTitle").value.trim() || questionBank.title || "QuizVerse Challenge";
-    const duration = Math.max(10, Math.min(30, Number($("duration").value || questionBank.durationSeconds || 15)));
-    questionBank.questions = questionBank.questions.map((q, index) => ({
-      id: String(q.id || "q" + index),
-      category: String(q.category || "Umum"),
-      question: String(q.question || ""),
-      options: Array.isArray(q.options) ? q.options.map(String) : [],
-      answerIndex: Number(q.answerIndex),
-      explanation: String(q.explanation || "")
-    }));
+    questionBank = cleaned;
+    saveHostDraft();
+    const title = questionBank.title;
+    const duration = questionBank.durationSeconds;
 
     await set(dbPath(`rooms/${pin}/meta`), {
       hostUid: uid, title, status: "lobby", createdAt: serverNow(), maxPlayers: 40
@@ -393,11 +403,10 @@ async function makeRoom() {
       durationSeconds: duration, question: { category: "", question: "", options: [] },
       title, deadlineAt: 0
     });
-    await createOwnPlayer();
-    setOwnAvatar(appearance());
+    sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ pin }));
     await enterLobby();
     connection("Host room " + pin, true);
-    status("Room siap. Bagikan PIN kepada pemain.");
+    status("Room siap. Bagikan link pemain dan PIN.");
   } catch (error) {
     status(explainError(error), true);
   }
@@ -556,6 +565,344 @@ async function hostAdvance() {
 }
 
 // -------------------- UI setup --------------------
+function emptyQuestion() {
+  return { id: "", category: "Umum", question: "", options: ["", "", "", ""], answerIndex: 0, explanation: "" };
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
+}
+function setDraftStatus(message) {
+  const target = $("draftStatus");
+  if (target) target.textContent = message;
+}
+function saveHostDraft() {
+  if (!questionBank) return;
+  questionBank.title = $("quizTitle").value.trim() || "QuizVerse Challenge";
+  questionBank.durationSeconds = Number($("duration").value || 15);
+  try {
+    sessionStorage.setItem(HOST_DRAFT_KEY, JSON.stringify(questionBank));
+    setDraftStatus("✓ Draft tersimpan otomatis di tab Host ini.");
+  } catch (error) {
+    setDraftStatus("Draft tidak dapat disimpan oleh browser ini: " + error.message);
+  }
+  $("draftQuestionCount").textContent = questionBank.questions.length + (questionBank.questions.length === 1 ? " soal" : " soal");
+}
+function renderQuestionEditor() {
+  const list = $("questionEditorList");
+  if (!list || !questionBank) return;
+  list.innerHTML = questionBank.questions.map((q, qi) => {
+    const options = (q.options || ["", "", "", ""]).map((value, oi) => `
+      <label class="option-edit option-${"ABCD"[oi]}">
+        <input type="radio" name="correct-${qi}" value="${oi}" data-question-index="${qi}" data-field="answerIndex" ${Number(q.answerIndex) === oi ? "checked" : ""} aria-label="Tandai opsi ${"ABCD"[oi]} sebagai jawaban benar">
+        <span class="option-letter">${"ABCD"[oi]}</span>
+        <input type="text" maxlength="180" placeholder="Tulis pilihan ${"ABCD"[oi]}" value="${escapeHtml(value)}" data-question-index="${qi}" data-option-index="${oi}" data-field="option">
+      </label>`).join("");
+    return `
+      <article class="question-editor" data-question-card="${qi}">
+        <div class="question-editor-head">
+          <strong>PERTANYAAN ${String(qi + 1).padStart(2, "0")}</strong>
+          <button type="button" class="remove-question" data-action="remove-question" data-question-index="${qi}" ${questionBank.questions.length === 1 ? "disabled" : ""}>Hapus</button>
+        </div>
+        <label class="field">Kategori<input type="text" maxlength="40" value="${escapeHtml(q.category)}" data-question-index="${qi}" data-field="category" placeholder="Umum / Sains / Sejarah"></label>
+        <label class="field">Teks pertanyaan<textarea rows="2" maxlength="500" data-question-index="${qi}" data-field="question" placeholder="Tulis pertanyaan di sini...">${escapeHtml(q.question)}</textarea></label>
+        <div class="options-title">PILIHAN JAWABAN <span>Pilih lingkaran untuk jawaban benar</span></div>
+        <div class="editor-options">${options}</div>
+        <label class="field explanation-field">Penjelasan setelah jawaban (opsional)<textarea rows="2" maxlength="300" data-question-index="${qi}" data-field="explanation" placeholder="Berikan penjelasan singkat...">${escapeHtml(q.explanation)}</textarea></label>
+      </article>`;
+  }).join("");
+  $("draftQuestionCount").textContent = questionBank.questions.length + " soal";
+}
+function loadHostDraft() {
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(HOST_DRAFT_KEY) || "null"); } catch { saved = null; }
+  if (saved && Array.isArray(saved.questions)) {
+    questionBank = {
+      title: String(saved.title || "QuizVerse Challenge"),
+      durationSeconds: Number(saved.durationSeconds || 15),
+      questions: saved.questions.map((q) => ({
+        id: String(q.id || ""), category: String(q.category || "Umum"),
+        question: String(q.question || ""),
+        options: Array.isArray(q.options) ? [0, 1, 2, 3].map((i) => String(q.options[i] || "")) : ["", "", "", ""],
+        answerIndex: Number.isInteger(Number(q.answerIndex)) ? Number(q.answerIndex) : 0,
+        explanation: String(q.explanation || "")
+      }))
+    };
+  } else {
+    questionBank = { title: "QuizVerse Challenge", durationSeconds: 15, questions: [emptyQuestion()] };
+  }
+  $("quizTitle").value = questionBank.title;
+  $("duration").value = String(questionBank.durationSeconds);
+  renderQuestionEditor();
+  if (saved) setDraftStatus("✓ Draft sebelumnya dipulihkan dari tab ini.");
+}
+function validateQuestionBank() {
+  if (!questionBank || !Array.isArray(questionBank.questions) || !questionBank.questions.length) {
+    throw new Error("Tambahkan minimal satu pertanyaan.");
+  }
+  if (questionBank.questions.length > 50) throw new Error("Maksimal 50 pertanyaan per room.");
+  const questions = questionBank.questions.map((q, index) => {
+    const options = Array.isArray(q.options) ? q.options.map((value) => String(value || "").trim()) : [];
+    if (!String(q.question || "").trim()) throw new Error("Pertanyaan " + (index + 1) + " belum diisi.");
+    if (options.length !== 4 || options.some((value) => !value)) {
+      throw new Error("Lengkapi empat pilihan jawaban pada pertanyaan " + (index + 1) + ".");
+    }
+    const answerIndex = Number(q.answerIndex);
+    if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex > 3) {
+      throw new Error("Pilih jawaban benar pada pertanyaan " + (index + 1) + ".");
+    }
+    return {
+      id: String(q.id || "q" + index), category: String(q.category || "Umum").trim() || "Umum",
+      question: String(q.question).trim(), options, answerIndex,
+      explanation: String(q.explanation || "").trim()
+    };
+  });
+  return {
+    title: $("quizTitle").value.trim() || "QuizVerse Challenge",
+    durationSeconds: Math.max(10, Math.min(30, Number($("duration").value || 15))),
+    questions
+  };
+}
+function selectCharacter(index, scrollCard = true) {
+  selectedCharacterIndex = (index + CHARACTER_PRESETS.length) % CHARACTER_PRESETS.length;
+  const preset = CHARACTER_PRESETS[selectedCharacterIndex];
+  $("selectedCharacterLabel").textContent = preset.name;
+  $("characterTrack").querySelectorAll(".character-card").forEach((card, cardIndex) => {
+    card.classList.toggle("selected", cardIndex === selectedCharacterIndex);
+    card.setAttribute("aria-pressed", cardIndex === selectedCharacterIndex ? "true" : "false");
+  });
+  if (scrollCard) {
+    const card = $("characterTrack").children[selectedCharacterIndex];
+    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }
+  if (PLAYER_ONLY) setOwnAvatar(appearance());
+}
+function renderCharacterCarousel() {
+  const track = $("characterTrack");
+  if (!track) return;
+  track.replaceChildren();
+  CHARACTER_PRESETS.forEach((preset, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "character-card";
+    card.dataset.characterIndex = String(index);
+    const avatar = preset.avatar;
+    card.innerHTML = `
+      <span class="character-portrait" style="--shirt:${avatar.shirtColor};--skin:${avatar.skin};--hair:${avatar.hairColor};--pants:${avatar.pantsColor}">
+        <i class="avatar-hair"></i><i class="avatar-head"><b></b><b></b></i><i class="avatar-body"></i><i class="avatar-legs"></i><i class="avatar-mark">${preset.mark}</i>
+      </span>
+      <span class="character-name">${escapeHtml(preset.name)}</span>
+      <span class="character-role">${escapeHtml(preset.role)}</span>
+      <span class="character-check">✓</span>`;
+    card.addEventListener("click", () => selectCharacter(index, false));
+    track.appendChild(card);
+  });
+  track.addEventListener("scroll", () => {
+    if (track._selectFrame) return;
+    track._selectFrame = requestAnimationFrame(() => {
+      const center = track.getBoundingClientRect().left + track.clientWidth / 2;
+      let closest = 0, distance = Infinity;
+      [...track.children].forEach((card, index) => {
+        const rect = card.getBoundingClientRect();
+        const delta = Math.abs(rect.left + rect.width / 2 - center);
+        if (delta < distance) { distance = delta; closest = index; }
+      });
+      if (closest !== selectedCharacterIndex) selectCharacter(closest, false);
+      track._selectFrame = 0;
+    });
+  }, { passive: true });
+  selectCharacter(selectedCharacterIndex, false);
+}
+function restoreHostSession() {
+  const saved = sessionStorage.getItem(HOST_SESSION_KEY);
+  if (!saved) return Promise.resolve(false);
+  return (async () => {
+    const session = JSON.parse(saved);
+    if (!/^\\d{6}$/.test(String(session.pin || ""))) throw new Error("Data sesi Host tidak valid.");
+    await ensureFirebase();
+    const pin = String(session.pin);
+    const [metaSnap, publicSnap] = await Promise.all([
+      get(dbPath(`rooms/${pin}/meta`)), get(dbPath(`rooms/${pin}/public`))
+    ]);
+    const meta = metaSnap.val();
+    const publicState = publicSnap.val();
+    if (!meta || meta.hostUid !== uid || !publicState) {
+      sessionStorage.removeItem(HOST_SESSION_KEY);
+      return false;
+    }
+    roomPin = pin;
+    isHost = true;
+    activeState = publicState;
+    ownPosition = { x: 0, z: 0 };
+    await enterLobby();
+    connection("Host room " + pin + " dipulihkan", true);
+    status("Sesi Host dipulihkan setelah refresh.");
+    return true;
+  })();
+}
+
+$("chooseHost").addEventListener("click", () => {
+  $("hostFields").classList.remove("hidden");
+  $("playerFields").classList.add("hidden");
+  $("setupEyebrow").textContent = "HOST CONSOLE";
+  $("setupTitle").textContent = "Buat arena kuis.";
+  $("backRole").classList.remove("hidden");
+  showScreen("setupScreen");
+  status("Susun soal langsung di halaman ini. Draft tersimpan otomatis.");
+});
+$("backRole").addEventListener("click", () => showScreen("roleScreen"));
+$("quizTitle").addEventListener("input", saveHostDraft);
+$("duration").addEventListener("change", saveHostDraft);
+$("questionEditorList").addEventListener("input", (event) => {
+  const target = event.target;
+  if (target.type === "radio") return;
+  const qi = Number(target.dataset.questionIndex);
+  if (!Number.isInteger(qi) || !questionBank?.questions[qi]) return;
+  const q = questionBank.questions[qi];
+  if (target.dataset.field === "option") q.options[Number(target.dataset.optionIndex)] = target.value;
+  else if (target.dataset.field) q[target.dataset.field] = target.value;
+  saveHostDraft();
+});
+$("questionEditorList").addEventListener("change", (event) => {
+  const target = event.target;
+  if (target.dataset.field !== "answerIndex") return;
+  const qi = Number(target.dataset.questionIndex);
+  if (!Number.isInteger(qi) || !questionBank?.questions[qi]) return;
+  questionBank.questions[qi].answerIndex = Number(target.value);
+  saveHostDraft();
+});
+$("questionEditorList").addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="remove-question"]');
+  if (!button || !questionBank) return;
+  const qi = Number(button.dataset.questionIndex);
+  questionBank.questions.splice(qi, 1);
+  if (!questionBank.questions.length) questionBank.questions.push(emptyQuestion());
+  saveHostDraft();
+  renderQuestionEditor();
+});
+$("addQuestion").addEventListener("click", () => {
+  if (questionBank.questions.length >= 50) {
+    status("Maksimal 50 pertanyaan per room.", true);
+    return;
+  }
+  questionBank.questions.push(emptyQuestion());
+  saveHostDraft();
+  renderQuestionEditor();
+  $("questionEditorList").lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+$("questionFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const questions = Array.isArray(parsed) ? parsed : parsed.questions;
+    if (!Array.isArray(questions) || !questions.length) throw new Error("Properti questions tidak ditemukan.");
+    if (questions.length > 50) throw new Error("Maksimal 50 pertanyaan per room.");
+    questionBank = {
+      title: String(parsed.title || $("quizTitle").value || "QuizVerse Challenge"),
+      durationSeconds: Number(parsed.durationSeconds || $("duration").value || 15),
+      questions: questions.map((q) => ({
+        id: String(q.id || ""), category: String(q.category || "Umum"),
+        question: String(q.question || ""),
+        options: Array.isArray(q.options) ? [0, 1, 2, 3].map((i) => String(q.options[i] || "")) : ["", "", "", ""],
+        answerIndex: Number(q.answerIndex || 0), explanation: String(q.explanation || "")
+      }))
+    };
+    $("quizTitle").value = questionBank.title;
+    $("duration").value = String(questionBank.durationSeconds);
+    renderQuestionEditor();
+    saveHostDraft();
+    $("fileStatus").textContent = "✓ " + file.name + " · " + questions.length + " soal berhasil diimpor.";
+    status("Bank soal berhasil diimpor. Kamu masih bisa mengeditnya.");
+  } catch (error) {
+    $("fileStatus").textContent = "File tidak valid: " + error.message;
+  }
+});
+$("createRoom").addEventListener("click", makeRoom);
+$("joinRoom").addEventListener("click", joinRoom);
+$("startGame").addEventListener("click", startGame);
+$("copyPin").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(roomPin);
+    $("copyPin").textContent = "Tersalin";
+    setTimeout(() => $("copyPin").textContent = "Salin PIN", 1200);
+  } catch { $("copyPin").textContent = roomPin; }
+});
+$("copyPlayerLink").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(playerInviteUrl());
+    $("copyPlayerLink").textContent = "Link tersalin";
+    setTimeout(() => $("copyPlayerLink").textContent = "Salin link pemain", 1400);
+  } catch {
+    $("playerJoinLink").textContent = playerInviteUrl();
+  }
+});
+$("clearDraft").addEventListener("click", () => {
+  if (!confirm("Hapus semua pertanyaan draft dan tutup Host Console?")) return;
+  sessionStorage.removeItem(HOST_DRAFT_KEY);
+  sessionStorage.removeItem(HOST_SESSION_KEY);
+  questionBank = { title: "QuizVerse Challenge", durationSeconds: 15, questions: [emptyQuestion()] };
+  $("quizTitle").value = questionBank.title;
+  $("duration").value = "15";
+  renderQuestionEditor();
+  setDraftStatus("Draft dihapus. Tutup tab Host untuk mengakhiri sesi.");
+  showScreen("roleScreen");
+});
+$("returnHome").addEventListener("click", () => {
+  stopListeners();
+  if (isHost) {
+    sessionStorage.removeItem(HOST_SESSION_KEY);
+    sessionStorage.removeItem(HOST_DRAFT_KEY);
+  }
+  roomPin = ""; isHost = false; questionBank = null; activeState = null;
+  localAnswerRound = -1; scoreBusyRound = -1; hostTransitionBusy = false;
+  ownPosition = { x: 0, z: 0 };
+  if (playerMesh) playerMesh.position.set(0, 0, 0);
+  if (PLAYER_ONLY) {
+    isHost = false;
+    roomPin = "";
+    showScreen("setupScreen");
+    status("Masukkan PIN untuk bergabung lagi.");
+  } else {
+    showScreen("roleScreen");
+  }
+});
+$("name").addEventListener("change", () => syncProfile().catch((e) => status(explainError(e), true)));
+$("characterPrev").addEventListener("click", () => selectCharacter(selectedCharacterIndex - 1));
+$("characterNext").addEventListener("click", () => selectCharacter(selectedCharacterIndex + 1));
+
+function initializePlayerEntry() {
+  $("roleScreen").classList.add("hidden");
+  $("setupScreen").classList.remove("hidden");
+  $("backRole").classList.add("hidden");
+  $("hostFields").classList.add("hidden");
+  $("playerFields").classList.remove("hidden");
+  $("setupEyebrow").textContent = "PLAYER ENTRY";
+  $("setupTitle").textContent = "Pilih karaktermu.";
+  const pin = new URLSearchParams(location.search).get("pin") || "";
+  if (/^\\d{6}$/.test(pin)) $("pin").value = pin;
+  showScreen("setupScreen");
+  renderCharacterCarousel();
+  setOwnAvatar(appearance());
+  status("Pilih karakter, isi nama, lalu masukkan PIN dari Host.");
+}
+
+// Load draft on each Host-page refresh. sessionStorage survives reloads and is
+// scoped to the tab, so a fresh tab or a closed tab starts a clean draft.
+loadHostDraft();
+renderCharacterCarousel();
+if (PLAYER_ONLY) {
+  initializePlayerEntry();
+} else {
+  $("choosePlayer")?.classList.add("hidden");
+  restoreHostSession().catch((error) => {
+    console.warn("Restore Host session:", error);
+    status("Draft aman, tetapi sesi room tidak dapat dipulihkan: " + explainError(error), true);
+  });
+}
+
+// -------------------- Movement controls --------------------
 $("chooseHost").addEventListener("click", () => {
   $("hostFields").classList.remove("hidden");
   $("playerFields").classList.add("hidden");
@@ -706,5 +1053,4 @@ addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
-setOwnAvatar(appearance());
 connection("Gratis · Firebase Spark", true);

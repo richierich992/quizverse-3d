@@ -23,6 +23,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Check browser JavaScript syntax
         run: npm run check
+      - name: Test Host/Player UI contract
+        run: npm run test:ui
       - name: Validate Firebase JSON
         run: |
           node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8'))"

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>QuizVerse 3D — Player Join</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main id="app">
+  <canvas id="world" aria-label="Arena 3D QuizVerse"></canvas>
+  <header class="topbar"><div class="brand">QUIZVERSE <span>3D LEARNING ARENA</span></div><div class="connection" id="connection">● Menghubungkan...</div></header>
+
+  <section id="roleScreen" class="panel role-panel">
+    <div class="eyebrow">LEARN · EXPLORE · PLAY</div>
+    <h1>Bangun arena<br><em>belajarmu.</em></h1>
+    <p class="muted">Pilih karaktermu, masukkan PIN dari Host, lalu mulai bermain.</p>
+    <div class="role-grid host-only hidden">
+      <button id="chooseHost" class="role-card">
+        <span class="role-icon">✦</span>
+        <strong>Buka Host Console</strong>
+        <small>Buat room PIN dan susun soal langsung di sini.</small>
+      </button>
+    </div>
+    <p class="hint">Pemain masuk melalui link undangan. Halaman pemain terpisah dari panel Host.</p>
+  </section>
+
+  <section id="setupScreen" class="panel setup-panel hidden">
+    <button id="backRole" class="back-link">← Kembali</button>
+    <div class="eyebrow" id="setupEyebrow">HOST CONSOLE</div>
+    <h1 id="setupTitle">Buat arena kuis.</h1>
+
+    <div id="hostFields" class="hidden">
+      <div class="host-setup-head">
+        <div><div class="eyebrow">HOST CONTROL</div><h2>Siapkan permainan</h2></div>
+        <span class="draft-pill"><i></i> Draft otomatis tersimpan</span>
+      </div>
+      <label class="field">Nama kuis<input id="quizTitle" maxlength="80" value="QuizVerse Challenge" placeholder="Contoh: Kuis Pengetahuan Umum"></label>
+      <label class="field duration-field">Waktu per soal
+        <select id="duration"><option value="15">15 detik</option><option value="10">10 detik</option><option value="20">20 detik</option><option value="30">30 detik</option></select>
+      </label>
+
+      <div class="section-rule"></div>
+      <div class="editor-title-row">
+        <div><div class="eyebrow">QUESTION BUILDER</div><h2>Susun pertanyaan</h2></div>
+        <span id="draftQuestionCount" class="count-pill">1 soal</span>
+      </div>
+      <p class="hint">Tulis pertanyaan, isi empat pilihan, lalu tandai jawaban yang benar. Draft tetap ada saat halaman di-refresh selama tab Host belum ditutup.</p>
+      <div id="questionEditorList" class="question-editor-list"></div>
+      <button id="addQuestion" type="button" class="secondary full">＋ Tambah pertanyaan</button>
+
+      <details class="json-import">
+        <summary>Import bank soal JSON (opsional)</summary>
+        <p class="hint">Bila sudah punya file JSON, kamu bisa mengimpornya. Kamu tetap bisa membuat semua soal langsung di halaman ini.</p>
+        <input id="questionFile" type="file" accept=".json,application/json">
+        <div id="fileStatus" class="file-status">Belum ada file diimpor.</div>
+      </details>
+
+      <div id="draftStatus" class="draft-status">Draft disimpan di tab ini.</div>
+      <button id="createRoom" class="primary full">Buat Room PIN</button>
+      <button id="clearDraft" type="button" class="text-button full">Hapus draft & tutup Host Console</button>
+    </div>
+
+    <div id="playerFields" class="hidden">
+      <div class="section-rule"></div><div class="eyebrow">JOIN GAME</div>
+      <label class="field">Nama pemain<input id="name" maxlength="18" value="Pemain" autocomplete="nickname" placeholder="Nama yang tampil di arena"></label>
+
+      <div id="avatarStudio">
+        <div class="avatar-heading"><div><b>Pilih karakter</b><small>Geser kartu atau gunakan tombol panah untuk melihat karakter.</small></div><span class="live-dot">3D AVATAR</span></div>
+        <div class="character-carousel">
+          <button id="characterPrev" class="carousel-arrow" type="button" aria-label="Karakter sebelumnya">‹</button>
+          <div id="characterTrack" class="character-track" aria-label="Pilihan karakter"></div>
+          <button id="characterNext" class="carousel-arrow" type="button" aria-label="Karakter berikutnya">›</button>
+        </div>
+        <div class="character-selected">Dipilih: <b id="selectedCharacterLabel">Nova</b></div>
+      </div>
+
+      <div class="section-rule"></div>
+      <label class="field">Room PIN<input id="pin" maxlength="6" inputmode="numeric" placeholder="Masukkan 6 digit PIN"></label>
+      <button id="joinRoom" class="primary full">Gabung ke permainan</button>
+    </div>
+    <p id="status" class="status">Pastikan koneksi internet aktif.</p>
+  </section>
+
+  <section id="lobbyScreen" class="panel lobby-panel hidden">
+    <div class="eyebrow">ROOM LOBBY</div><h1>Siap bermain?</h1>
+    <div class="pin-card"><small>ROOM PIN</small><strong id="roomPin">000000</strong><button id="copyPin" class="copy-pin">Salin PIN</button></div>
+    <div class="lobby-meta"><span id="quizName">QuizVerse Challenge</span><span id="questionCount">0 pertanyaan</span></div>
+    <div id="playerInvite" class="invite-card hidden">
+      <div><small>LINK KHUSUS PEMAIN</small><span id="playerJoinLink">player.html</span></div>
+      <button id="copyPlayerLink" class="secondary">Salin link pemain</button>
+      <p class="hint">Bagikan link ini dan PIN di atas kepada peserta. Link ini langsung membuka halaman pemain.</p>
+    </div>
+    <h3>Pemain bergabung <span id="playerCount">0</span></h3><div id="roster" class="roster"></div>
+    <button id="startGame" class="primary full hidden">Mulai permainan</button>
+    <p id="hostNote" class="hint">Menunggu host memulai permainan...</p>
+  </section>
+
+  <section id="hud" class="hud hidden">
+    <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span>SKOR <b id="score">0</b></span></div>
+    <div class="question-card"><div class="eyebrow" id="category">PERTANYAAN</div><h2 id="question">Pertanyaan akan muncul di sini.</h2></div>
+    <div class="timer-row"><div class="timer"><i id="bar"></i></div><b id="time">15</b></div>
+    <div id="answers" class="answer-legend"></div>
+    <div id="feedback" class="feedback">Berlari ke platform dengan warna jawabanmu.</div>
+    <div class="hud-bottom"><span>STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span>WASD / Joystick</span></div>
+  </section>
+
+  <div id="touchControls" class="touch-controls hidden"><div id="stick" class="stick">●</div><button id="jump" class="jump-btn">JUMP</button></div>
+
+  <section id="endScreen" class="panel end-panel hidden">
+    <div class="eyebrow">GAME COMPLETED</div><h1>Podium <em>pemenang.</em></h1><div id="podium" class="podium"></div>
+    <button id="returnHome" class="primary full">Kembali ke awal</button>
+  </section>
+  <div class="version">QUIZVERSE 3D · REALTIME LEARNING</div>
+</main>
+<script type="module" src="./main.js"></script>
+</body></html>

@@ -3,15 +3,15 @@
 Game kuis edukasi 3D berbasis browser. Client menggunakan Three.js, Firebase Anonymous Authentication, dan Firebase Realtime Database pada **Spark plan**. Tidak memakai Cloud Functions atau layanan Firebase yang memerlukan upgrade billing.
 
 ## Arsitektur Spark
-- **Host** memilih bank soal JSON, membuat Room PIN, memegang alur kuis, dan menjaga tab Host tetap terbuka sampai permainan selesai.
-- **Player** memasukkan PIN, memilih avatar, bergerak di arena, dan mengirim jawaban dengan memasuki platform warna.
+- **Host** membuka `index.html`, menyusun soal langsung di halaman (import JSON hanya opsional), membuat Room PIN, dan menjaga tab Host tetap terbuka sampai permainan selesai. Draft soal disimpan di `sessionStorage`, sehingga aman saat refresh dan otomatis berakhir saat tab Host ditutup.
+- **Player** memakai link khusus `player.html?pin=123456`, mengisi nama, menggeser carousel karakter visual, lalu masuk ke arena. Halaman Player tidak menampilkan pilihan menjadi Host.
 - **Realtime Database** menyimpan room, soal aktif yang sudah disanitasi (tanpa kunci), posisi/avatar, jawaban pribadi, dan skor.
 - **Realtime Database Security Rules** menyembunyikan answer keys, hanya menerima satu jawaban per pemain per ronde sebelum deadline, serta memvalidasi perubahan skor terhadap kunci jawaban tersembunyi. Pemeriksaan aturan terjadi di Firebase, bukan hanya di JavaScript client.
 
 **Catatan model free:** tidak ada Cloud Functions. Browser Host bertindak sebagai pengatur pergantian ronde. Jika tab Host ditutup atau koneksi Host putus, timer tidak akan otomatis memajukan ronde berikutnya. Buka game dari browser Host di komputer/proyektor dan biarkan tab itu tetap aktif selama sesi.
 
 ## File penting
-- `index.html`, `style.css`, `main.js`: UI Host/Player dan arena Three.js.
+- `index.html`: Host Console; `player.html`: pintu masuk khusus Player; `style.css` dan `main.js`: UI bersama dan arena Three.js.
 - `firebase-config.js`: konfigurasi Web app QuizVerse.
 - `database.rules.json`: rules Spark untuk memisahkan room publik, answer keys privat, dan submission per pemilik.
 - `admin/Code.gs`: ekspor bank soal Google Sheets menjadi file JSON privat di Google Drive.
@@ -40,8 +40,8 @@ firebase login
 firebase deploy --only database --project quizverse-a5e26
 ```
 
-## Bank soal
-Host memilih file JSON di panel Host. Format yang diterima:
+## Menyusun pertanyaan
+Host dapat membuat pertanyaan langsung dari editor pada halaman utama. Setiap pertanyaan memiliki kategori, teks, empat pilihan, jawaban benar, dan penjelasan opsional. Maksimal 50 soal per room. Draft memakai `sessionStorage`: refresh tab tidak menghapus isi, sementara tab baru atau tab yang ditutup memulai sesi draft baru. Import JSON tetap tersedia sebagai opsi. Format file:
 ```json
 {
   "title": "Kuis Pengetahuan Umum",
@@ -100,3 +100,9 @@ Firebase Spark tidak memerlukan payment method untuk mulai digunakan. Realtime D
 - Rules melakukan validasi server-side untuk submission dan skor, tetapi Host tetap dipercaya untuk memilih isi kuis dan memulai/transisi ronde. Jangan gunakan desain ini untuk ujian berisiko tinggi atau kompetisi berhadiah.
 - GitHub Actions sudah menguji Rules di Firebase Emulator: kunci privat, jawaban ganda, jawaban setelah deadline, reveal, skor/streak sah, perubahan skor palsu, serta larangan pemain baru masuk setelah game dimulai. Uji browser dua perangkat dan integrasi ke project Firebase asli masih perlu dilakukan.
 - Fase peti/kristal, power-up, obby, eliminasi penuh, serta admin bank soal berbasis web belum termasuk MVP.
+
+
+## Link Host dan Player
+- Host Console: https://richierich992.github.io/quizverse-3d/
+- Link Player: https://richierich992.github.io/quizverse-3d/player.html?pin=123456 (PIN akan dibuat oleh Host dan otomatis ditempel pada link undangan).
+- Host tidak dibuat sebagai pemain/avatar dan tidak memakai nama. Daftar pemain dan podium hanya berisi peserta yang masuk dari halaman Player.
