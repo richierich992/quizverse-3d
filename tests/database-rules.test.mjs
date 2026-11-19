@@ -64,9 +64,6 @@ try {
 
   const submission1 = `submissions/${pin}/current/player-1`;
   const submission2 = `submissions/${pin}/current/player-2`;
-  console.log("DEBUG deadline", deadline0, "localNow", Date.now());
-  console.log("DEBUG public", JSON.stringify((await get(ref(p1, `${base}/public`))).val()));
-  console.log("DEBUG player", JSON.stringify((await get(ref(p1, `${base}/players/player-1`))).val()));
   await assertSucceeds(set(ref(p1, submission1), { questionIndex: 0, answerIndex: 1 }));
   await assertFails(set(ref(p1, submission1), { questionIndex: 0, answerIndex: 0 }));
   await assertSucceeds(get(ref(p1, submission1)));
@@ -74,6 +71,9 @@ try {
   await assertFails(update(ref(p1, `${base}/players/player-1`), { score: 999 }));
 
   await delay(5100);
+  // A player who has not answered is blocked after the server deadline,
+  // even before the host has switched the public state to reveal.
+  await assertFails(set(ref(p2, submission2), { questionIndex: 0, answerIndex: 2 }));
   await assertFails(update(ref(host, `${base}/public`), {
     phase: "reveal", correctOption: 0, explanation: "Wrong key", revealEndsAt: Date.now() + 100
   }));
