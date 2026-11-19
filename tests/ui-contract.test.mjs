@@ -59,12 +59,18 @@ assert.match(css, /\.wardrobe-items/);
 assert.match(css, /#avatarPreviewCanvas/);
 console.log("PASS: separate Host/Player entry, session draft persistence, inline question builder, and 3D avatar wardrobe.");
 
-assert.match(main, /Eye whites, irises, pupils and highlights\. Camera\/front is \+Z\./, "Avatar face orientation is explicit");
-assert.match(main, /orb\("#ffffff", x, 2\.08, 0\.438/, "Avatar has visible eye whites on the front side");
-assert.match(main, /TubeGeometry\(curve, 20, radius/, "Avatar uses curved mouth/facial details");
-assert.match(main, /new THREE\.CapsuleGeometry\(0\.15, legHeight/, "Avatar limbs use rounded geometry");
+assert.match(main, /All face details point toward \+Z/, "Avatar face orientation is explicit");
+assert.match(main, /const eyes = \[\]/, "Avatar eyes are grouped for facial animation");
+assert.match(main, /g\.userData\.rig = \{ torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes \}/, "Avatar exposes articulated body and facial rig");
+assert.match(main, /function animateAvatar\(mesh, time, moving = false\)/, "Avatar has a shared animation controller");
+assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinking");
+assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
+assert.match(main, /entry\.mesh\.rotation\.y = Math\.atan2\(dx, dz\)/, "Remote players face their movement direction");
+assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
 assert.match(css, /border-radius:17px/, "Wardrobe cards use softer rounded styling");
 
 assert.match(main, /function wardrobeItemArt\(item\)/, "Wardrobe catalog uses visual item thumbnails");
 assert.match(main, /mini-avatar-head/, "Preset character tiles show miniature avatar previews");
 assert.match(css, /\.mini-avatar-head/, "Mini avatar thumbnails have visible facial detail");
+assert.match(main, /animateAvatar\(previewAvatar, now, false\)/, "Live avatar preview animates while idle");
+assert.match(main, /Object\.values\(remotePlayers\)\.forEach/, "Remote avatars receive independent animation updates");
