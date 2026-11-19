@@ -305,6 +305,12 @@ function subscribeRoom() {
         $("feedback").textContent = "Berlari ke platform dengan warna jawabanmu.";
       }
       lastHudPhase = "question";
+    } else if (activeState.phase === "scoring") {
+      showScreen("hud");
+      $("feedback").textContent = "Server sedang memeriksa jawaban dan menghitung skor...";
+      hasAnswered = true;
+      lastHudPhase = "scoring";
+      requestAdvance();
     } else if (activeState.phase === "reveal") {
       showScreen("hud");
       $("feedback").textContent = "Jawaban benar: " + String.fromCharCode(65 + Number(activeState.correctOption)) +
