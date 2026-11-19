@@ -833,8 +833,8 @@ function findSpawnPosition(players = {}) {
     z: Number(person?.z || 0)
   }));
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < 40; i++) {
-    const radius = 13 + Math.sqrt(i) * 0.82;
+  for (let i = 0; i < 160; i++) {
+    const radius = 13 + Math.sqrt(i) * 0.48;
     const angle = i * goldenAngle;
     const candidate = {
       x: Math.cos(angle) * radius,
