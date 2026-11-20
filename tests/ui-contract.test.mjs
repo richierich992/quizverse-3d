@@ -32,6 +32,11 @@ assert.match(main, /const groundHeight = answerBaySurfaceAt\(ownPosition\.x, own
 assert.match(main, /targetX: x, targetY: y, targetZ: z/, "Remote player avatar receives the matching podium height");
 assert.match(main, /entry\.mesh\.position\.y \+= \(Number\(entry\.targetY \|\| 0\) - entry\.mesh\.position\.y\) \* remoteBlend/, "Remote player avatar smoothly follows podium height changes");
 assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclosed indoor competition venue");
+assert.match(main, /Low-poly audience figures: lightweight, decorative silhouettes/, "Arena includes a decorative audience");
+assert.match(main, /Four sweeping light beams are translucent and rotate slowly overhead/, "Arena includes moving translucent spotlights");
+assert.match(main, /Perimeter LED segments animate as a subtle venue heartbeat/, "Arena perimeter lighting animates");
+assert.match(main, /sweepingBeams\.forEach\(\(beam, i\)/, "Light beams are animated in the render loop");
+assert.match(main, /perimeterLEDs\.forEach\(\(led\)/, "Perimeter LEDs animate in the render loop");
 assert.match(main, /createArenaScreenTexture\(\)/, "Arena includes a custom competition display screen");
 assert.match(main, /arenaRing\(23\.65, 0\.075, arenaMaterial\.lightCyan/, "Arena perimeter has a finished illuminated rim");
 assert.match(main, /for \(let row = 0; row < 3; row\+\+\)/, "Arena includes three stepped spectator seating rows");
