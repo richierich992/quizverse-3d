@@ -444,7 +444,83 @@ function buildArenaArchitecture() {
     scene.add(pool);
   });
 
-  // Soft architectural wash lights along the side walls.
+
+  // Decorative hanging banners and compact, stylized crowd silhouettes.
+  const bannerColors = ["#49c8ff", "#ffb95e", "#a78bfa", "#42d6a0"];
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const z = -15 + k * 15;
+      arenaBox(1.05, 3.6, 0.22, arenaMaterial.steelDark, side * 20.25, 7.1, z);
+      arenaBox(0.88, 2.95, 0.055, new THREE.MeshStandardMaterial({
+        color: bannerColors[(k + (side > 0 ? 1 : 0)) % bannerColors.length],
+        roughness: 0.65, metalness: 0.1
+      }), side * 20.25, 7.1, z - side * 0.14, { castShadow: false });
+      arenaBox(0.88, 0.07, 0.07, arenaMaterial.lightCyan, side * 20.25, 8.66, z, { castShadow: false, receiveShadow: false });
+    }
+  }
+  // Low-poly audience figures: lightweight, decorative silhouettes, not game avatars.
+  const crowdPalette = ["#5a7991", "#6d8da5", "#9c7c9f", "#d18a63", "#5eaa9d", "#8798b4"];
+  const crowdSeed = (n) => ((n * 37 + 11) % 17) / 17;
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 3; row++) {
+      const x = side * (14.2 + row * 1.28);
+      const y = 0.74 + row * 0.42;
+      for (let n = 0; n < 14; n++) {
+        const z = -6.1 + n * 0.94;
+        const color = crowdPalette[(n + row * 3 + (side > 0 ? 2 : 0)) % crowdPalette.length];
+        const torso = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.16, 0.24 + crowdSeed(n + row) * 0.08, 3, 6),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.88 })
+        );
+        torso.position.set(x, y + 0.48, z);
+        torso.castShadow = false;
+        torso.receiveShadow = false;
+        scene.add(torso);
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.16, 8, 6),
+          new THREE.MeshStandardMaterial({ color: "#d7ad91", roughness: 0.9 })
+        );
+        head.position.set(x, y + 0.82, z);
+        head.castShadow = false;
+        head.receiveShadow = false;
+        scene.add(head);
+      }
+    }
+  }
+
+  // Four sweeping light beams are translucent and rotate slowly overhead.
+  const beamMaterials = ["#f45c78", "#4e9dff", "#f6d16a", "#40d5a0"].map(color =>
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.055, depthWrite: false, side: THREE.DoubleSide })
+  );
+  const sweepingBeams = [];
+  for (let i = 0; i < 4; i++) {
+    const beam = new THREE.Mesh(
+      new THREE.ConeGeometry(4.2, 11.8, 18, 1, true),
+      beamMaterials[i]
+    );
+    beam.position.set((i - 1.5) * 6.5, 6.0, -3.0);
+    beam.rotation.z = Math.PI;
+    beam.rotation.x = 0.18;
+    beam.userData.sweepPhase = i * Math.PI * 0.5;
+    scene.add(beam);
+    sweepingBeams.push(beam);
+  }
+
+  // Perimeter LED segments animate as a subtle venue heartbeat.
+  const perimeterLEDs = [];
+  for (let i = 0; i < 48; i++) {
+    const a = i / 48 * Math.PI * 2;
+    const led = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.07, 0.14),
+      new THREE.MeshBasicMaterial({ color: "#57d8ff" })
+    );
+    led.position.set(Math.cos(a) * 23.45, 0.06, Math.sin(a) * 23.45);
+    led.rotation.y = -a;
+    led.userData.ledIndex = i;
+    scene.add(led);
+    perimeterLEDs.push(led);
+  }
+    // Soft architectural wash lights along the side walls.
   for (const side of [-1, 1]) {
     for (const z of [-12, 12]) {
       const wallLight = new THREE.PointLight("#78d9ff", 18, 14, 2);
@@ -454,6 +530,8 @@ function buildArenaArchitecture() {
   }
 }
 buildArenaArchitecture();
+const sweepingBeams = scene.children.filter((obj) => obj.userData.sweepPhase !== undefined);
+const perimeterLEDs = scene.children.filter((obj) => obj.userData.ledIndex !== undefined);
 
 const pads = PAD_POINTS.map((p, index) => {
   const group = new THREE.Group();
@@ -2123,6 +2201,15 @@ function animate() {
   });
   const t = now * 0.001;
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
+  sweepingBeams.forEach((beam, i) => {
+    beam.rotation.z = Math.PI + Math.sin(t * 0.34 + beam.userData.sweepPhase) * 0.42;
+    beam.rotation.y = Math.sin(t * 0.26 + beam.userData.sweepPhase) * 0.48;
+    beam.material.opacity = 0.035 + (Math.sin(t * 0.9 + i) + 1) * 0.018;
+  });
+  perimeterLEDs.forEach((led) => {
+    const pulse = (Math.sin(t * 2.1 - led.userData.ledIndex * 0.42) + 1) * 0.5;
+    led.material.color.setRGB(0.18 + pulse * 0.22, 0.55 + pulse * 0.38, 0.82 + pulse * 0.18);
+  });
   renderer.render(scene, camera);
   if (previewRenderer && previewScene) {
     if (previewAvatar) {
