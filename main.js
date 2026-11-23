@@ -1243,8 +1243,21 @@ function updateLobbySocial() {
       desiredYaw = Math.atan2(Math.sin(desiredYaw), Math.cos(desiredYaw));
     }
     const currentYaw = Number(mesh.userData.socialLookYaw || 0);
-    mesh.userData.socialLookYaw = currentYaw + (desiredYaw - currentYaw) * 0.075;
+    const yawDelta = Math.atan2(
+      Math.sin(desiredYaw - currentYaw),
+      Math.cos(desiredYaw - currentYaw)
+    );
+    mesh.userData.socialLookYaw = currentYaw + yawDelta * 0.075;
   });
+}
+
+function avatarGroundHeight(mesh) {
+  const winnerTarget = mesh?.userData?.winnerTarget;
+  if (winnerTarget) return Number(winnerTarget.y || 0);
+  return answerBaySurfaceAt(
+    Number(mesh?.position?.x || 0),
+    Number(mesh?.position?.z || 0)
+  );
 }
 
 function animateAvatar(mesh, time, moving = false) {
@@ -1254,7 +1267,8 @@ function animateAvatar(mesh, time, moving = false) {
   const stride = t * 10.5;
   const walk = moving ? 1 : 0;
   const swing = Math.sin(stride) * walk;
-  const airborne = mesh.position.y > 0.16;
+  const groundHeight = avatarGroundHeight(mesh);
+  const airborne = mesh.position.y > groundHeight + 0.16;
   rig.leftArm.rotation.x = swing * 0.68 + Math.sin(t * 2.2) * 0.035;
   rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.035;
   rig.leftArm.rotation.z = (airborne ? 0.42 : -0.035) - swing * 0.10;
@@ -2473,7 +2487,20 @@ function updateJoystick(event) {
 // Host has no avatar: use a smooth in-arena spectator camera that follows the
 // live group of participants without switching to a top-down overview.
 function updateWinnerCamera(dt) {
-  const desiredCamera = spectatorCameraPosition.set(0, 7.35, -4.0);
+  // Fit all three podiums even on tall, narrow phone screens.
+  const verticalHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+  const horizontalHalfFovTangent = verticalHalfFov * Math.max(0.35, Number(camera.aspect) || 1);
+  const frameDistance = THREE.MathUtils.clamp(
+    5.2 / Math.max(0.12, horizontalHalfFovTangent),
+    13.2,
+    25
+  );
+  const cameraHeight = winnerCameraFocus.y + Math.min(7.6, frameDistance * 0.42);
+  const desiredCamera = spectatorCameraPosition.set(
+    0,
+    cameraHeight,
+    winnerCameraFocus.z + frameDistance
+  );
   const blend = 1 - Math.exp(-2.5 * dt);
   camera.position.lerp(desiredCamera, blend);
   camera.lookAt(winnerCameraFocus);
