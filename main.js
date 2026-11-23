@@ -770,8 +770,8 @@ async function createParty() {
     Object.entries(social.parties || {}).forEach(([code, item]) => {
       const teamId = item?.teamId;
       if (teamId === "red" || teamId === "blue") {
-        const memberCount = Object.keys(item?.members || {}).filter((id) =>
-          social.playerParties?.[id] === code
+        const memberCount = Object.values(item?.members || {}).filter((member) =>
+          member?.uid && social.playerParties?.[member.uid] === code
         ).length;
         counts[teamId] += memberCount;
       }
