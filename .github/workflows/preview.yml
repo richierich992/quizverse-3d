@@ -1,4 +1,4 @@
-name: Deploy QuizVerse PR Preview
+name: Publish QuizVerse Browser Preview
 
 on:
   push:
@@ -7,62 +7,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Share the Pages deployment lock with the production workflow.
-# A production deployment may cancel this preview and restore the main-only site.
-concurrency:
-  group: github-pages
-  cancel-in-progress: false
+  contents: write
 
 jobs:
   preview:
     if: github.repository == 'richierich992/quizverse-3d' && github.ref == 'refs/heads/feature/realistic-arena-environment'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}preview/
     steps:
-      - name: Checkout production site from main
-        uses: actions/checkout@v6
-        with:
-          ref: main
-          path: site
-          persist-credentials: false
-
-      - name: Checkout PR branch
+      - name: Checkout current PR branch
         uses: actions/checkout@v6
         with:
           ref: feature/realistic-arena-environment
-          path: preview-source
-          persist-credentials: false
+          fetch-depth: 0
+          persist-credentials: true
 
-      - name: Assemble isolated preview under /preview/
+      - name: Synchronize isolated preview branch
         shell: bash
         run: |
-          mkdir -p site/preview
-          rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='node_modules/' \
-            --exclude='tests/' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='firebase.json' \
-            --exclude='database.rules.json' \
-            --exclude='.firebaserc' \
-            preview-source/ site/preview/
+          git push origin HEAD:refs/heads/preview --force
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload combined production and preview site
-        uses: actions/upload-pages-artifact@v4
+      - name: Package browser preview
+        uses: actions/upload-artifact@v4
         with:
-          path: site
-
-      - name: Deploy preview without replacing the production root
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: quizverse-browser-preview
+          path: |
+            index.html
+            player.html
+            main.js
+            style.css
+            firebase-config.js
+          if-no-files-found: error
+          retention-days: 7
