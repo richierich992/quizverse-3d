@@ -73,6 +73,8 @@ let stateUnsubscribe = null, playersUnsubscribe = null;
 let lastQuestionIndex = -1;
 let localAnswerRound = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
+let lastVisualStateKey = "";
+const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -604,6 +606,111 @@ for (let i = 0; i < 10; i++) {
   crystal.position.set(Math.cos(a) * 19, 1.2 + (i % 3) * 0.3, Math.sin(a) * 19);
   scene.add(crystal);
 }
+const matchEventRings = Array.from({ length: 3 }, (_, index) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: "#62dcff", transparent: true, opacity: 0, depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.055, 8, 56), material);
+  ring.rotation.x = Math.PI / 2;
+  ring.visible = false;
+  ring.userData.ringIndex = index;
+  ring.renderOrder = 2;
+  scene.add(ring);
+  return ring;
+});
+const celebrationPalette = ["#ffffff", "#ffd166", "#65e6c2", "#73d8ff", "#ff8caa", "#b69cff"];
+const celebrationGeometry = new THREE.OctahedronGeometry(0.16, 0);
+const celebrationParticles = Array.from({ length: 24 }, (_, index) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: celebrationPalette[index % celebrationPalette.length],
+    transparent: true, opacity: 0, depthWrite: false
+  });
+  const particle = new THREE.Mesh(celebrationGeometry, material);
+  particle.visible = false;
+  particle.userData.velocity = new THREE.Vector3();
+  particle.userData.spin = (index % 2 ? 1 : -1) * (1.8 + (index % 5) * 0.35);
+  scene.add(particle);
+  return particle;
+});
+
+function triggerQuestionStart() {
+  matchVisualEvent.kind = "question";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 1.25;
+  matchVisualEvent.x = 0;
+  matchVisualEvent.z = 0;
+  matchVisualEvent.color = "#73dfff";
+  $("app").classList.remove("timer-critical", "answer-revealed");
+  $("app").classList.add("question-enter");
+  celebrationParticles.forEach((particle) => { particle.visible = false; });
+}
+function triggerAnswerReveal(state) {
+  const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
+  const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
+  matchVisualEvent.kind = "reveal";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 1.65;
+  matchVisualEvent.x = point.x;
+  matchVisualEvent.z = point.z;
+  matchVisualEvent.color = COLORS[correctIndex];
+  $("app").classList.remove("timer-critical", "question-enter");
+  $("app").classList.add("answer-revealed");
+  $("answers").querySelectorAll("span").forEach((item, index) => {
+    item.classList.toggle("is-correct-answer", index === correctIndex);
+  });
+
+  celebrationParticles.forEach((particle, index) => {
+    const angle = (index / celebrationParticles.length) * Math.PI * 2;
+    const speed = 2.2 + (index % 4) * 0.55;
+    particle.position.set(point.x, 1.25 + (index % 3) * 0.16, point.z);
+    particle.userData.velocity.set(
+      Math.cos(angle) * speed,
+      3.1 + (index % 5) * 0.48,
+      Math.sin(angle) * speed
+    );
+    particle.rotation.set(Math.random() * 1.4, Math.random() * 1.4, Math.random() * 1.4);
+    particle.material.opacity = 1;
+    particle.visible = true;
+  });
+}
+function updateMatchVisualEffects(now, dt) {
+  const event = matchVisualEvent;
+  const elapsed = event.kind ? (now - event.startedAt) / 1000 : Infinity;
+  const active = elapsed >= 0 && elapsed < event.duration;
+
+  matchEventRings.forEach((ring, index) => {
+    const localProgress = (elapsed - index * 0.12) / Math.max(0.1, event.duration - 0.12);
+    if (!active || localProgress < 0 || localProgress >= 1) {
+      ring.visible = false;
+      return;
+    }
+    const progress = THREE.MathUtils.clamp(localProgress, 0, 1);
+    const radius = event.kind === "question" ? 1.0 + progress * 13.5 : 0.8 + progress * 5.4;
+    ring.position.set(event.x, event.kind === "question" ? 0.045 + index * 0.012 : 0.94 + index * 0.018, event.z);
+    ring.scale.setScalar(radius);
+    ring.material.color.set(event.color);
+    ring.material.opacity = Math.sin(progress * Math.PI) * (event.kind === "question" ? 0.48 : 0.58);
+    ring.visible = true;
+  });
+
+  celebrationParticles.forEach((particle) => {
+    if (!particle.visible) return;
+    const velocity = particle.userData.velocity;
+    particle.position.addScaledVector(velocity, dt);
+    velocity.y -= 6.8 * dt;
+    particle.rotation.x += particle.userData.spin * dt;
+    particle.rotation.y += particle.userData.spin * 0.72 * dt;
+    particle.material.opacity = Math.max(0, 1 - elapsed / event.duration);
+    if (elapsed >= event.duration || particle.position.y < 0.15) particle.visible = false;
+  });
+
+  if (event.kind && elapsed >= event.duration) {
+    event.kind = "";
+    $("app").classList.remove("question-enter", "answer-revealed");
+  }
+}
+
 
 function appearance() {
   return { ...selectedAvatar };
@@ -1174,9 +1281,13 @@ function subscribeRoom() {
   stopListeners();
   // A new room subscription must render its first live question, even after switching rooms.
   lastQuestionIndex = -1;
+  lastVisualStateKey = "";
   stateUnsubscribe = onValue(dbPath(`rooms/${roomPin}/public`), (snap) => {
     activeState = snap.val();
     if (!activeState) return;
+    const visualStateKey = String(activeState.questionIndex) + ":" + String(activeState.phase);
+    const visualPhaseChanged = visualStateKey !== lastVisualStateKey;
+    lastVisualStateKey = visualStateKey;
     lobbyFromState(activeState);
     if (activeState.phase === "lobby") {
       showScreen("lobbyScreen");
@@ -1188,6 +1299,7 @@ function subscribeRoom() {
         ownPosition = { x: 0, z: 0 };
         if (playerMesh) playerMesh.position.set(0, 0, 0);
         renderQuestion(activeState);
+        triggerQuestionStart();
       }
       showScreen("hud");
     } else if (activeState.phase === "reveal") {
@@ -1197,6 +1309,7 @@ function subscribeRoom() {
         renderQuestion(activeState);
       }
       showScreen("hud");
+      if (visualPhaseChanged) triggerAnswerReveal(activeState);
       $("feedback").textContent = "Jawaban benar: " + String.fromCharCode(65 + Number(activeState.correctOption)) +
         (activeState.explanation ? " · " + activeState.explanation : "");
       renderRoundLeaderboard();
@@ -2162,7 +2275,9 @@ function animate() {
     const left = Math.max(0, (Number(activeState.deadlineAt) - serverNow()) / 1000);
     $("time").textContent = String(Math.ceil(left));
     $("bar").style.width = Math.max(0, left / Number(activeState.durationSeconds || 15) * 100) + "%";
+    $("app").classList.toggle("timer-critical", left > 0 && left <= 5);
   } else if (activeState?.phase === "reveal") {
+    $("app").classList.remove("timer-critical");
     $("time").textContent = "✓";
     $("bar").style.width = "100%";
   }
@@ -2210,6 +2325,7 @@ function animate() {
     const pulse = (Math.sin(t * 2.1 - led.userData.ledIndex * 0.42) + 1) * 0.5;
     led.material.color.setRGB(0.18 + pulse * 0.22, 0.55 + pulse * 0.38, 0.82 + pulse * 0.18);
   });
+  updateMatchVisualEffects(now, dt);
   renderer.render(scene, camera);
   if (previewRenderer && previewScene) {
     if (previewAvatar) {
