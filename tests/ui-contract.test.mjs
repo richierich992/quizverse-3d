@@ -46,6 +46,12 @@ assert.match(main, /const dy = targetY - entry\.mesh\.position\.y/, "Remote avat
 assert.match(main, /entry\.mesh\.position\.y \+= dy \* positionBlend/, "Remote avatar smoothly follows podium height changes with the same finish-walk interpolation");
 assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclosed indoor competition venue");
 assert.match(main, /Low-poly audience figures: lightweight, decorative silhouettes/, "Arena includes a decorative audience");
+assert.match(main, /const arenaAudience = \[\]/, "Audience figures are tracked in a bounded render-only collection");
+assert.match(main, /arenaAudience\.push\(\{\s*group: spectator,\s*head,\s*baseY: y/, "Each decorative spectator groups existing body parts for efficient animation");
+assert.match(main, /function triggerAudienceReaction\(\)/, "Audience responds to answer reveals and the match finish");
+assert.match(main, /function animateAudience\(now\)/, "Audience idle and cheering motion uses the render loop");
+assert.match(main, /event\.kind === "victory" \? 1 : 0\.68/, "Victory creates a stronger crowd cheer than a regular answer reveal");
+assert.match(main, /animateAudience\(now\);\s*updateMatchVisualEffects\(now, dt\)/, "Audience animation remains client-side and independent of Firebase writes");
 assert.match(main, /Four sweeping light beams are translucent and rotate slowly overhead/, "Arena includes moving translucent spotlights");
 assert.match(main, /Perimeter LED segments animate as a subtle venue heartbeat/, "Arena perimeter lighting animates");
 assert.match(main, /sweepingBeams\.forEach\(\(beam, i\)/, "Light beams are animated in the render loop");
