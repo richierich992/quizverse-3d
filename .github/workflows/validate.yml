@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/server-authoritative-quiz
+      - feature/realistic-arena-environment
   pull_request:
     branches:
       - main
