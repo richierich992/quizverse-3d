@@ -131,6 +131,7 @@ let stateUnsubscribe = null, playersUnsubscribe = null;
 let lastQuestionIndex = -1;
 let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
+let lastSyncedPosition = { x: 0, z: 0 };
 let lastVisualStateKey = "";
 const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
 const matchMotionPreference = matchMedia("(prefers-reduced-motion: reduce)");
@@ -1908,6 +1909,7 @@ async function createOwnPlayer() {
       lastScoredQuestionIndex: -1
     });
   }
+  lastSyncedPosition = { x: ownPosition.x, z: ownPosition.z };
 }
 async function joinRoom() {
   try {
@@ -2801,8 +2803,15 @@ function movePlayer(dt) {
     }
   }
   const now = performance.now();
-  if (db && roomPin && now - lastPositionWrite > 200) {
+  const movedSinceSync = Math.hypot(
+    ownPosition.x - lastSyncedPosition.x,
+    ownPosition.z - lastSyncedPosition.z
+  );
+  const syncInterval = inLobby ? 420 : 200;
+  const shouldSyncPosition = inQuestion || movedSinceSync >= 0.12;
+  if (db && roomPin && shouldSyncPosition && now - lastPositionWrite > syncInterval) {
     lastPositionWrite = now;
+    lastSyncedPosition = { x: ownPosition.x, z: ownPosition.z };
     update(dbPath(`rooms/${roomPin}/players/${uid}`), { x: ownPosition.x, z: ownPosition.z })
       .catch((error) => console.warn("Position sync:", error));
   }
