@@ -161,6 +161,46 @@
       <button id="teamBattleHostAction" type="button" class="primary full hidden">Mulai Team Battle</button>
       <span class="team-battle-footnote">5 ronde · 1 poin untuk tim pemenang setiap ronde · skor kuis utama tetap terpisah.</span>
     </section>
+    <section id="socialPartyCard" class="social-party-card" aria-labelledby="socialPartyTitle">
+      <div class="social-party-header">
+        <div>
+          <span class="eyebrow">SOCIAL COMPETITION</span>
+          <strong id="socialPartyTitle">Party Center 🤝</strong>
+          <p>Bentuk party hingga 4 pemain, pilih tim bersama, dan kumpulkan riwayat kemenangan.</p>
+        </div>
+        <div class="social-party-stats">
+          <small>REKOR KAMU</small>
+          <b><span id="partyWins">0</span>W · <span id="partyLosses">0</span>L</b>
+        </div>
+      </div>
+      <div id="partyHostNote" class="party-host-note hidden">HOST SPECTATOR · Pemain membentuk party dari halaman Player.</div>
+      <div id="partyCreateJoin" class="party-create-join">
+        <button id="createParty" type="button" class="primary">Buat Party</button>
+        <div class="party-join-row">
+          <input id="partyJoinCode" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="KODE PARTY" aria-label="Kode party"/>
+          <button id="joinParty" type="button" class="secondary">Gabung</button>
+        </div>
+      </div>
+      <div id="partyCurrent" class="party-current hidden">
+        <div class="party-code-line">
+          <div><small>KODE UNDANGAN PARTY</small><strong id="partyCodeValue">------</strong></div>
+          <button id="copyPartyCode" type="button" class="secondary">Salin</button>
+        </div>
+        <div id="partyLeaderNote" class="party-leader-note">Bagikan kode ini ke temanmu.</div>
+        <div class="party-member-heading"><span>ANGGOTA PARTY</span><b id="partyMemberCount">0/4</b></div>
+        <div id="partyMembers" class="party-members"></div>
+        <div id="partyTeamPicker" class="party-team-picker hidden">
+          <span>PILIH TIM BERSAMA</span>
+          <div>
+            <button id="partyTeamRed" type="button" class="party-team-button party-red">TEAM MERAH</button>
+            <button id="partyTeamBlue" type="button" class="party-team-button party-blue">TEAM BIRU</button>
+          </div>
+        </div>
+        <button id="leaveParty" type="button" class="secondary full">Keluar dari Party</button>
+      </div>
+      <p id="partyStatus" class="social-party-status" aria-live="polite">Belum tergabung dalam party. Buat party atau masukkan kode teman.</p>
+      <span class="social-party-footnote">Party dapat berisi 2–4 pemain. Statistik disimpan di room ini dan tidak mengubah skor kuis.</span>
+    </section>
   </section>
 
   <div id="reactionRushOverlay" class="reaction-rush-overlay hidden" aria-hidden="true">
