@@ -501,6 +501,8 @@ async function startTeamColorBattle() {
       session: { sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0 },
       teams: { sessionId: nextSessionId, members }
     };
+    teamBattleBusy = false;
+    renderTeamColorBattle();
     await startNextTeamColorRound();
   } catch (error) {
     $("teamBattleStatus").textContent = "Tidak dapat memulai Team Battle: " + explainError(error);
