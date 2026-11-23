@@ -76,7 +76,7 @@ const match = (bracket, id) => Object.values(bracket.rounds)
 }
 
 assert.throws(() => buildSingleEliminationBracket(entrants(1)), /Minimal dua party/);
-assert.throws(() => buildSingleEliminationBracket(entrants(17)), /maksimal 16 party/);
+assert.throws(() => buildSingleEliminationBracket(entrants(17)), /maksimal diikuti 16 party/);
 assert.equal(buildSingleEliminationBracket([
   { partyCode: "ABC234" },
   { partyCode: "ABC234" },
