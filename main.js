@@ -266,6 +266,8 @@ function labelSprite(text, color) {
   return sprite;
 }
 
+const arenaAudience = [];
+
 const arenaMaterial = {
   wall: new THREE.MeshStandardMaterial({ color: "#1b2b39", roughness: 0.78, metalness: 0.22 }),
   wallLight: new THREE.MeshStandardMaterial({ color: "#314657", roughness: 0.58, metalness: 0.42 }),
@@ -462,6 +464,7 @@ function buildArenaArchitecture() {
     }
   }
   // Low-poly audience figures: lightweight, decorative silhouettes, not game avatars.
+  // Each spectator is a two-mesh group so the whole crowd can react without extra draw calls.
   const crowdPalette = ["#5a7991", "#6d8da5", "#9c7c9f", "#d18a63", "#5eaa9d", "#8798b4"];
   const crowdSeed = (n) => ((n * 37 + 11) % 17) / 17;
   for (const side of [-1, 1]) {
@@ -471,22 +474,33 @@ function buildArenaArchitecture() {
       for (let n = 0; n < 14; n++) {
         const z = -6.1 + n * 0.94;
         const color = crowdPalette[(n + row * 3 + (side > 0 ? 2 : 0)) % crowdPalette.length];
+        const spectator = new THREE.Group();
+        spectator.position.set(x, y, z);
+        spectator.rotation.y = side < 0 ? -0.10 : 0.10;
         const torso = new THREE.Mesh(
           new THREE.CapsuleGeometry(0.16, 0.24 + crowdSeed(n + row) * 0.08, 3, 6),
           new THREE.MeshStandardMaterial({ color, roughness: 0.88 })
         );
-        torso.position.set(x, y + 0.48, z);
+        torso.position.set(0, 0.48, 0);
         torso.castShadow = false;
         torso.receiveShadow = false;
-        scene.add(torso);
+        spectator.add(torso);
         const head = new THREE.Mesh(
           new THREE.SphereGeometry(0.16, 8, 6),
           new THREE.MeshStandardMaterial({ color: "#d7ad91", roughness: 0.9 })
         );
-        head.position.set(x, y + 0.82, z);
+        head.position.set(0, 0.82, 0);
         head.castShadow = false;
         head.receiveShadow = false;
-        scene.add(head);
+        spectator.add(head);
+        scene.add(spectator);
+        arenaAudience.push({
+          group: spectator,
+          head,
+          baseY: y,
+          phase: (side + 1) * 1.3 + row * 0.81 + n * 0.47,
+          cheerDelay: ((n * 7 + row * 5 + (side > 0 ? 3 : 0)) % 11) * 0.045
+        });
       }
     }
   }
@@ -709,7 +723,15 @@ function triggerAvatarReaction(mesh, kind, duration = 1.7) {
   };
 }
 
+function triggerAudienceReaction() {
+  // Audience reaction shares the local match event clock; it never writes to Firebase.
+  arenaAudience.forEach((spectator) => {
+    spectator.group.userData.cheerStartedAt = performance.now();
+  });
+}
+
 function triggerAnswerReveal(state) {
+  triggerAudienceReaction();
   const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
   const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
   // Remote avatars only show a shared reveal reaction; their private answer stays private.
@@ -777,6 +799,7 @@ function applyWinnerPlacements(podium = []) {
 }
 
 function triggerGameFinish(podium = []) {
+  triggerAudienceReaction();
   if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
   Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
   applyWinnerPlacements(podium);
@@ -800,6 +823,32 @@ function triggerGameFinish(podium = []) {
     particle.rotation.set(index * 0.17, index * 0.23, index * 0.11);
     particle.material.opacity = 1;
     particle.visible = true;
+  });
+}
+
+function animateAudience(now) {
+  if (!arenaAudience.length) return;
+  const event = matchVisualEvent;
+  const eventElapsed = event.kind ? (now - event.startedAt) / 1000 : Infinity;
+  const eventActive = eventElapsed >= 0 && eventElapsed < event.duration &&
+    (event.kind === "reveal" || event.kind === "victory");
+  const intensity = eventActive
+    ? (event.kind === "victory" ? 1 : 0.68) * Math.sin(Math.PI * THREE.MathUtils.clamp(eventElapsed / event.duration, 0, 1))
+    : 0;
+  const time = now * 0.001;
+  arenaAudience.forEach((spectator) => {
+    const localTime = time + spectator.phase;
+    const delayedCheer = eventActive
+      ? Math.max(0, Math.sin(Math.max(0, eventElapsed - spectator.cheerDelay) * 8.5))
+      : 0;
+    const bounce = 0.018 + intensity * (0.045 + delayedCheer * 0.075);
+    spectator.group.position.y = spectator.baseY + Math.abs(Math.sin(localTime * 2.1)) * 0.012 +
+      Math.abs(Math.sin(localTime * 5.2)) * bounce;
+    spectator.group.rotation.z = Math.sin(localTime * 1.3) * 0.012 +
+      Math.sin(localTime * 4.8) * intensity * 0.025;
+    spectator.head.rotation.z = Math.sin(localTime * 1.8) * 0.035 -
+      Math.sin(localTime * 5.5) * intensity * 0.045;
+    spectator.head.rotation.x = -0.025 - intensity * (0.035 + delayedCheer * 0.06);
   });
 }
 
@@ -2644,6 +2693,7 @@ function animate() {
     const pulse = (Math.sin(t * 2.1 - led.userData.ledIndex * 0.42) + 1) * 0.5;
     led.material.color.setRGB(0.18 + pulse * 0.22, 0.55 + pulse * 0.38, 0.82 + pulse * 0.18);
   });
+  animateAudience(now);
   updateMatchVisualEffects(now, dt);
   renderer.render(scene, camera);
   if (previewRenderer && previewScene) {
