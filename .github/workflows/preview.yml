@@ -1,0 +1,68 @@
+name: Deploy QuizVerse PR Preview
+
+on:
+  push:
+    branches:
+      - feature/realistic-arena-environment
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Share the Pages deployment lock with the production workflow.
+# A production deployment may cancel this preview and restore the main-only site.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    if: github.repository == 'richierich992/quizverse-3d' && github.ref == 'refs/heads/feature/realistic-arena-environment'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}preview/
+    steps:
+      - name: Checkout production site from main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: site
+          persist-credentials: false
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/realistic-arena-environment
+          path: preview-source
+          persist-credentials: false
+
+      - name: Assemble isolated preview under /preview/
+        shell: bash
+        run: |
+          mkdir -p site/preview
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='tests/' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='firebase.json' \
+            --exclude='database.rules.json' \
+            --exclude='.firebaserc' \
+            preview-source/ site/preview/
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload combined production and preview site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy preview without replacing the production root
+        id: deployment
+        uses: actions/deploy-pages@v4
