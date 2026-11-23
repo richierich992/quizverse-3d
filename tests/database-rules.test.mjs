@@ -308,6 +308,9 @@ try {
   await assertSucceeds(set(ref(p2, regTwo), {
     partyCode: "PARY02", leaderUid: "player-2", partyName: "Party Two", registeredAt: Date.now()
   }));
+  await assertFails(set(ref(p1, `${tournamentSocial}/tournament/registrations/cup-1/slot03`), {
+    partyCode: "PARY01", leaderUid: "player-1", partyName: "Party One Duplicate", registeredAt: Date.now()
+  }));
   await assertSucceeds(update(ref(host, tournamentMeta), { phase: "active", startedAt: Date.now() }));
   await assertFails(set(ref(p1, `${tournamentSocial}/tournament/registrations/cup-1/slot03`), {
     partyCode: "PARY01", leaderUid: "player-1", partyName: "Party One", registeredAt: Date.now()
