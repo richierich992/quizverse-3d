@@ -739,6 +739,10 @@ function triggerAudienceReaction(kind, duration) {
 function triggerAnswerReveal(state) {
   triggerAudienceReaction("reveal", 1.65);
   const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
+  const correctText = String(state.question?.options?.[correctIndex] || "Jawaban tidak tersedia");
+  $("answerRevealLetter").textContent = String.fromCharCode(65 + correctIndex);
+  $("answerRevealText").textContent = correctText;
+  $("answerRevealToast").style.setProperty("--reveal-color", COLORS[correctIndex]);
   const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
   // Remote avatars only show a shared reveal reaction; their private answer stays private.
   Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "reveal", 1.2));
