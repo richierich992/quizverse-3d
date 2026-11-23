@@ -41,6 +41,18 @@ assert.match(main, /function finishTeamColorBattle\(\)/, "Host can finish and re
 assert.match(main, /function stopTeamColorBattleListener\(\)/, "Team battle listeners and state are cleaned up when leaving a room");
 assert.match(css, /\.team-score-red/, "Red team has distinct scoreboard styling");
 assert.match(css, /\.team-score-blue/, "Blue team has distinct scoreboard styling");
+assert.match(index, /id="socialPartyCard"/, "Host lobby shows the Social Competition Party Center");
+assert.match(player, /id="socialPartyCard"/, "Player lobby shows the Social Competition Party Center");
+assert.match(player, /id="partyJoinCode"/, "Players can enter a six-character party invite code");
+assert.match(main, /function createParty\(\)/, "Players can create a four-person party");
+assert.match(main, /function joinParty\(\)/, "Players can join a party with an invite code");
+assert.match(main, /function leaveParty\(\)/, "Players can leave a party and transfer leadership");
+assert.match(main, /function setPartyTeam\(teamId\)/, "Party leaders can choose the team's side");
+assert.match(main, /const selectedTeam = party\?\.members\?\.\[playerId\] && \["red", "blue"\]\.includes\(party\.teamId\)/, "Team Battle respects each party's chosen team");
+assert.match(main, /socialCompetition\/stats\/\$\{playerId\}\/matches\/session-\$\{sessionId\}/, "Completed Team Battle writes separate per-player match records");
+assert.match(main, /function subscribeSocialCompetition\(\)/, "Party membership and personal statistics are synchronized live");
+assert.match(main, /function renderPartyCenter\(\)/, "Party Center renders membership, team choice and win/loss record");
+assert.match(css, /\.party-team-button\.is-selected/, "The selected party team is visibly highlighted");
 assert.match(main, /const round = \{\s*sessionId: Number\(session\.sessionId\), roundId: nextRoundId/, "Team battle start publishes a synchronized round with a target and deadline");
 assert.match(main, /rounds: 5|totalRounds: 5/, "Team battle limits the match to five rounds");
 assert.match(main, /teamBattleWrongUntil/, "Wrong team color taps can retry after a short delay");
