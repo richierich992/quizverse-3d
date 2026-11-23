@@ -204,10 +204,36 @@
             <button id="partyTeamBlue" type="button" class="party-team-button party-blue">TEAM BIRU</button>
           </div>
         </div>
+        <button id="registerPartyTournament" type="button" class="primary full hidden">Daftarkan Party ke Turnamen</button>
         <button id="leaveParty" type="button" class="secondary full">Keluar dari Party</button>
       </div>
       <p id="partyStatus" class="social-party-status" aria-live="polite">Belum tergabung dalam party. Buat party atau masukkan kode teman.</p>
       <span class="social-party-footnote">Party dapat berisi 2–4 pemain. Statistik disimpan di room ini dan tidak mengubah skor kuis.</span>
+    </section>
+    <section id="tournamentCenterCard" class="tournament-center-card" aria-labelledby="tournamentCenterTitle">
+      <div class="tournament-center-header">
+        <div>
+          <span class="eyebrow">QUIZVERSE COMPETITIVE SERIES</span>
+          <strong id="tournamentCenterTitle">Tournament Center 🏆</strong>
+          <p id="tournamentTitle">QuizVerse Cup</p>
+        </div>
+        <div class="tournament-meta">
+          <b id="tournamentPhase">BELUM DIBUKA</b>
+          <span id="tournamentCount">MAKSIMAL 16 PARTY</span>
+        </div>
+      </div>
+      <div id="tournamentHostControls" class="tournament-host-controls hidden">
+        <input id="tournamentTitleInput" type="text" maxlength="36" value="QuizVerse Cup" aria-label="Nama turnamen"/>
+        <button id="createTournament" type="button" class="primary full">Buka Pendaftaran Turnamen</button>
+        <button id="startTournament" type="button" class="secondary full" disabled>Kunci Peserta &amp; Susun Bracket</button>
+      </div>
+      <div class="tournament-section-label">PARTY TERDAFTAR</div>
+      <div id="tournamentRegistrationList" class="tournament-registration-list">
+        <p class="tournament-empty">Belum ada pendaftaran.</p>
+      </div>
+      <div id="tournamentBracket" class="tournament-bracket"></div>
+      <p id="tournamentStatus" class="tournament-status" aria-live="polite">Host dapat membuka pendaftaran. Peserta berupa party, bukan pemain satuan.</p>
+      <span class="tournament-footnote">Single elimination · 2–16 party · Host sebagai spectator · hasil match menentukan party yang maju.</span>
     </section>
   </section>
 
