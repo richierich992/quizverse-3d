@@ -112,6 +112,11 @@ scene.fog = new THREE.Fog("#0a1724", 38, 86);
 const camera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.1, 120);
 camera.position.set(0, 13, 20);
 camera.lookAt(0, 0.85, 0);
+const winnerCameraTransition = { startedAt: 0 };
+const winnerCameraStartPosition = new THREE.Vector3();
+const winnerCameraStartTarget = new THREE.Vector3();
+const winnerCameraDirection = new THREE.Vector3();
+const winnerCameraLookTarget = new THREE.Vector3();
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
 const winnerCameraFocus = new THREE.Vector3(0, 1.62, -17.15);
@@ -716,7 +721,7 @@ function triggerQuestionStart() {
   matchVisualEvent.x = 0;
   matchVisualEvent.z = 0;
   matchVisualEvent.color = "#73dfff";
-  $("app").classList.remove("timer-critical", "answer-revealed");
+  $("app").classList.remove("timer-critical", "answer-revealed", "champions-reveal");
   $("app").classList.add("question-enter");
   celebrationParticles.forEach((particle) => { particle.visible = false; });
 }
@@ -809,6 +814,15 @@ function applyWinnerPlacements(podium = []) {
 }
 
 function triggerGameFinish(podium = []) {
+  const champion = Array.isArray(podium) && podium.length
+    ? String(podium[0]?.name || "Pemenang")
+    : "Semua pemain hebat";
+  $("championName").textContent = champion.slice(0, 48);
+  $("app").classList.add("champions-reveal");
+  winnerCameraTransition.startedAt = performance.now();
+  winnerCameraStartPosition.copy(camera.position);
+  camera.getWorldDirection(winnerCameraDirection);
+  winnerCameraStartTarget.copy(camera.position).addScaledVector(winnerCameraDirection, 12);
   triggerAudienceReaction("victory", 2.25);
   if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
   Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
@@ -2554,6 +2568,15 @@ function updateJoystick(event) {
 // Host has no avatar: use a smooth in-arena spectator camera that follows the
 // live group of participants without switching to a top-down overview.
 function updateWinnerCamera(dt) {
+  // A 2.35-second cubic ease makes the cut from live spectator to podium feel deliberate.
+  const progress = THREE.MathUtils.clamp(
+    (performance.now() - winnerCameraTransition.startedAt) / 2350,
+    0,
+    1
+  );
+  const eased = progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
   // Fit all three podiums even on tall, narrow phone screens.
   const verticalHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
   const horizontalHalfFovTangent = verticalHalfFov * Math.max(0.35, Number(camera.aspect) || 1);
@@ -2568,9 +2591,9 @@ function updateWinnerCamera(dt) {
     cameraHeight,
     winnerCameraFocus.z + frameDistance
   );
-  const blend = 1 - Math.exp(-2.5 * dt);
-  camera.position.lerp(desiredCamera, blend);
-  camera.lookAt(winnerCameraFocus);
+  camera.position.lerpVectors(winnerCameraStartPosition, desiredCamera, eased);
+  winnerCameraLookTarget.lerpVectors(winnerCameraStartTarget, winnerCameraFocus, eased);
+  camera.lookAt(winnerCameraLookTarget);
 }
 
 function updateHostSpectatorCamera(dt) {
