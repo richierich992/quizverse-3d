@@ -23,6 +23,13 @@ assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel d
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
+assert.match(index, /id="roundIntro"/, "Match intro overlay is present in the shared Host/Player arena layout");
+assert.match(index, /id="roundIntroTitle"/, "Match intro has a dynamic opening/next-question title");
+assert.match(index, /id="roundIntroMeta"/, "Match intro displays the current question number");
+assert.match(main, /roundIntroTitle"\)\.textContent = questionNumber === 1 \? "PERTANDINGAN DIMULAI" : "SOAL BERIKUTNYA"/, "First question and following questions use distinct intro copy");
+assert.match(css, /#app\.question-enter \.round-intro\{animation:roundIntroCurtain/, "Question start briefly reveals a cinematic center intro");
+assert.match(css, /#app\.question-enter \.answer-legend span:nth-child\(4\)/, "Answer options enter with a staggered sequence");
+assert.match(css, /#app\.question-enter \.round-intro-card\{animation:roundIntroCard/, "Intro card uses a short scale-and-focus entrance");
 assert.match(main, /function triggerQuestionStart\(\)/, "Question start triggers a one-shot arena entrance effect");
 assert.match(main, /function triggerAnswerReveal\(state\)/, "Answer reveal triggers a one-shot correct-answer celebration");
 assert.match(main, /visualPhaseChanged\) triggerAnswerReveal\(activeState\)/, "Repeated Firebase updates do not replay the reveal celebration");
