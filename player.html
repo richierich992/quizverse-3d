@@ -103,6 +103,29 @@
       <p>Uji refleks sambil menunggu. Tekan tombol tepat saat lampu berubah hijau. Rekor tersimpan di perangkat ini.</p>
       <button id="reactionRushOpen" type="button" class="secondary full">Main Reaction Rush</button>
     </div>
+    <section id="quickColorCard" class="quick-color-card" aria-labelledby="quickColorTitle">
+      <div class="quick-color-head">
+        <div>
+          <span class="eyebrow">MINI GAME MULTIPLAYER</span>
+          <strong id="quickColorTitle">Quick Color Match 🎨</strong>
+          <p>Cari warna target dan tekan secepat mungkin. Pemain pertama yang benar memenangkan ronde.</p>
+        </div>
+        <div class="quick-color-clock"><small>WAKTU</small><b id="quickColorTimer">—</b></div>
+      </div>
+      <div class="quick-color-target">
+        <span id="quickColorTargetLabel">MENUNGGU RONDE</span>
+        <strong id="quickColorTarget">SIAP?</strong>
+      </div>
+      <div id="quickColorChoices" class="quick-color-choices" aria-label="Pilihan warna">
+        <button type="button" class="quick-color-option" data-color-index="0" disabled>MERAH</button>
+        <button type="button" class="quick-color-option" data-color-index="1" disabled>BIRU</button>
+        <button type="button" class="quick-color-option" data-color-index="2" disabled>KUNING</button>
+        <button type="button" class="quick-color-option" data-color-index="3" disabled>HIJAU</button>
+      </div>
+      <p id="quickColorStatus" class="quick-color-status" aria-live="polite">Host dapat memulai ronde. Semua pemain di room bisa ikut berlomba.</p>
+      <button id="startQuickColorMatch" type="button" class="primary full hidden">Mulai Ronde</button>
+      <span class="quick-color-footnote">Tidak mengubah skor kuis utama.</span>
+    </section>
   </section>
 
   <div id="reactionRushOverlay" class="reaction-rush-overlay hidden" aria-hidden="true">
