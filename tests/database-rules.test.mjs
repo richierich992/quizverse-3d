@@ -184,7 +184,7 @@ try {
   const partyRef = `${socialBase}/parties/${partyCode}`;
   const pointer1 = `${socialBase}/playerParties/player-1`;
   const pointer2 = `${socialBase}/playerParties/player-2`;
-  await assertFails(set(ref(p1, `${partyRef}`), {
+  await assertFails(set(ref(p2, `${partyRef}`), {
     leaderUid: "player-1", teamId: "red", createdAt: Date.now(),
     members: { "player-1": { name: "Player 1", joinedAt: Date.now() } }
   }));
@@ -193,7 +193,7 @@ try {
     members: { "player-1": { name: "Player 1", joinedAt: Date.now() } }
   }));
   await assertSucceeds(set(ref(p1, pointer1), partyCode));
-  await assertSucceeds(update(ref(p1, socialBase), {
+  await assertSucceeds(update(ref(p2, socialBase), {
     [`parties/${partyCode}/members/player-2`]: { name: "Player 2", joinedAt: Date.now() },
     "playerParties/player-2": partyCode
   }));
@@ -205,7 +205,7 @@ try {
   }));
   await assertSucceeds(update(ref(p1, socialBase), {
     [`parties/${partyCode}/members/player-1`]: null,
-    "parties/${partyCode}`: null,
+    [`parties/${partyCode}`]: null,
     "playerParties/player-1": null
   }));
   const statsPath = `${socialBase}/stats/player-1/matches/session-1`;
