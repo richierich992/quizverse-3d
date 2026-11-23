@@ -128,6 +128,7 @@ let ownPosition = { x: 0, z: 0 }, moveKeys = {}, joystick = { x: 0, y: 0 };
 let lobbyRoamState = null;
 let jumpVelocity = 0, grounded = true, serverOffset = 0;
 let stateUnsubscribe = null, playersUnsubscribe = null;
+let playersSnapshotReady = false, seenPlayerIds = new Set(), lobbyArrivalRoom = "";
 let lastQuestionIndex = -1;
 let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
@@ -1514,6 +1515,31 @@ function animateAvatar(mesh, time, moving = false) {
     rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
     rig.torso.rotation.z -= 0.045 * socialWave;
   }
+
+  const arrival = mesh.userData.lobbyArrival;
+  let arrivalWave = 0;
+  let arrivalBounce = 0;
+  if (arrival && socialEnabled) {
+    const arrivalProgress = (time - arrival.startedAt) / (arrival.duration * 1000);
+    if (arrivalProgress >= 1) {
+      mesh.userData.lobbyArrival = null;
+    } else if (arrivalProgress >= 0) {
+      const waveWindow = arrival.kind === "arrive" ? 0.52 : 0.76;
+      if (arrivalProgress < waveWindow) {
+        arrivalWave = Math.sin((arrivalProgress / waveWindow) * Math.PI);
+      }
+      if (arrival.kind === "arrive") {
+        arrivalBounce = Math.abs(Math.sin(arrivalProgress * Math.PI * 3.1)) *
+          (1 - arrivalProgress) * 0.13;
+      }
+    }
+  }
+  if (arrivalWave > 0) {
+    rig.rightArm.rotation.z -= 0.98 * arrivalWave;
+    rig.rightArm.rotation.x += Math.sin(t * 16) * 0.21 * arrivalWave;
+    rig.torso.rotation.z -= 0.035 * arrivalWave;
+  }
+  if (arrivalBounce > 0) rig.torso.position.y += arrivalBounce;
   if (socialChat > 0) {
     const chatBeat = Math.sin(t * 8.5 + Number(mesh.userData.socialOffset || 0) * 0.001);
     rig.leftArm.rotation.z += 0.13 * socialChat;
@@ -1671,6 +1697,9 @@ function stopListeners() {
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
+  playersSnapshotReady = false;
+  seenPlayerIds = new Set();
+  lobbyArrivalRoom = "";
   Object.values(remotePlayers).forEach((p) => {
     scene.remove(p.mesh);
     disposeAvatar(p.mesh);
@@ -1684,6 +1713,50 @@ async function syncProfile() {
   await update(dbPath(`rooms/${roomPin}/players/${uid}`), {
     name: $("name").value.trim().slice(0, 18) || "Pemain",
     avatar: ownAvatar
+  });
+}
+function triggerLobbyArrival(mesh, kind = "arrive", delay = 0) {
+  if (!mesh?.userData || activeState?.phase !== "lobby") return;
+  mesh.userData.lobbyArrival = {
+    kind,
+    startedAt: performance.now() + Math.max(0, Number(delay) || 0),
+    duration: kind === "arrive" ? 1.55 : 1.10
+  };
+}
+function maybeStartLobbyArrival() {
+  if (!playersSnapshotReady || activeState?.phase !== "lobby" ||
+    !playerMesh || !roomPin || lobbyArrivalRoom === roomPin) return;
+  lobbyArrivalRoom = roomPin;
+  triggerLobbyArrival(playerMesh, "arrive");
+
+  // Existing nearby players acknowledge the person who just entered this view.
+  const nearby = Object.values(remotePlayers)
+    .map((entry) => entry.mesh)
+    .filter((mesh) => Math.hypot(
+      mesh.position.x - playerMesh.position.x,
+      mesh.position.z - playerMesh.position.z
+    ) <= 9.5);
+  nearby.forEach((mesh, index) =>
+    triggerLobbyArrival(mesh, "welcome", Math.min(index, 3) * 135)
+  );
+}
+function welcomeNearbyLobbyPlayers(newcomer) {
+  if (!newcomer || activeState?.phase !== "lobby") return;
+  triggerLobbyArrival(newcomer, "arrive");
+  const avatars = [];
+  if (playerMesh) avatars.push(playerMesh);
+  Object.values(remotePlayers).forEach((entry) => avatars.push(entry.mesh));
+  let greeted = 0;
+  avatars.forEach((other) => {
+    if (other === newcomer) return;
+    const distance = Math.hypot(
+      other.position.x - newcomer.position.x,
+      other.position.z - newcomer.position.z
+    );
+    if (distance <= 9.5) {
+      triggerLobbyArrival(other, "welcome", Math.min(greeted, 3) * 135);
+      greeted += 1;
+    }
   });
 }
 function updateRemoteAvatar(id, data) {
@@ -1781,6 +1854,7 @@ function subscribeRoom() {
     const visualPhaseChanged = visualStateKey !== lastVisualStateKey;
     lastVisualStateKey = visualStateKey;
     lobbyFromState(activeState);
+    maybeStartLobbyArrival();
     if (activeState.phase === "lobby") {
       showScreen("lobbyScreen");
     } else if (activeState.phase === "question") {
@@ -1820,7 +1894,21 @@ function subscribeRoom() {
   }, (error) => connection("Database: " + error.message, false));
 
   playersUnsubscribe = onValue(dbPath(`rooms/${roomPin}/players`), (snap) => {
-    renderPlayers(snap.val());
+    const nextPlayers = snap.val() || {};
+    const newcomerIds = playersSnapshotReady && activeState?.phase === "lobby"
+      ? Object.keys(nextPlayers).filter((id) =>
+        id !== uid && !seenPlayerIds.has(id) && !remotePlayers[id] &&
+        nextPlayers[id]?.connected !== false
+      )
+      : [];
+    renderPlayers(nextPlayers);
+    seenPlayerIds = new Set(Object.keys(nextPlayers));
+    playersSnapshotReady = true;
+    maybeStartLobbyArrival();
+    newcomerIds.forEach((id) => {
+      const newcomer = remotePlayers[id]?.mesh;
+      if (newcomer) welcomeNearbyLobbyPlayers(newcomer);
+    });
   });
 }
 async function enterLobby() {
