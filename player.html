@@ -94,7 +94,34 @@
     <h3>Pemain bergabung <span id="playerCount">0</span></h3><div id="roster" class="roster"></div>
     <button id="startGame" class="primary full hidden">Mulai permainan</button>
     <p id="hostNote" class="hint">Menunggu host memulai permainan...</p>
+    <div class="reaction-rush-card">
+      <div class="reaction-rush-heading">
+        <span class="eyebrow">MINI GAME LOBBY</span>
+        <span class="reaction-rush-best">REKOR <b id="reactionRushBest">—</b></span>
+      </div>
+      <strong>Reaction Rush ⚡</strong>
+      <p>Uji refleks sambil menunggu. Tekan tombol tepat saat lampu berubah hijau. Rekor tersimpan di perangkat ini.</p>
+      <button id="reactionRushOpen" type="button" class="secondary full">Main Reaction Rush</button>
+    </div>
   </section>
+
+  <div id="reactionRushOverlay" class="reaction-rush-overlay hidden" aria-hidden="true">
+    <section class="reaction-rush-dialog" role="dialog" aria-modal="true" aria-labelledby="reactionRushTitle">
+      <button id="reactionRushClose" class="reaction-rush-close" type="button" aria-label="Tutup Reaction Rush">×</button>
+      <span class="eyebrow">QUIZVERSE MINI GAME</span>
+      <h2 id="reactionRushTitle">Reaction Rush</h2>
+      <div id="reactionRushSignal" class="reaction-rush-signal" data-phase="ready">
+        <span id="reactionRushSignalText">SIAP?</span>
+      </div>
+      <strong id="reactionRushResult" class="reaction-rush-result">Siap menguji refleks?</strong>
+      <p id="reactionRushPrompt">Tekan mulai, tunggu sampai lampu hijau, lalu tekan secepat mungkin.</p>
+      <button id="reactionRushAction" type="button" class="primary full">Mulai tantangan</button>
+      <div class="reaction-rush-dialog-footer">
+        <span>Rekor pribadi <b id="reactionRushDialogBest">—</b></span>
+        <button id="reactionRushCloseFooter" type="button" class="secondary">Tutup</button>
+      </div>
+    </section>
+  </div>
 
   <section id="hud" class="hud hidden">
     <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span>SKOR <b id="score">0</b></span></div>
