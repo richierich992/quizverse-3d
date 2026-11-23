@@ -1462,9 +1462,13 @@ function updateLobbySocial() {
       mesh.userData.socialLookYaw = 0;
       mesh.userData.socialConversation = 0;
       mesh.userData.socialPartnerId = "";
+      mesh.userData.socialHighFive = 0;
+      mesh.userData.socialHighFiveSide = 0;
+      mesh.userData.socialHighFivePartnerId = "";
     });
     return;
   }
+  const nearestByMesh = new Map();
   avatars.forEach((mesh) => {
     let nearest = null;
     let nearestDistance = 12;
@@ -1479,6 +1483,7 @@ function updateLobbySocial() {
       }
     });
 
+    nearestByMesh.set(mesh, nearest);
     let desiredYaw = 0;
     if (nearest) {
       desiredYaw = Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y;
@@ -1506,6 +1511,41 @@ function updateLobbySocial() {
       .filter((entry) => entry.distance <= entry.zone.radius)
       .sort((a, b) => a.distance - b.distance)[0];
     mesh.userData.socialActivity = activityZone?.zone.id || "";
+  });
+
+  // Both clients derive the same rhythm from the sorted pair of player identities.
+  avatars.forEach((mesh) => {
+    const nearest = nearestByMesh.get(mesh);
+    const partner = nearest?.mesh;
+    const partnerNearest = partner ? nearestByMesh.get(partner) : null;
+    const mutualPair = Boolean(
+      partner && partnerNearest?.mesh === mesh &&
+      nearest.distance >= 1.18 && nearest.distance <= 3.2 &&
+      !mesh.userData.moving && !partner.userData.moving
+    );
+    let target = 0;
+    let phase = 0;
+    if (mutualPair) {
+      const pairIds = [
+        String(mesh.userData.socialId || ""),
+        String(partner.userData.socialId || "")
+      ].sort();
+      const pairOffset = socialOffsetFor("high-five:" + pairIds.join("|")) % 16000;
+      const pairCycle = (performance.now() + pairOffset) % 16000;
+      if (pairCycle < 2200) {
+        phase = pairCycle / 2200;
+        target = Math.sin(phase * Math.PI);
+      }
+    }
+    const current = Number(mesh.userData.socialHighFive || 0);
+    mesh.userData.socialHighFive = current + (target - current) * 0.22;
+    mesh.userData.socialHighFivePhase = phase;
+    mesh.userData.socialHighFiveSide = mutualPair
+      ? (Math.sin(Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y) >= 0 ? 1 : -1)
+      : 0;
+    mesh.userData.socialHighFivePartnerId = mutualPair
+      ? String(partner.userData.socialId || "")
+      : "";
   });
 }
 
@@ -1588,17 +1628,26 @@ function animateAvatar(mesh, time, moving = false) {
   const socialConversation = socialEnabled
     ? THREE.MathUtils.clamp(Number(mesh.userData.socialConversation || 0), 0, 1)
     : 0;
-  const socialWave = socialConversation > 0.42 && socialCycle < 920
+  const socialHighFive = socialEnabled
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialHighFive || 0), 0, 1)
+    : 0;
+  const socialHighFiveSide = Number(mesh.userData.socialHighFiveSide || 0);
+  const highFivePhase = Number(mesh.userData.socialHighFivePhase || 0);
+  const highFiveSlap = socialHighFive *
+    Math.max(0, 1 - Math.abs(highFivePhase - 0.58) / 0.16);
+  const socialWave = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle < 920
     ? Math.sin((socialCycle / 920) * Math.PI) * socialConversation
     : 0;
-  const socialNod = socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
+  const socialNod = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
     ? Math.sin(((socialCycle - 1450) / 900) * Math.PI) * socialConversation
     : 0;
-  const socialChat = socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
+  const socialChat = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
     ? Math.sin(((socialCycle - 2650) / 1550) * Math.PI) * socialConversation
     : 0;
   const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
-  const socialActivity = socialEnabled ? String(mesh.userData.socialActivity || "") : "";
+  const socialActivity = socialEnabled && socialHighFive < 0.25
+    ? String(mesh.userData.socialActivity || "")
+    : "";
   const activityPhase = (time + socialOffset) % 4200;
   const activityBeat = Math.sin((activityPhase / 4200) * Math.PI * 2);
   const activityPulse = Math.max(0, Math.sin((activityPhase / 4200) * Math.PI * 2));
@@ -1635,6 +1684,19 @@ function animateAvatar(mesh, time, moving = false) {
     rig.torso.rotation.z -= 0.035 * arrivalWave;
   }
   if (arrivalBounce > 0) rig.torso.position.y += arrivalBounce;
+  if (socialHighFive > 0.04 && socialHighFiveSide !== 0) {
+    // The inward hand is selected from the partner's relative side.
+    if (socialHighFiveSide > 0) {
+      rig.rightArm.rotation.z -= 1.92 * socialHighFive;
+      rig.rightArm.rotation.x -= 0.24 * socialHighFive;
+    } else {
+      rig.leftArm.rotation.z += 1.92 * socialHighFive;
+      rig.leftArm.rotation.x -= 0.24 * socialHighFive;
+    }
+    rig.torso.rotation.y += socialLook * 0.10 * socialHighFive;
+    rig.head.rotation.z += socialHighFive * 0.035;
+    rig.torso.position.y += highFiveSlap * 0.075;
+  }
   if (socialActivity === "cheer") {
     rig.leftArm.rotation.z += 0.72 + activityBeat * 0.09;
     rig.rightArm.rotation.z -= 0.72 - activityBeat * 0.09;
@@ -1760,6 +1822,9 @@ function setAvatarSocialIdentity(mesh, identity) {
   mesh.userData.socialLookYaw = 0;
   mesh.userData.socialConversation = 0;
   mesh.userData.socialPartnerId = "";
+  mesh.userData.socialHighFive = 0;
+  mesh.userData.socialHighFiveSide = 0;
+  mesh.userData.socialHighFivePartnerId = "";
 }
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
@@ -3269,6 +3334,7 @@ function animate() {
     entry.mesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
     const networkMoving = Number(entry.lastMoveAt || 0) > 0 && now - Number(entry.lastMoveAt || 0) < 390;
     const moving = winnerWalking || networkMoving;
+    entry.mesh.userData.moving = moving;
     animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
