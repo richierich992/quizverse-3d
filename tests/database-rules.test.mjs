@@ -130,17 +130,14 @@ try {
   await assertFails(set(ref(p2, `${socialBase}/parties/${partyCode}/members/slot5`), {
     uid: "player-2", name: "Player 2", joinedAt: Date.now()
   }));
+  await assertSucceeds(set(ref(p1, `${socialBase}/parties/${partyCode}/leaderUid`), "player-2"));
   await assertSucceeds(update(ref(p1, socialBase), {
-    [`parties/${partyCode}/leaderUid`]: "player-2",
     [`parties/${partyCode}/members/slot1`]: null,
     "playerParties/player-1": null
   }));
   await assertSucceeds(set(ref(p2, `${socialBase}/parties/${partyCode}/teamId`), "red"));
-  await assertSucceeds(update(ref(p2, socialBase), {
-    [`parties/${partyCode}/members/slot2`]: null,
-    [`parties/${partyCode}`]: null,
-    "playerParties/player-2": null
-  }));
+  await assertSucceeds(set(ref(p2, `${partyRef}`), null));
+  await assertSucceeds(set(ref(p2, pointer2), null));
 
   const statsPath = `${socialBase}/stats/player-1/matches/session-1`;
   await assertFails(set(ref(p1, statsPath), {
