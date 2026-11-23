@@ -32,6 +32,12 @@ assert.match(css, /#app\.question-enter \.round-intro\{animation:roundIntroCurta
 assert.match(css, /#app\.question-enter \.answer-legend span:nth-child\(4\)/, "Answer options enter with a staggered sequence");
 assert.match(css, /#app\.question-enter \.round-intro-card\{animation:roundIntroCard/, "Intro card uses a short scale-and-focus entrance");
 assert.match(main, /function triggerQuestionStart\(\)/, "Question start triggers a one-shot arena entrance effect");
+assert.match(index, /id="answerRevealToast"/, "Host has a shared correct-answer reveal toast");
+assert.match(player, /id="answerRevealToast"/, "Player has a shared correct-answer reveal toast");
+assert.match(main, /answerRevealLetter"\)\.textContent = String\.fromCharCode\(65 \+ correctIndex\)/, "Reveal toast shows the correct answer letter");
+assert.match(main, /answerRevealText"\)\.textContent = correctText/, "Reveal toast displays the public correct answer text");
+assert.match(main, /state\.question\?\.options\?\.\[correctIndex\]/, "Reveal toast reads only the existing public question options");
+assert.match(css, /#app\.answer-revealed \.answer-reveal-toast\{/, "Correct answer toast animates only during the reveal phase");
 assert.match(main, /function triggerAnswerReveal\(state\)/, "Answer reveal triggers a one-shot correct-answer celebration");
 assert.match(main, /visualPhaseChanged\) triggerAnswerReveal\(activeState\)/, "Repeated Firebase updates do not replay the reveal celebration");
 assert.match(main, /left > 0 && left <= 5/, "Last-five-second urgency uses the synchronized room deadline");
