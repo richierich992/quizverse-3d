@@ -167,6 +167,15 @@ assert.match(main, /winnerRank === 1/, "First place has a persistent champion po
 assert.match(main, /winnerRank === 2/, "Second place has a distinct podium pose");
 assert.match(main, /winnerRank === 3/, "Third place has a distinct podium pose");
 assert.match(main, /const winnerRank = mesh\.userData\.winnerMoving \? 0 : Number\(mesh\.userData\.winnerRank \|\| 0\)/, "Champion pose starts after the avatar reaches the podium");
+assert.match(main, /const winnerCameraTransition = \{ startedAt: 0 \}/, "Podium camera has a dedicated transition clock");
+assert.match(main, /winnerCameraStartPosition\.copy\(camera\.position\)/, "Podium transition starts from the live spectator position");
+assert.match(main, /\/ 2350/, "Podium camera uses a deliberate 2.35-second cinematic transition");
+assert.match(main, /winnerCameraLookTarget\.lerpVectors\(winnerCameraStartTarget, winnerCameraFocus, eased\)/, "Podium camera smoothly transitions its viewing target");
+assert.match(main, /championName"\)\.textContent = champion\.slice\(0, 48\)/, "Winner banner uses the first-place player's public display name");
+assert.match(index, /id="championBanner"/, "Host has a podium champion banner");
+assert.match(player, /id="championBanner"/, "Player has a podium champion banner");
+assert.match(css, /#app\.champions-reveal \.champion-banner/, "Champion banner reveals during the finished phase");
+assert.match(css, /#app\.champions-reveal \.champion-banner\{[\s\S]*?championBannerEntrance/, "Champion banner has a one-shot entrance animation");
 assert.match(main, /function updateWinnerCamera\(dt\)/, "All clients receive a dedicated final podium camera");
 assert.match(main, /const horizontalHalfFovTangent = verticalHalfFov \* Math\.max\(0\.35, Number\(camera\.aspect\) \|\| 1\)/, "Winner camera accounts for portrait and landscape screen aspect ratios");
 assert.match(main, /const frameDistance = THREE\.MathUtils\.clamp\([\s\S]*?5\.2 \/ Math\.max\(0\.12, horizontalHalfFovTangent\)/, "Winner camera backs up enough to frame all podiums on narrow screens");
