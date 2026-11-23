@@ -22,13 +22,14 @@ const match = (bracket, id) => Object.values(bracket.rounds)
 {
   const bracket = buildSingleEliminationBracket(entrants(3));
   assert.equal(bracket.bracketSize, 4);
-  assert.equal(match(bracket, "r1m2").status, "ready");
-  assert.equal(match(bracket, "r2m1").status, "bye");
-  assert.equal(match(bracket, "r2m1").winnerPartyCode, "PARTCD");
+  assert.equal(match(bracket, "r1m2").status, "bye");
+  assert.equal(match(bracket, "r1m2").winnerPartyCode, "PARTCD");
+  assert.equal(match(bracket, "r2m1").status, "waiting");
+  assert.equal(match(bracket, "r2m1").winnerPartyCode, null);
+  assert.equal(bracket.championPartyCode, null);
   assert.equal(bracket.currentMatchId, "r1m1");
   const afterFirstRound = buildSingleEliminationBracket(entrants(3), {
-    r1m1: "PARTBC",
-    r1m2: "PARTCD"
+    r1m1: "PARTBC"
   });
   assert.equal(match(afterFirstRound, "r2m1").status, "ready");
   assert.equal(match(afterFirstRound, "r2m1").partyA, "PARTBC");
