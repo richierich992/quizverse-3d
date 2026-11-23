@@ -141,6 +141,11 @@ let lastSyncedPosition = { x: 0, z: 0 };
 let lastVisualStateKey = "";
 const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
 const matchMotionPreference = matchMedia("(prefers-reduced-motion: reduce)");
+const REACTION_RUSH_BEST_KEY = "quizverse-reaction-rush-best-v1";
+let reactionRushTimeout = null;
+let reactionRushPhase = "closed";
+let reactionRushStartedAt = 0;
+let reactionRushBest = readReactionRushBest();
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -152,7 +157,116 @@ function connection(message, good = false) {
   $("connection").textContent = "● " + message;
   $("connection").style.color = good ? "#68e7ba" : "#f4c982";
 }
+function readReactionRushBest() {
+  try {
+    const stored = Number(localStorage.getItem(REACTION_RUSH_BEST_KEY) || 0);
+    return Number.isFinite(stored) && stored > 0 ? stored : 0;
+  } catch {
+    return 0;
+  }
+}
+function renderReactionRushBest() {
+  const label = reactionRushBest ? reactionRushBest + " ms" : "—";
+  $("reactionRushBest").textContent = label;
+  $("reactionRushDialogBest").textContent = label;
+}
+function setReactionRushView(phase, signal, result, prompt, action) {
+  reactionRushPhase = phase;
+  $("reactionRushSignal").dataset.phase = phase;
+  $("reactionRushSignalText").textContent = signal;
+  $("reactionRushResult").textContent = result;
+  $("reactionRushPrompt").textContent = prompt;
+  $("reactionRushAction").textContent = action;
+}
+function openReactionRush() {
+  if (activeState?.phase !== "lobby") return;
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  setReactionRushView(
+    "ready", "SIAP?", "Siap menguji refleks?",
+    "Tekan mulai, tunggu sampai lampu hijau, lalu tekan secepat mungkin.",
+    "Mulai tantangan"
+  );
+  renderReactionRushBest();
+  $("reactionRushOverlay").classList.remove("hidden");
+  $("reactionRushOverlay").setAttribute("aria-hidden", "false");
+  $("reactionRushAction").focus();
+}
+function closeReactionRush(returnFocus = false) {
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  reactionRushPhase = "closed";
+  const overlay = $("reactionRushOverlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  if (returnFocus) $("reactionRushOpen").focus();
+}
+function startReactionRushRound() {
+  if (activeState?.phase !== "lobby") {
+    closeReactionRush();
+    return;
+  }
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  reactionRushStartedAt = 0;
+  setReactionRushView(
+    "waiting", "TUNGGU", "Jangan terburu-buru!",
+    "Tunggu sinyal hijau. Menekan terlalu cepat akan dianggap false start.",
+    "Jangan tekan dulu"
+  );
+  const randomDelay = 1400 + Math.random() * 3200;
+  reactionRushTimeout = setTimeout(() => {
+    if (reactionRushPhase !== "waiting") return;
+    reactionRushStartedAt = performance.now();
+    setReactionRushView(
+      "go", "GO!", "SEKARANG!",
+      "Lampu hijau! Tekan tombol secepat mungkin.",
+      "TEKAN SEKARANG!"
+    );
+  }, randomDelay);
+}
+function handleReactionRushAction() {
+  if (reactionRushPhase === "ready" || reactionRushPhase === "false-start" ||
+    reactionRushPhase === "result") {
+    startReactionRushRound();
+    return;
+  }
+  if (reactionRushPhase === "waiting") {
+    clearTimeout(reactionRushTimeout);
+    reactionRushTimeout = null;
+    setReactionRushView(
+      "false-start", "TERLALU CEPAT", "False start!",
+      "Kamu menekan sebelum lampu hijau. Coba tunggu sinyal berikutnya.",
+      "Coba lagi"
+    );
+    return;
+  }
+  if (reactionRushPhase === "go") {
+    const elapsed = Math.max(1, Math.round(performance.now() - reactionRushStartedAt));
+    const isRecord = !reactionRushBest || elapsed < reactionRushBest;
+    if (isRecord) {
+      reactionRushBest = elapsed;
+      try {
+        localStorage.setItem(REACTION_RUSH_BEST_KEY, String(elapsed));
+      } catch {
+        // The challenge still works when browser storage is unavailable.
+      }
+    }
+    renderReactionRushBest();
+    setReactionRushView(
+      "result",
+      elapsed < 220 ? "KILAT!" : elapsed < 320 ? "HEBAT!" : "SELESAI",
+      elapsed + " ms",
+      isRecord ? "Rekor baru! Catatan terbaikmu berhasil diperbarui." :
+        "Bagus! Rekor terbaikmu saat ini " + reactionRushBest + " ms.",
+      "Main lagi"
+    );
+  }
+}
 function showScreen(id) {
+  if (id !== "lobbyScreen") closeReactionRush();
   if (id !== "endScreen") $("app").classList.remove("champions-reveal");
   ["roleScreen", "setupScreen", "lobbyScreen", "hud", "endScreen"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== id);
@@ -2965,6 +3079,19 @@ $("questionFile").addEventListener("change", async (event) => {
 $("createRoom").addEventListener("click", makeRoom);
 $("joinRoom").addEventListener("click", joinRoom);
 $("startGame").addEventListener("click", startGame);
+$("reactionRushOpen").addEventListener("click", openReactionRush);
+$("reactionRushAction").addEventListener("click", handleReactionRushAction);
+$("reactionRushClose").addEventListener("click", () => closeReactionRush(true));
+$("reactionRushCloseFooter").addEventListener("click", () => closeReactionRush(true));
+$("reactionRushOverlay").addEventListener("click", (event) => {
+  if (event.target === $("reactionRushOverlay")) closeReactionRush(true);
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && reactionRushPhase !== "closed") {
+    closeReactionRush(true);
+  }
+});
+renderReactionRushBest();
 $("copyPin").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(roomPin);
