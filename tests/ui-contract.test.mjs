@@ -41,10 +41,10 @@ assert.match(main, /function finishTeamColorBattle\(\)/, "Host can finish and re
 assert.match(main, /function stopTeamColorBattleListener\(\)/, "Team battle listeners and state are cleaned up when leaving a room");
 assert.match(css, /\.team-score-red/, "Red team has distinct scoreboard styling");
 assert.match(css, /\.team-score-blue/, "Blue team has distinct scoreboard styling");
-assert.match(main, /const teamRound1 =/ , "Team battle start publishes a synchronized round with a target and deadline");
+assert.match(main, /const round = \{\s*sessionId: Number\(session\.sessionId\), roundId: nextRoundId/, "Team battle start publishes a synchronized round with a target and deadline");
 assert.match(main, /rounds: 5|totalRounds: 5/, "Team battle limits the match to five rounds");
 assert.match(main, /teamBattleWrongUntil/, "Wrong team color taps can retry after a short delay");
-assert.match(main, /teamBattleData\?\.winners/, "Team scores are derived from the current session's round winners");
+assert.match(main, /data\.winners\?\.\[String\(sessionId\)\]/, "Team scores are derived from the current session's round winners");
 assert.match(css, /\.quick-color-option\[data-color-index="0"\]/, "Quick Color Match uses distinct colored answer pads");
 assert.match(css, /\.quick-color-option\.is-target:not\(:disabled\)/, "The correct color pad receives a live target highlight");
 assert.match(index, /id="reactionRushOpen"/, "Host lobby offers the Reaction Rush mini-game");
