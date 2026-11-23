@@ -428,3 +428,39 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   #app.timer-critical .timer-row>b,
   #app.answer-revealed .answer-legend span.is-correct-answer{animation:none!important}
 }
+
+
+/* Keep the 3D winners' stage visible behind the final results card. */
+#endScreen{
+  top:auto;
+  bottom:clamp(12px,2.5vh,24px);
+  left:clamp(12px,2.5vw,32px);
+  transform:none;
+  width:min(350px,31vw);
+  max-height:min(58dvh,560px);
+  padding:18px 19px;
+  background:rgba(5,17,31,.76);
+  border-color:#74c8ee55;
+  backdrop-filter:blur(14px);
+}
+#endScreen h1{font-size:clamp(23px,2.2vw,29px);margin:8px 0}
+#endScreen .podium{gap:6px;margin:12px 0}
+#endScreen .podium-item{padding:8px 10px}
+#endScreen .podium-rank{font-size:18px}
+@media(max-width:650px){
+  #endScreen{
+    left:3vw;
+    bottom:10px;
+    width:94vw;
+    max-height:min(38dvh,310px);
+    padding:12px 14px;
+    border-radius:14px;
+  }
+  #endScreen h1{font-size:22px;margin:5px 0}
+  #endScreen .eyebrow{font-size:8px}
+  #endScreen .podium{gap:4px;margin:7px 0}
+  #endScreen .podium-item{padding:6px 9px;gap:8px}
+  #endScreen .podium-rank{font-size:16px;width:25px}
+  #endScreen .podium-name,#endScreen .podium-score{font-size:11px}
+  #endScreen .primary{padding:9px 12px;font-size:10px}
+}
