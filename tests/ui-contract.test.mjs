@@ -222,6 +222,19 @@ assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking 
 assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
 assert.match(main, /playerMesh\.userData\.targetYaw = Math\.atan2\(input\.x, input\.z\)/, "Local movement stores a target heading instead of snapping the body");
 assert.match(main, /if \(playerMesh && !playerMesh\.userData\.winnerTarget\) \{[\s\S]*?const desiredYaw = Number\(playerMesh\.userData\.targetYaw\)[\s\S]*?playerMesh\.rotation\.y \+= yawDelta \* \(1 - Math\.exp\(-14 \* dt\)\)/, "Local avatar smoothly turns along the shortest angular path");
+
+assert.match(main, /const AVATAR_COLLISION_RADIUS = 0\.56/, "Arena collision uses a consistent avatar radius");
+assert.match(main, /const ARENA_WALK_RADIUS = 23\.15/, "Players remain inside the circular arena floor");
+assert.match(main, /const ARENA_STATIC_RECT_COLLIDERS = \[/, "Ground-level grandstands have static rectangular collision bounds");
+assert.match(main, /const ARENA_STATIC_CIRCLE_COLLIDERS = \[/, "Arena support columns have circular collision bounds");
+assert.match(main, /function isArenaStaticBlocked\(x, z\)/, "Movement checks the static arena geometry");
+assert.match(main, /function isPlayerMovementBlocked\(x, z, fromX, fromZ\)/, "Players cannot walk through nearby remote avatars");
+assert.match(main, /const previousDistance = Math\.hypot\(fromX - otherX, fromZ - otherZ\)/, "Overlapping reconnects can move apart instead of getting stuck");
+assert.match(main, /if \(isPlayerMovementBlocked\(nextX, nextZ, startX, startZ\)\) nextX = startX/, "Horizontal collision resolution allows wall sliding");
+assert.match(main, /if \(isPlayerMovementBlocked\(nextX, nextZ, startX, startZ\)\) nextZ = startZ/, "Vertical collision resolution allows wall sliding");
+assert.match(main, /const clearArenaObjects = !isArenaStaticBlocked\(candidate\.x, candidate\.z\)/, "Spawn candidates avoid the arena's physical obstacles");
+assert.match(main, /const savedPositionClear = !isArenaStaticBlocked\(savedPosition\.x, savedPosition\.z\)/, "Reconnects validate saved positions before restoring them");
+assert.match(main, /update\(playerRef, \{ \.\.\.profile, x: ownPosition\.x, z: ownPosition\.z \}\)/, "A relocated reconnect persists its safe position");
 assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
 const previewRefresh = main.slice(main.indexOf("function refreshAvatarPreview"), main.indexOf("function initAvatarPreview"));
 const disposeBlock = main.slice(main.indexOf("function disposeAvatar"), main.indexOf("function setAvatarNameTag"));
