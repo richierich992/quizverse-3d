@@ -23,7 +23,8 @@ assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel d
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
-assert.match(index, /id="roundIntro"/, "Match intro overlay is present in the shared Host/Player arena layout");
+assert.match(index, /id="roundIntro"/, "Host match intro overlay is present");
+assert.match(player, /id="roundIntro"/, "Player match intro overlay is present");
 assert.match(index, /id="roundIntroTitle"/, "Match intro has a dynamic opening/next-question title");
 assert.match(index, /id="roundIntroMeta"/, "Match intro displays the current question number");
 assert.match(main, /roundIntroTitle"\)\.textContent = questionNumber === 1 \? "PERTANDINGAN DIMULAI" : "SOAL BERIKUTNYA"/, "First question and following questions use distinct intro copy");
