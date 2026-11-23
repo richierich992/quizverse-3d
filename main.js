@@ -532,6 +532,45 @@ function buildArenaArchitecture() {
   }
 }
 buildArenaArchitecture();
+
+const winnerPodiumGroup = new THREE.Group();
+winnerPodiumGroup.visible = false;
+scene.add(winnerPodiumGroup);
+const winnerPodiumSlots = [
+  { x: 0, z: -17.15, y: 1.62, color: "#e6b84e", label: "1ST" },
+  { x: -3.45, z: -17.15, y: 1.12, color: "#c5d4e2", label: "2ND" },
+  { x: 3.45, z: -17.15, y: 0.92, color: "#c58b65", label: "3RD" }
+];
+winnerPodiumSlots.forEach((slot) => {
+  const metal = new THREE.MeshStandardMaterial({
+    color: slot.color, roughness: 0.34, metalness: 0.72,
+    emissive: slot.color, emissiveIntensity: 0.10
+  });
+  const pedestal = new THREE.Mesh(
+    roundedBoxGeometry(2.85, slot.y, 2.55, 0.22), metal
+  );
+  pedestal.position.set(slot.x, slot.y / 2, slot.z);
+  pedestal.castShadow = true;
+  pedestal.receiveShadow = true;
+  winnerPodiumGroup.add(pedestal);
+
+  const cap = new THREE.Mesh(
+    roundedBoxGeometry(2.9, 0.13, 2.62, 0.12),
+    new THREE.MeshStandardMaterial({
+      color: slot.color, roughness: 0.26, metalness: 0.58,
+      emissive: slot.color, emissiveIntensity: 0.22
+    })
+  );
+  cap.position.set(slot.x, slot.y - 0.10, slot.z);
+  cap.castShadow = false;
+  winnerPodiumGroup.add(cap);
+
+  const badge = labelSprite(slot.label, slot.color);
+  badge.scale.set(1.55, 0.39, 1);
+  badge.position.set(slot.x, slot.y + 0.34, slot.z + 1.32);
+  winnerPodiumGroup.add(badge);
+});
+
 const sweepingBeams = scene.children.filter((obj) => obj.userData.sweepPhase !== undefined);
 const perimeterLEDs = scene.children.filter((obj) => obj.userData.ledIndex !== undefined);
 
@@ -635,6 +674,21 @@ const celebrationParticles = Array.from({ length: 24 }, (_, index) => {
 });
 
 function triggerQuestionStart() {
+  winnerPodiumGroup.visible = false;
+  if (playerMesh) {
+    playerMesh.userData.winnerTarget = null;
+    playerMesh.userData.winnerRank = 0;
+  }
+  Object.entries(remotePlayers).forEach(([id, entry]) => {
+    const person = playerData[id] || {};
+    const x = Number(person.x || 0);
+    const z = Number(person.z || 0);
+    entry.mesh.userData.winnerTarget = null;
+    entry.mesh.userData.winnerRank = 0;
+    entry.targetX = x;
+    entry.targetY = answerBaySurfaceAt(x, z);
+    entry.targetZ = z;
+  });
   matchVisualEvent.kind = "question";
   matchVisualEvent.startedAt = performance.now();
   matchVisualEvent.duration = 1.25;
@@ -688,9 +742,38 @@ function triggerAnswerReveal(state) {
     particle.visible = true;
   });
 }
-function triggerGameFinish() {
+function applyWinnerPlacements(podium = []) {
+  if (!Array.isArray(podium) || !podium.length) return;
+  winnerPodiumGroup.visible = true;
+  const slotByUid = new Map(podium.slice(0, 3).map((person, index) => [String(person.uid || ""), index]));
+  const place = (mesh, rankIndex) => {
+    const slot = winnerPodiumSlots[rankIndex];
+    if (!mesh || !slot) return;
+    mesh.userData.winnerRank = rankIndex + 1;
+    mesh.userData.winnerTarget = { x: slot.x, y: slot.y, z: slot.z, yaw: 0 };
+  };
+
+  if (uid && slotByUid.has(String(uid))) place(playerMesh, slotByUid.get(String(uid)));
+  Object.entries(remotePlayers).forEach(([id, entry]) => {
+    const rankIndex = slotByUid.get(String(id));
+    if (rankIndex === undefined) {
+      entry.mesh.userData.winnerRank = 0;
+      entry.mesh.userData.winnerTarget = null;
+      return;
+    }
+    place(entry.mesh, rankIndex);
+    const slot = winnerPodiumSlots[rankIndex];
+    entry.targetX = slot.x;
+    entry.targetY = slot.y;
+    entry.targetZ = slot.z;
+    entry.targetYaw = 0;
+  });
+}
+
+function triggerGameFinish(podium = []) {
   if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
   Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
+  applyWinnerPlacements(podium);
 
   matchVisualEvent.kind = "victory";
   matchVisualEvent.startedAt = performance.now();
@@ -1131,6 +1214,38 @@ function createAvatar(a = {}) {
   return g;
 }
 
+function updateLobbySocial() {
+  const avatars = [];
+  if (playerMesh) avatars.push(playerMesh);
+  Object.values(remotePlayers).forEach((entry) => avatars.push(entry.mesh));
+
+  if (activeState?.phase !== "lobby") {
+    avatars.forEach((mesh) => { mesh.userData.socialLookYaw = 0; });
+    return;
+  }
+  avatars.forEach((mesh) => {
+    let nearest = null;
+    let nearestDistance = 12;
+    avatars.forEach((other) => {
+      if (other === mesh) return;
+      const dx = other.position.x - mesh.position.x;
+      const dz = other.position.z - mesh.position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = { dx, dz };
+      }
+    });
+    let desiredYaw = 0;
+    if (nearest) {
+      desiredYaw = Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y;
+      desiredYaw = Math.atan2(Math.sin(desiredYaw), Math.cos(desiredYaw));
+    }
+    const currentYaw = Number(mesh.userData.socialLookYaw || 0);
+    mesh.userData.socialLookYaw = currentYaw + (desiredYaw - currentYaw) * 0.075;
+  });
+}
+
 function animateAvatar(mesh, time, moving = false) {
   const rig = mesh?.userData?.rig;
   if (!rig) return;
@@ -1148,8 +1263,20 @@ function animateAvatar(mesh, time, moving = false) {
   rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.05 : Math.sin(t * 3.1) * 0.04);
   rig.torso.rotation.z = Math.sin(t * 1.5) * 0.018 + swing * 0.018;
   rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
-  rig.head.rotation.y = Math.sin(t * 0.72) * 0.035;
+  const socialEnabled = activeState?.phase === "lobby" && !moving && !airborne;
+  const socialOffset = Number(mesh.userData.socialOffset || 0);
+  const socialCycle = (time + socialOffset) % 14500;
+  const socialWave = socialEnabled && socialCycle < 920
+    ? Math.sin((socialCycle / 920) * Math.PI)
+    : 0;
+  const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
+  rig.head.rotation.y = socialLook * 0.48 + Math.sin(t * 0.72) * 0.035;
   rig.head.rotation.z = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.55) * 0.012;
+  if (socialWave > 0) {
+    rig.rightArm.rotation.z -= 1.02 * socialWave;
+    rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
+    rig.torso.rotation.z -= 0.045 * socialWave;
+  }
 
   const reaction = mesh.userData.reaction;
   if (reaction) {
@@ -1181,6 +1308,21 @@ function animateAvatar(mesh, time, moving = false) {
     }
   }
 
+  const winnerRank = Number(mesh.userData.winnerRank || 0);
+  if (winnerRank === 1) {
+    rig.leftArm.rotation.z += 0.88;
+    rig.rightArm.rotation.z -= 0.88;
+    rig.head.rotation.z += Math.sin(t * 2.2) * 0.025;
+  } else if (winnerRank === 2) {
+    rig.rightArm.rotation.z -= 0.92;
+    rig.rightArm.rotation.x += Math.sin(t * 3.1) * 0.12;
+    rig.head.rotation.z -= 0.035;
+  } else if (winnerRank === 3) {
+    rig.leftArm.rotation.z += 0.64;
+    rig.rightArm.rotation.z -= 0.64;
+    rig.torso.rotation.z += Math.sin(t * 3.8) * 0.035;
+  }
+
   // A quick, staggered blink keeps the faces from looking like static dolls.
   const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
   let blinkScale = 1;
@@ -1202,6 +1344,19 @@ function disposeAvatar(mesh) {
       node.material.dispose();
     }
   });
+}
+function socialOffsetFor(identity) {
+  let hash = 2166136261;
+  for (const char of String(identity || "player")) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % 14500;
+}
+function setAvatarSocialIdentity(mesh, identity) {
+  if (!mesh) return;
+  mesh.userData.socialOffset = socialOffsetFor(identity);
+  mesh.userData.socialLookYaw = 0;
 }
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
@@ -1231,6 +1386,7 @@ function setOwnAvatar(a) {
     disposeAvatar(playerMesh);
   }
   playerMesh = createAvatar(a);
+  setAvatarSocialIdentity(playerMesh, uid || "local-player");
   setAvatarNameTag(playerMesh, $("name")?.value || "Pemain");
   playerMesh.position.set(ownPosition.x, answerBaySurfaceAt(ownPosition.x, ownPosition.z), ownPosition.z);
   scene.add(playerMesh);
@@ -1282,6 +1438,7 @@ function updateRemoteAvatar(id, data) {
       disposeAvatar(entry.mesh);
     }
     const mesh = createAvatar(data.avatar || {});
+    setAvatarSocialIdentity(mesh, id);
     mesh.position.set(x, y, z);
     setAvatarNameTag(mesh, name);
     entry = {
@@ -1334,6 +1491,7 @@ function renderPlayers(players) {
     if (activeState?.phase === "reveal") settleMyScore(activeState).catch(console.warn);
   }
   if (activeState?.phase === "reveal") renderRoundLeaderboard();
+  if (activeState?.phase === "finished") applyWinnerPlacements(activeState.podium || []);
 }
 function lobbyFromState(state) {
   $("roomPin").textContent = roomPin;
@@ -1393,7 +1551,7 @@ function subscribeRoom() {
       });
       settleMyScore(activeState).catch((error) => console.warn("Settle score:", error));
     } else if (activeState.phase === "finished") {
-      if (visualPhaseChanged) triggerGameFinish();
+      if (visualPhaseChanged) triggerGameFinish(activeState.podium || []);
       $("roundLeaderboard").classList.add("hidden");
       renderPodium(activeState.podium || []);
       showScreen("endScreen");
@@ -1722,9 +1880,9 @@ async function hostAdvance() {
       hostTransitionBusy = true;
       const nextIndex = round + 1;
       if (nextIndex >= questionBank.questions.length) {
-        const podium = Object.values(playerData)
-          .map((p) => ({ name: p.name || "Pemain", score: Number(p.score || 0) }))
-          .sort((a, b) => b.score - a.score).slice(0, 3);
+        const podium = Object.entries(playerData)
+          .map(([playerUid, p]) => ({ uid: playerUid, name: p.name || "Pemain", score: Number(p.score || 0) }))
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, 3);
         await update(dbPath(`rooms/${roomPin}/public`), {
           phase: "finished", podium, finishedAt: Math.round(now)
         });
@@ -2313,6 +2471,14 @@ function updateJoystick(event) {
 
 // Host has no avatar: use a smooth in-arena spectator camera that follows the
 // live group of participants without switching to a top-down overview.
+function updateWinnerCamera(dt) {
+  const desiredCamera = spectatorCameraPosition.set(0, 7.35, -4.0);
+  const focus = new THREE.Vector3(0, 1.62, -17.15);
+  const blend = 1 - Math.exp(-2.5 * dt);
+  camera.position.lerp(desiredCamera, blend);
+  camera.lookAt(focus);
+}
+
 function updateHostSpectatorCamera(dt) {
   const entries = Object.values(remotePlayers);
   let focusX = 0, focusZ = 0, spread = 0;
@@ -2365,7 +2531,9 @@ function animate() {
     $("bar").style.width = "100%";
   }
   if (isHost) hostAdvance();
-  if (isHost) {
+  if (activeState?.phase === "finished") {
+    updateWinnerCamera(dt);
+  } else if (isHost) {
     updateHostSpectatorCamera(dt);
   } else if (playerMesh) {
     camera.position.x += (playerMesh.position.x - camera.position.x) * 0.045;
@@ -2373,6 +2541,15 @@ function animate() {
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
   const now = performance.now();
+  updateLobbySocial();
+  if (playerMesh?.userData.winnerTarget) {
+    const target = playerMesh.userData.winnerTarget;
+    const winnerBlend = 1 - Math.exp(-2.2 * dt);
+    playerMesh.position.x += (target.x - playerMesh.position.x) * winnerBlend;
+    playerMesh.position.y += (target.y - playerMesh.position.y) * winnerBlend;
+    playerMesh.position.z += (target.z - playerMesh.position.z) * winnerBlend;
+    playerMesh.rotation.y += (target.yaw - playerMesh.rotation.y) * winnerBlend;
+  }
   if (playerMesh) animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving));
   const remoteBlend = 1 - Math.exp(-16 * dt);
   Object.values(remotePlayers).forEach((entry) => {
