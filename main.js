@@ -87,6 +87,7 @@ function connection(message, good = false) {
   $("connection").style.color = good ? "#68e7ba" : "#f4c982";
 }
 function showScreen(id) {
+  if (id !== "endScreen") $("app").classList.remove("champions-reveal");
   ["roleScreen", "setupScreen", "lobbyScreen", "hud", "endScreen"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== id);
   });
