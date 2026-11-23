@@ -498,7 +498,8 @@ async function startTeamColorBattle() {
     players.forEach(([playerId]) => {
       const code = social.playerParties?.[playerId];
       const party = code ? social.parties?.[code] : null;
-      const selectedTeam = party?.members?.[playerId] && ["red", "blue"].includes(party.teamId)
+      const isPartyMember = Object.values(party?.members || {}).some((member) => member?.uid === playerId);
+      const selectedTeam = isPartyMember && ["red", "blue"].includes(party.teamId)
         ? party.teamId : null;
       if (selectedTeam) {
         members[playerId] = selectedTeam;
@@ -673,8 +674,10 @@ function getMyParty() {
   const data = socialCompetitionData || {};
   const code = data.playerParties?.[uid];
   const party = code ? data.parties?.[code] : null;
-  if (!code || !party?.members?.[uid]) return null;
-  return { code, ...party };
+  const mySlot = Object.entries(party?.members || {})
+    .find(([, member]) => member?.uid === uid)?.[0] || "";
+  if (!code || !party || !mySlot) return null;
+  return { code, mySlot, ...party };
 }
 function renderPartyCenter() {
   const data = socialCompetitionData || {};
@@ -711,11 +714,12 @@ function renderPartyCenter() {
     return;
   }
   const members = Object.entries(party.members || {})
-    .map(([memberId, info]) => ({
-      uid: memberId,
-      name: String(info?.name || playerData[memberId]?.name || "Pemain"),
+    .map(([slot, info]) => ({
+      slot, uid: String(info?.uid || ""),
+      name: String(info?.name || playerData[info?.uid]?.name || "Pemain"),
       joinedAt: Number(info?.joinedAt || 0)
     }))
+    .filter((member) => member.uid)
     .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid));
   const isLeader = party.leaderUid === uid;
   $("partyCodeValue").textContent = party.code;
@@ -785,7 +789,7 @@ async function createParty() {
       leaderUid: uid,
       teamId: preferredTeam,
       createdAt: Math.round(serverNow()),
-      members: { [uid]: { name, joinedAt: Math.round(serverNow()) } }
+      members: { slot1: { uid, name, joinedAt: Math.round(serverNow()) } }
     });
     await set(dbPath(`rooms/${roomPin}/socialCompetition/playerParties/${uid}`), code);
     $("partyStatus").textContent = "Party berhasil dibuat. Bagikan kode " + code + " kepada teman.";
@@ -809,13 +813,16 @@ async function joinParty() {
     const partySnap = await get(dbPath(`rooms/${roomPin}/socialCompetition/parties/${code}`));
     const party = partySnap.val();
     if (!party) throw new Error("Party tidak ditemukan. Periksa kode undangannya.");
-    if (party.members?.[uid]) throw new Error("Kamu sudah menjadi anggota party ini.");
-    if (Object.keys(party.members || {}).length >= 4) throw new Error("Party sudah penuh. Maksimal 4 pemain.");
+    if (Object.values(party.members || {}).some((member) => member?.uid === uid)) {
+      throw new Error("Kamu sudah menjadi anggota party ini.");
+    }
+    const freeSlot = ["slot1", "slot2", "slot3", "slot4"].find((slot) => !party.members?.[slot]);
+    if (!freeSlot) throw new Error("Party sudah penuh. Maksimal 4 pemain.");
     if (teamBattleData?.session?.status === "active") throw new Error("Tunggu Team Battle selesai sebelum bergabung.");
     const name = String($("name").value.trim() || "Pemain").slice(0, 18);
     const joinedAt = Math.round(serverNow());
     await update(dbPath(`rooms/${roomPin}/socialCompetition`), {
-      [`parties/${code}/members/${uid}`]: { name, joinedAt },
+      [`parties/${code}/members/${freeSlot}`]: { uid, name, joinedAt },
       [`playerParties/${uid}`]: code
     });
     $("partyJoinCode").value = "";
@@ -834,17 +841,19 @@ async function leaveParty() {
   partyBusy = true;
   renderPartyCenter();
   try {
-    const memberIds = Object.keys(party.members || {});
+    const members = Object.entries(party.members || {})
+      .map(([slot, info]) => ({ slot, uid: String(info?.uid || ""), joinedAt: Number(info?.joinedAt || 0) }))
+      .filter((member) => member.uid);
     const changes = {
       [`playerParties/${uid}`]: null,
-      [`parties/${party.code}/members/${uid}`]: null
+      [`parties/${party.code}/members/${party.mySlot}`]: null
     };
-    if (party.leaderUid === uid && memberIds.length > 1) {
-      const replacement = memberIds
-        .filter((id) => id !== uid)
-        .sort((a, b) => Number(party.members[a]?.joinedAt || 0) - Number(party.members[b]?.joinedAt || 0) || a.localeCompare(b))[0];
+    if (party.leaderUid === uid && members.length > 1) {
+      const replacement = members
+        .filter((member) => member.uid !== uid)
+        .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid))[0].uid;
       changes[`parties/${party.code}/leaderUid`] = replacement;
-    } else if (party.leaderUid === uid && memberIds.length === 1) {
+    } else if (party.leaderUid === uid && members.length === 1) {
       changes[`parties/${party.code}`] = null;
     }
     await update(dbPath(`rooms/${roomPin}/socialCompetition`), changes);
