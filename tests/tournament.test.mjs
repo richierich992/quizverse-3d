@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { buildSingleEliminationBracket } from "../tournament.js";
 
 const entrants = (count) => Array.from({ length: count }, (_, index) => ({
-  partyCode: "CODE" + String(index + 1).padStart(2, "0"),
+  partyCode: "PARY" + String(index + 1).padStart(2, "0"),
   name: "Party " + (index + 1)
 }));
 const match = (bracket, id) => Object.values(bracket.rounds)
@@ -23,21 +23,21 @@ const match = (bracket, id) => Object.values(bracket.rounds)
   assert.equal(bracket.bracketSize, 4);
   assert.equal(match(bracket, "r1m2").status, "ready");
   assert.equal(match(bracket, "r2m1").status, "bye");
-  assert.equal(match(bracket, "r2m1").winnerPartyCode, "CODE03");
+  assert.equal(match(bracket, "r2m1").winnerPartyCode, "PARY03");
   assert.equal(bracket.currentMatchId, "r1m1");
   const afterFirstRound = buildSingleEliminationBracket(entrants(3), {
-    r1m1: "CODE02",
-    r1m2: "CODE03"
+    r1m1: "PARY02",
+    r1m2: "PARY03"
   });
   assert.equal(match(afterFirstRound, "r2m1").status, "ready");
-  assert.equal(match(afterFirstRound, "r2m1").partyA, "CODE02");
-  assert.equal(match(afterFirstRound, "r2m1").partyB, "CODE03");
+  assert.equal(match(afterFirstRound, "r2m1").partyA, "PARY02");
+  assert.equal(match(afterFirstRound, "r2m1").partyB, "PARY03");
   const champion = buildSingleEliminationBracket(entrants(3), {
-    r1m1: "CODE02",
-    r1m2: "CODE03",
-    r2m1: "CODE03"
+    r1m1: "PARY02",
+    r1m2: "PARY03",
+    r2m1: "PARY03"
   });
-  assert.equal(champion.championPartyCode, "CODE03");
+  assert.equal(champion.championPartyCode, "PARY03");
   assert.equal(champion.currentMatchId, "");
 }
 
@@ -48,7 +48,7 @@ const match = (bracket, id) => Object.values(bracket.rounds)
   assert.equal(match(bracket, "r1m3").status, "bye");
   assert.equal(match(bracket, "r1m4").status, "empty");
   assert.equal(match(bracket, "r2m2").status, "bye");
-  assert.equal(match(bracket, "r2m2").winnerPartyCode, "CODE05");
+  assert.equal(match(bracket, "r2m2").winnerPartyCode, "PARY05");
   assert.equal(bracket.currentMatchId, "r1m1");
 }
 
