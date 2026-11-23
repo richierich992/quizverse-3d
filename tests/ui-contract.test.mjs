@@ -123,6 +123,18 @@ assert.match(main, /All face details point toward \+Z/, "Avatar face orientation
 assert.match(main, /const eyes = \[\]/, "Avatar eyes are grouped for facial animation");
 assert.match(main, /g\.userData\.rig = \{ torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes \}/, "Avatar exposes articulated body and facial rig");
 assert.match(main, /function animateAvatar\(mesh, time, moving = false\)/, "Avatar has a shared animation controller");
+assert.match(main, /function triggerAvatarReaction\(mesh, kind, duration = 1\.7\)/, "Avatar reactions use a shared timed animation trigger");
+assert.match(main, /reaction\.kind === "correct" \|\| reaction\.kind === "victory"/, "Correct answers and final victory use an upbeat pose");
+assert.match(main, /reaction\.kind === "wrong" \|\| reaction\.kind === "missed"/, "Wrong or missed answers use a gentle disappointed pose");
+assert.match(main, /reaction\.kind === "reveal"/, "Other participants use a non-revealing shared result reaction");
+assert.match(main, /localAnswerIndex === correctIndex \? "correct" : "wrong"/, "Only the local player's own revealed answer determines their personal reaction");
+assert.match(main, /if \(visualPhaseChanged\) triggerGameFinish\(\)/, "Game-finish celebration triggers once per phase transition");
+assert.match(main, /function triggerGameFinish\(\)/, "Game finish starts a shared avatar celebration");
+assert.match(main, /localAnswerIndex = Number\(index\)/, "A player's answer is remembered locally only after successful submission");
+assert.match(main, /localAnswerRound = -1;\s*localAnswerIndex = -1;/, "Personal answer state resets on a new question");
+assert.match(main, /triggerAvatarReaction\(entry\.mesh, "victory", 2\.25\)/, "Remote participants celebrate when the match ends");
+assert.match(main, /triggerAvatarReaction\(playerMesh, correct \? "correct" : hasThisAnswer \? "wrong" : "missed"/, "Reconnects can recover a personal reaction after reveal from the existing private submission");
+
 assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinking");
 assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
 assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
