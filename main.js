@@ -820,12 +820,15 @@ function renderPartyCenter() {
     return;
   }
   if (!party) {
-    create.disabled = partyBusy || activeState?.phase !== "lobby";
-    join.disabled = partyBusy || activeState?.phase !== "lobby";
-    codeInput.disabled = partyBusy || activeState?.phase !== "lobby";
-    partyStatus.textContent = activeState?.phase === "lobby"
-      ? "Belum tergabung dalam party. Buat party atau masukkan kode teman."
-      : "Party hanya dapat diubah saat lobby.";
+    const tournamentLocked = tournamentSnapshot.meta?.phase === "active";
+    create.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    join.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    codeInput.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    partyStatus.textContent = tournamentLocked
+      ? "Turnamen sedang berjalan. Party baru tidak dapat dibuat atau diubah."
+      : activeState?.phase === "lobby"
+        ? "Belum tergabung dalam party. Buat party atau masukkan kode teman."
+        : "Party hanya dapat diubah saat lobby."
     return;
   }
   const members = Object.entries(party.members || {})
@@ -852,14 +855,17 @@ function renderPartyCenter() {
     memberRoot.appendChild(chip);
   });
   teamPicker.classList.toggle("hidden", !isLeader || activeState?.phase !== "lobby" ||
-    teamBattleData?.session?.status === "active");
+    tournamentSnapshot.meta?.phase === "active" || teamBattleData?.session?.status === "active");
   $("partyTeamRed").classList.toggle("is-selected", party.teamId === "red");
   $("partyTeamBlue").classList.toggle("is-selected", party.teamId === "blue");
   $("partyTeamRed").disabled = partyBusy;
   $("partyTeamBlue").disabled = partyBusy;
-  leave.disabled = partyBusy || activeState?.phase !== "lobby";
+  leave.disabled = partyBusy || activeState?.phase !== "lobby" ||
+    tournamentSnapshot.meta?.phase === "active";
   if (activeState?.phase !== "lobby") {
     partyStatus.textContent = "Party terkunci selama kuis berjalan.";
+  } else if (tournamentSnapshot.meta?.phase === "active") {
+    partyStatus.textContent = "Party terkunci selama Tournament Mode berlangsung.";
   } else if (teamBattleData?.session?.status === "active") {
     partyStatus.textContent = "Pilihan party terkunci selama Team Battle berlangsung.";
   } else {
