@@ -395,6 +395,97 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   72%{opacity:1;transform:translateY(-2px) scale(1.012);filter:blur(0)}
   100%{opacity:1;transform:translateY(0) scale(1)}
 }
+.round-intro{
+  position:absolute;
+  z-index:4;
+  inset:0;
+  display:grid;
+  place-items:center;
+  pointer-events:none;
+  opacity:0;
+}
+#app.question-enter .round-intro{animation:roundIntroCurtain 1.15s ease both}
+.round-intro-card{
+  position:relative;
+  display:grid;
+  justify-items:center;
+  gap:8px;
+  width:min(520px,88vw);
+  padding:20px 24px 18px;
+  overflow:hidden;
+  border:1px solid #8de8ff88;
+  border-radius:17px;
+  background:linear-gradient(112deg,rgba(5,20,37,.94),rgba(14,48,70,.92),rgba(5,20,37,.94));
+  box-shadow:0 22px 70px #0009,0 0 36px #4ccfff38,inset 0 1px #ffffff22;
+  backdrop-filter:blur(14px);
+  text-align:center;
+}
+.round-intro-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(115deg,transparent 18%,#7de4ff12 49%,transparent 78%);
+  pointer-events:none;
+}
+.round-intro-kicker{
+  position:relative;
+  color:#8fe8ff;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:3px;
+}
+.round-intro-card strong{
+  position:relative;
+  color:#f5fcff;
+  font:800 clamp(18px,3.2vw,31px)/1.08 'Space Grotesk',sans-serif;
+  letter-spacing:1px;
+  text-shadow:0 0 22px #64dfff77;
+}
+.round-intro-card>span:last-of-type{
+  position:relative;
+  color:#b8d8eb;
+  font:700 10px 'Space Grotesk',sans-serif;
+  letter-spacing:3px;
+}
+.round-intro-scan{
+  position:absolute;
+  top:0;
+  left:-42%;
+  width:38%;
+  height:2px;
+  background:linear-gradient(90deg,transparent,#b7f4ff,transparent);
+  box-shadow:0 0 18px #70e2ff;
+}
+#app.question-enter .round-intro-scan{animation:roundIntroScan .92s ease .08s both}
+@keyframes roundIntroCurtain{
+  0%{opacity:0}
+  13%{opacity:1}
+  70%{opacity:1}
+  100%{opacity:0}
+}
+@keyframes roundIntroScan{
+  from{left:-42%}
+  to{left:108%}
+}
+#app.question-enter .round-intro-card{animation:roundIntroCard 1.15s cubic-bezier(.18,.75,.25,1) both}
+@keyframes roundIntroCard{
+  0%{transform:translateY(20px) scale(.91);filter:blur(5px)}
+  18%{transform:translateY(0) scale(1.015);filter:blur(0)}
+  34%,68%{transform:translateY(0) scale(1)}
+  100%{transform:translateY(-8px) scale(1.035)}
+}
+#app.question-enter .answer-legend span{
+  animation:answerChoiceEntrance .42s cubic-bezier(.18,.75,.25,1) both;
+}
+#app.question-enter .answer-legend span:nth-child(1){animation-delay:.10s}
+#app.question-enter .answer-legend span:nth-child(2){animation-delay:.17s}
+#app.question-enter .answer-legend span:nth-child(3){animation-delay:.24s}
+#app.question-enter .answer-legend span:nth-child(4){animation-delay:.31s}
+@keyframes answerChoiceEntrance{
+  0%{opacity:0;transform:translateY(12px) scale(.96);filter:blur(3px)}
+  75%{opacity:1;transform:translateY(-2px) scale(1.015);filter:blur(0)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
 #app.timer-critical .timer i{
   background:linear-gradient(90deg,#ff6b73,#ffb05e)!important;
   animation:timerUrgency .38s ease-in-out infinite alternate;
@@ -424,6 +515,10 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
 }
 @media(prefers-reduced-motion:reduce){
   #app.question-enter .question-card,
+  #app.question-enter .round-intro,
+  #app.question-enter .round-intro-card,
+  #app.question-enter .round-intro-scan,
+  #app.question-enter .answer-legend span,
   #app.timer-critical .timer i,
   #app.timer-critical .timer-row>b,
   #app.answer-revealed .answer-legend span.is-correct-answer{animation:none!important}
