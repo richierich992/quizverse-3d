@@ -146,6 +146,10 @@ let reactionRushTimeout = null;
 let reactionRushPhase = "closed";
 let reactionRushStartedAt = 0;
 let reactionRushBest = readReactionRushBest();
+let quickColorRoundUnsubscribe = null, quickColorWinnerUnsubscribe = null;
+let quickColorRound = null, quickColorWinner = null;
+let quickColorTicker = null, quickColorStarting = false, quickColorSubmitting = false;
+let quickColorWrongUntil = 0;
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -202,6 +206,147 @@ function closeReactionRush(returnFocus = false) {
     overlay.setAttribute("aria-hidden", "true");
   }
   if (returnFocus) $("reactionRushOpen").focus();
+}
+function stopQuickColorTicker() {
+  if (quickColorTicker) clearInterval(quickColorTicker);
+  quickColorTicker = null;
+}
+function startQuickColorTicker() {
+  if (quickColorTicker) return;
+  quickColorTicker = setInterval(renderQuickColorMatch, 200);
+}
+function stopQuickColorMatchListeners() {
+  if (quickColorRoundUnsubscribe) quickColorRoundUnsubscribe();
+  if (quickColorWinnerUnsubscribe) quickColorWinnerUnsubscribe();
+  quickColorRoundUnsubscribe = quickColorWinnerUnsubscribe = null;
+  stopQuickColorTicker();
+  quickColorRound = null;
+  quickColorWinner = null;
+  quickColorStarting = false;
+  quickColorSubmitting = false;
+  quickColorWrongUntil = 0;
+}
+function subscribeQuickColorMatch() {
+  stopQuickColorMatchListeners();
+  const base = `rooms/${roomPin}/miniGames/quickColorMatch`;
+  quickColorRoundUnsubscribe = onValue(dbPath(`${base}/round`), (snap) => {
+    const next = snap.val();
+    if (Number(next?.roundId || 0) !== Number(quickColorRound?.roundId || 0)) {
+      quickColorWrongUntil = 0;
+      quickColorSubmitting = false;
+    }
+    quickColorRound = next;
+    renderQuickColorMatch();
+  }, (error) => {
+    $("quickColorStatus").textContent = "Mini-game tidak dapat dimuat: " + error.message;
+  });
+  quickColorWinnerUnsubscribe = onValue(dbPath(`${base}/winner`), (snap) => {
+    quickColorWinner = snap.val();
+    renderQuickColorMatch();
+  }, (error) => {
+    $("quickColorStatus").textContent = "Hasil mini-game tidak dapat dimuat: " + error.message;
+  });
+}
+function renderQuickColorMatch() {
+  const buttons = $("quickColorChoices").querySelectorAll("[data-color-index]");
+  const startButton = $("startQuickColorMatch");
+  const round = quickColorRound;
+  const now = serverNow();
+  const roundId = Number(round?.roundId || 0);
+  const winner = quickColorWinner && Number(quickColorWinner.roundId) === roundId
+    ? quickColorWinner : null;
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const startedAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const isPreparing = round?.phase === "preparing";
+  const isActive = round?.phase === "active";
+  const countdown = Math.max(0, Math.ceil((startedAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const canPlay = activeState?.phase === "lobby" && isActive && now >= startedAt &&
+    now <= endsAt && !winner && !quickColorSubmitting && performance.now() >= quickColorWrongUntil;
+  $("quickColorTargetLabel").textContent = hasTarget ? "TEKAN WARNA INI" : "MENUNGGU RONDE";
+  $("quickColorTarget").textContent = hasTarget ? COLOR_NAMES[targetIndex] : "SIAP?";
+  $("quickColorTarget").style.color = hasTarget ? COLORS[targetIndex] : "#eaf6ff";
+  $("quickColorTimer").textContent = !round ? "—" :
+    isPreparing ? "..." : now < startedAt ? countdown + "s" : secondsLeft + "s";
+  buttons.forEach((button) => {
+    const colorIndex = Number(button.dataset.colorIndex);
+    button.disabled = !canPlay;
+    button.classList.toggle("is-target", hasTarget && colorIndex === targetIndex && now >= startedAt && !winner);
+  });
+  let message = "Host dapat memulai ronde. Semua pemain di room bisa ikut berlomba.";
+  if (isPreparing) message = "Host sedang menyiapkan ronde...";
+  else if (isActive && now < startedAt) message = "Bersiap! Target warna sudah terlihat. Mulai dalam " + countdown + "...";
+  else if (isActive && winner) {
+    message = winner.uid === uid ? "Kamu menang! 🎉" : winner.name + " paling cepat menemukan warna yang benar! 🎉";
+  } else if (isActive && now <= endsAt) message = "GO! Tekan tombol warna yang sesuai sekarang!";
+  else if (isActive && !winner && now > endsAt) message = "Waktu habis. Belum ada pemenang ronde ini.";
+  $("quickColorStatus").textContent = message;
+  startButton.classList.toggle("hidden", !isHost);
+  startButton.disabled = quickColorStarting || (isActive && now <= endsAt && !winner);
+  startButton.textContent = round ? "Mulai Ronde Berikutnya" : "Mulai Ronde";
+}
+async function startQuickColorMatch() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || quickColorStarting) return;
+  quickColorStarting = true;
+  renderQuickColorMatch();
+  try {
+    const roundRef = dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/round`);
+    const winnerRef = dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`);
+    const previousSnap = await get(roundRef);
+    const nextRoundId = Number(previousSnap.val()?.roundId || 0) + 1;
+    const startsAt = Math.round(serverNow() + 3200);
+    const nextRound = {
+      roundId: nextRoundId,
+      phase: "preparing",
+      targetIndex: Math.floor(Math.random() * COLOR_NAMES.length),
+      startsAt,
+      endsAt: startsAt + 9000
+    };
+    // Close the prior round before clearing its winner, so no late tap can claim the old race.
+    await set(roundRef, nextRound);
+    await set(winnerRef, null);
+    await update(roundRef, { phase: "active" });
+  } catch (error) {
+    $("quickColorStatus").textContent = "Gagal memulai ronde: " + explainError(error);
+  } finally {
+    quickColorStarting = false;
+    renderQuickColorMatch();
+  }
+}
+async function submitQuickColorAnswer(colorIndex) {
+  const round = quickColorRound;
+  const now = serverNow();
+  if (!round || round.phase !== "active" || activeState?.phase !== "lobby" ||
+    now < Number(round.startsAt) || now > Number(round.endsAt) ||
+    (quickColorWinner && Number(quickColorWinner.roundId) === Number(round.roundId)) ||
+    quickColorSubmitting) return;
+  if (Number(colorIndex) !== Number(round.targetIndex)) {
+    quickColorWrongUntil = performance.now() + 420;
+    $("quickColorStatus").textContent = "Belum tepat! Coba warna yang lain.";
+    renderQuickColorMatch();
+    return;
+  }
+  quickColorSubmitting = true;
+  renderQuickColorMatch();
+  try {
+    await set(dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`), {
+      uid,
+      name: String($("name").value.trim() || "Pemain").slice(0, 18),
+      roundId: Number(round.roundId),
+      answerIndex: Number(colorIndex)
+    });
+  } catch (error) {
+    // Another player may have won a few milliseconds earlier; read the committed result.
+    const winnerSnap = await get(dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`))
+      .catch(() => null);
+    if (winnerSnap?.exists()) quickColorWinner = winnerSnap.val();
+    else $("quickColorStatus").textContent = "Jawaban belum terkirim: " + explainError(error);
+  } finally {
+    quickColorSubmitting = false;
+    renderQuickColorMatch();
+  }
 }
 function startReactionRushRound() {
   if (activeState?.phase !== "lobby") {
@@ -266,7 +411,12 @@ function handleReactionRushAction() {
   }
 }
 function showScreen(id) {
-  if (id !== "lobbyScreen") closeReactionRush();
+  if (id !== "lobbyScreen") {
+    closeReactionRush();
+    stopQuickColorTicker();
+  } else {
+    startQuickColorTicker();
+  }
   if (id !== "endScreen") $("app").classList.remove("champions-reveal");
   ["roleScreen", "setupScreen", "lobbyScreen", "hud", "endScreen"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== id);
@@ -2103,6 +2253,7 @@ async function ensureFirebase() {
   connection("Firebase Spark terhubung", true);
 }
 function stopListeners() {
+  stopQuickColorMatchListeners();
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
@@ -2253,6 +2404,7 @@ function playerInviteUrl() {
 }
 function subscribeRoom() {
   stopListeners();
+  subscribeQuickColorMatch();
   // A new room subscription must render its first live question, even after switching rooms.
   lastQuestionIndex = -1;
   lastVisualStateKey = "";
@@ -3081,6 +3233,11 @@ $("joinRoom").addEventListener("click", joinRoom);
 $("startGame").addEventListener("click", startGame);
 $("reactionRushOpen").addEventListener("click", openReactionRush);
 $("reactionRushAction").addEventListener("click", handleReactionRushAction);
+$("startQuickColorMatch").addEventListener("click", startQuickColorMatch);
+$("quickColorChoices").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-color-index]");
+  if (button && !button.disabled) submitQuickColorAnswer(Number(button.dataset.colorIndex));
+});
 $("reactionRushClose").addEventListener("click", () => closeReactionRush(true));
 $("reactionRushCloseFooter").addEventListener("click", () => closeReactionRush(true));
 $("reactionRushOverlay").addEventListener("click", (event) => {
