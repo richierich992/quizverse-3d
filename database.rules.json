@@ -96,6 +96,44 @@
               ".validate": "newData.isBoolean()"
             }
           }
+        },
+        "socialCompetition": {
+          ".read": "auth != null",
+          "parties": {
+            "$partyCode": {
+              ".write": "auth != null && root.child('rooms').child($roomPin).child('players').child(auth.uid).exists() && ((!data.exists() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active' && newData.child('leaderUid').val() === auth.uid && newData.child('members').child(auth.uid).exists()) || (data.exists() && auth.uid === data.child('leaderUid').val() && !newData.exists() && data.child('members').numChildren() === 1))",
+              ".validate": "newData.hasChildren(['leaderUid','teamId','createdAt','members']) && newData.child('leaderUid').isString() && newData.child('teamId').val() in ['red','blue'] && newData.child('createdAt').isNumber() && newData.child('members').numChildren() >= 1 && newData.child('members').numChildren() <= 4",
+              "leaderUid": {
+                ".write": "auth != null && auth.uid === data.val() && data.parent().child('members').child(newData.val()).exists() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active'"
+              },
+              "teamId": {
+                ".write": "auth != null && auth.uid === data.parent().child('leaderUid').val() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active' && (newData.val() === 'red' || newData.val() === 'blue')"
+              },
+              "members": {
+                "$uid": {
+                  ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($roomPin).child('players').child($uid).exists() && (( !data.exists() && newData.exists() && data.parent().numChildren() < 4 && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active' && (!root.child('rooms').child($roomPin).child('socialCompetition').child('playerParties').child($uid).exists() || root.child('rooms').child($roomPin).child('socialCompetition').child('playerParties').child($uid).val() === $partyCode)) || (data.exists() && !newData.exists() && root.child('rooms').child($roomPin).child('socialCompetition').child('playerParties').child($uid).val() === $partyCode))",
+                  ".validate": "newData.hasChildren(['name','joinedAt']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 18 && newData.child('joinedAt').isNumber()"
+                }
+              }
+            }
+          },
+          "playerParties": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($roomPin).child('players').child($uid).exists() && (!newData.exists() || (newData.isString() && root.child('rooms').child($roomPin).child('socialCompetition').child('parties').child(newData.val()).exists() && (!data.exists() || data.val() === newData.val())))",
+              ".validate": "newData.isString() && newData.val().length === 6"
+            }
+          },
+          "stats": {
+            "$uid": {
+              ".read": "auth != null",
+              "matches": {
+                "$matchId": {
+                  ".write": "auth != null && auth.uid === root.child('rooms').child($roomPin).child('meta').child('hostUid').val() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() === 'finished' && root.child('rooms').child($roomPin).child('players').child($uid).exists() && !data.exists()",
+                  ".validate": "newData.hasChildren(['sessionId','teamId','result','finishedAt']) && newData.child('sessionId').isNumber() && (newData.child('teamId').val() === 'red' || newData.child('teamId').val() === 'blue') && (newData.child('result').val() === 'win' || newData.child('result').val() === 'loss' || newData.child('result').val() === 'draw') && newData.child('finishedAt').isNumber()"
+                }
+              }
+            }
+          }
         }
       }
     },
