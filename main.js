@@ -125,6 +125,7 @@ let app = null, auth = null, db = null, uid = "";
 let roomPin = "", isHost = false, questionBank = null;
 let activeState = null, playerData = {}, remotePlayers = {}, ownAvatar = null;
 let ownPosition = { x: 0, z: 0 }, moveKeys = {}, joystick = { x: 0, y: 0 };
+let lobbyRoamState = null;
 let jumpVelocity = 0, grounded = true, serverOffset = 0;
 let stateUnsubscribe = null, playersUnsubscribe = null;
 let lastQuestionIndex = -1;
@@ -2636,14 +2637,125 @@ function moveInput() {
   const len = Math.hypot(x, z);
   return len > 1 ? { x: x / len, z: z / len } : { x, z };
 }
+function resetLobbyRoam() {
+  const identity = String(uid || "local-player");
+  let seed = 2166136261;
+  for (let i = 0; i < identity.length; i++) {
+    seed ^= identity.charCodeAt(i);
+    seed = Math.imul(seed, 16777619);
+  }
+  const now = performance.now();
+  lobbyRoamState = {
+    seed: seed >>> 0,
+    step: 0,
+    anchorX: ownPosition.x,
+    anchorZ: ownPosition.z,
+    targetX: ownPosition.x,
+    targetZ: ownPosition.z,
+    active: false,
+    nextMoveAt: now + 650 + ((seed >>> 4) % 1350)
+  };
+}
+function lobbyRoamRandom(step, salt = 0) {
+  const seed = Number(lobbyRoamState?.seed || 1) + step * 104729 + salt * 13007;
+  const value = Math.sin(seed * 0.000071) * 43758.5453;
+  return value - Math.floor(value);
+}
+function chooseLobbyRoamTarget(now) {
+  if (!lobbyRoamState) resetLobbyRoam();
+  const roam = lobbyRoamState;
+  roam.step += 1;
+  for (let attempt = 0; attempt < 18; attempt++) {
+    const angle = lobbyRoamRandom(roam.step, attempt) * Math.PI * 2;
+    const radius = 1.15 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 1.9;
+    const x = roam.anchorX + Math.cos(angle) * radius;
+    const z = roam.anchorZ + Math.sin(angle) * radius;
+    const clearPlatforms = PAD_POINTS.every((point) =>
+      Math.hypot(point.x - x, point.z - z) > 4.15
+    );
+    const clearPlayers = Object.values(remotePlayers).every((entry) =>
+      Math.hypot(entry.mesh.position.x - x, entry.mesh.position.z - z) > 1.85
+    );
+    if (!isArenaStaticBlocked(x, z) && clearPlatforms && clearPlayers) {
+      roam.targetX = x;
+      roam.targetZ = z;
+      roam.active = true;
+      roam.nextMoveAt = now;
+      return true;
+    }
+  }
+  roam.active = false;
+  roam.nextMoveAt = now + 900;
+  return false;
+}
+function getLobbyRoamVector(now) {
+  if (!lobbyRoamState) resetLobbyRoam();
+  const roam = lobbyRoamState;
+  if (!roam.active && now >= roam.nextMoveAt) chooseLobbyRoamTarget(now);
+  if (!roam.active) return { x: 0, z: 0 };
+  const dx = roam.targetX - ownPosition.x;
+  const dz = roam.targetZ - ownPosition.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.22) {
+    roam.active = false;
+    roam.nextMoveAt = now + 1100 + lobbyRoamRandom(roam.step, 19) * 2200;
+    return { x: 0, z: 0 };
+  }
+  return { x: dx / distance, z: dz / distance };
+}
+function lobbySeparationVector(x, z) {
+  let steerX = 0;
+  let steerZ = 0;
+  for (const entry of Object.values(remotePlayers)) {
+    const dx = x - entry.mesh.position.x;
+    const dz = z - entry.mesh.position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.001 || distance >= 2.45) continue;
+    const strength = (2.45 - distance) / 2.45;
+    steerX += (dx / distance) * strength;
+    steerZ += (dz / distance) * strength;
+  }
+  return { x: steerX, z: steerZ };
+}
 function movePlayer(dt) {
   if (!playerMesh) return;
-  if (activeState?.phase !== "question") {
+  const phase = activeState?.phase;
+  const inLobby = phase === "lobby";
+  const inQuestion = phase === "question";
+  if (!inLobby && !inQuestion) {
+    lobbyRoamState = null;
     playerMesh.userData.moving = false;
     return;
   }
-  const input = moveInput();
-  const speed = 7.2;
+
+  const manualInput = moveInput();
+  const manual = Math.hypot(manualInput.x, manualInput.z) > 0.04;
+  let input = manualInput;
+  let speed = 7.2;
+
+  if (inLobby) {
+    if (manual) {
+      // Manual WASD/joystick movement takes priority over ambient wandering.
+      lobbyRoamState = null;
+    } else {
+      input = getLobbyRoamVector(performance.now());
+      speed = 1.55;
+    }
+    const separation = lobbySeparationVector(ownPosition.x, ownPosition.z);
+    const avoidanceWeight = manual ? 0.24 : 1.55;
+    input = {
+      x: input.x + separation.x * avoidanceWeight,
+      z: input.z + separation.z * avoidanceWeight
+    };
+    const inputLength = Math.hypot(input.x, input.z);
+    if (inputLength > 1) {
+      input.x /= inputLength;
+      input.z /= inputLength;
+    }
+  } else {
+    lobbyRoamState = null;
+  }
+
   const startX = ownPosition.x;
   const startZ = ownPosition.z;
   let nextX = startX + input.x * speed * dt;
@@ -2668,7 +2780,7 @@ function movePlayer(dt) {
   // while they are inside the answer area, then return to the main floor.
   const groundHeight = answerBaySurfaceAt(ownPosition.x, ownPosition.z);
 
-  if (jumpVelocity !== 0 || !grounded) {
+  if (inQuestion && (jumpVelocity !== 0 || !grounded)) {
     playerMesh.position.y += jumpVelocity * dt;
     jumpVelocity -= 22 * dt;
     if (playerMesh.position.y <= groundHeight) {
@@ -2680,7 +2792,7 @@ function movePlayer(dt) {
     playerMesh.position.y = groundHeight;
   }
 
-  if (!answerBusy) {
+  if (inQuestion && !answerBusy) {
     for (const pad of pads) {
       if (Math.hypot(ownPosition.x - pad.x, ownPosition.z - pad.z) <= 3.15) {
         submitPlatformAnswer(pad.index);
