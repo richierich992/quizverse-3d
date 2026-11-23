@@ -161,7 +161,7 @@ assert.match(main, /const leftLift = Math\.max\(0, Math\.sin\(phase\)\) \* 0\.09
 assert.match(main, /const rightLift = Math\.max\(0, Math\.sin\(phase \+ Math\.PI\)\) \* 0\.095 \* gait/, "Right foot visibly lifts opposite the left foot");
 assert.match(main, /const jumpHeight = THREE\.MathUtils\.clamp\(\(mesh\.position\.y - groundHeight\) \/ 1\.12, 0, 1\)/, "Jump animation blends from the actual height above the current floor");
 assert.match(main, /const jumpPose = jumpHeight \* motionScale/, "Jump pose is reduced when reduced-motion is enabled");
-assert.match(main, /rig\.leftLeg\.rotation\.x = -swing \* 0\.78 \* walkLegBlend - jumpHeight \* 0\.42/, "Jump pose tucks the legs while preserving the walking pose");
+assert.match(main, /rig\.leftLeg\.rotation\.x = -swing \* 0\.78 \* walkLegBlend - jumpPose \* 0\.42/, "Jump pose tucks the legs while preserving the walking pose");
 assert.match(main, /const landingImpact = landedFor >= 0 && landedFor < 0\.24/, "Landing creates a short, reusable squash-and-rebound effect");
 assert.match(main, /rig\.torso\.scale\.y = 1 - landingImpact \* 0\.075/, "Landing response includes a subtle body squash");
 assert.match(main, /animateAvatar\(entry\.mesh, now, moving\)/, "Remote and local players use the same avatar motion controller");
@@ -220,6 +220,8 @@ assert.match(main, /triggerAvatarReaction\(playerMesh, correct \? "correct" : ha
 assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinking");
 assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
 assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
+assert.match(main, /playerMesh\.userData\.targetYaw = Math\.atan2\(input\.x, input\.z\)/, "Local movement stores a target heading instead of snapping the body");
+assert.match(main, /if \(playerMesh && !playerMesh\.userData\.winnerTarget\) \{[\s\S]*?const desiredYaw = Number\(playerMesh\.userData\.targetYaw\)[\s\S]*?playerMesh\.rotation\.y \+= yawDelta \* \(1 - Math\.exp\(-14 \* dt\)\)/, "Local avatar smoothly turns along the shortest angular path");
 assert.match(main, /const sharedMaterials = new Map\(\)/, "Avatar materials are shared to reduce rendering overhead");
 const previewRefresh = main.slice(main.indexOf("function refreshAvatarPreview"), main.indexOf("function initAvatarPreview"));
 const disposeBlock = main.slice(main.indexOf("function disposeAvatar"), main.indexOf("function setAvatarNameTag"));
