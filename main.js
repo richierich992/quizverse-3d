@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { buildSingleEliminationBracket } from "./tournament.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
@@ -156,6 +157,7 @@ let teamBattleWrongUntil = 0;
 let socialCompetitionUnsubscribe = null;
 let socialCompetitionData = null;
 let partyBusy = false;
+let tournamentBusy = false;
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -454,10 +456,14 @@ function renderTeamColorBattle() {
   }
   $("teamBattleStatus").textContent = message;
   renderPartyCenter();
+  renderTournamentCenter();
   const hostAction = $("teamBattleHostAction");
   hostAction.classList.toggle("hidden", !isHost);
   if (!session || finished) {
-    hostAction.textContent = finished ? "Mulai Team Battle Baru" : "Mulai Team Battle";
+    const tournamentActive = socialCompetitionData?.tournament?.meta?.phase === "active";
+    hostAction.textContent = tournamentActive
+      ? (finished ? "Mulai Match Turnamen Berikutnya / Rematch" : "Mulai Match Turnamen")
+      : finished ? "Mulai Team Battle Baru" : "Mulai Team Battle";
     hostAction.disabled = teamBattleBusy;
   } else if (Number(session.roundId || 0) >= totalRounds) {
     hostAction.textContent = "Selesaikan Battle";
@@ -474,62 +480,104 @@ async function startTeamColorBattle() {
   if (!isHost || !roomPin || activeState?.phase !== "lobby" || teamBattleBusy) return;
   const session = teamBattleData?.session;
   if (session?.status === "active") {
-    if (Number(session.roundId || 0) >= Number(session.totalRounds || 5)) {
-      await finishTeamColorBattle();
-    } else {
-      await startNextTeamColorRound();
-    }
+    if (Number(session.roundId || 0) >= Number(session.totalRounds || 5)) await finishTeamColorBattle();
+    else await startNextTeamColorRound();
     return;
   }
   teamBattleBusy = true;
   renderTeamColorBattle();
   try {
-    const playersSnap = await get(dbPath(`rooms/${roomPin}/players`));
+    const playersSnap = await get(dbPath("rooms/" + roomPin + "/players"));
+    const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
     const players = Object.entries(playersSnap.val() || {})
       .filter(([, person]) => person && person.connected !== false)
       .sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")) ||
         a[0].localeCompare(b[0]));
-    if (players.length < 2) throw new Error("Minimal dua pemain harus bergabung sebelum Team Battle dimulai.");
-    const socialSnap = await get(dbPath(`rooms/${roomPin}/socialCompetition`));
     const social = socialSnap.val() || {};
     const members = {};
     const counts = { red: 0, blue: 0 };
-    const solos = [];
-    players.forEach(([playerId]) => {
-      const code = social.playerParties?.[playerId];
-      const party = code ? social.parties?.[code] : null;
-      const isPartyMember = Object.values(party?.members || {}).some((member) => member?.uid === playerId);
-      const selectedTeam = isPartyMember && ["red", "blue"].includes(party.teamId)
-        ? party.teamId : null;
-      if (selectedTeam) {
-        members[playerId] = selectedTeam;
-        counts[selectedTeam] += 1;
-      } else {
-        solos.push(playerId);
+    let tournamentMatch = null;
+    const tournamentMeta = social.tournament?.meta;
+    if (tournamentMeta?.phase === "active") {
+      const tournamentId = String(tournamentMeta.tournamentId);
+      const registrations = social.tournament?.registrations?.[tournamentId] || {};
+      const entrants = tournamentEntrantList(registrations);
+      const resultRows = social.tournament?.results?.[tournamentId] || {};
+      const resultMap = Object.fromEntries(Object.entries(resultRows)
+        .filter(([, item]) => item?.winnerPartyCode).map(([id, item]) => [id, item.winnerPartyCode]));
+      const bracket = buildSingleEliminationBracket(entrants, resultMap);
+      if (bracket.championPartyCode) {
+        await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+          phase: "completed", completedAt: Math.round(serverNow()),
+          championPartyCode: bracket.championPartyCode
+        });
+        throw new Error("Turnamen sudah selesai. Juara telah ditentukan.");
       }
-    });
-    solos.forEach((playerId) => {
-      const teamId = counts.red <= counts.blue ? "red" : "blue";
-      members[playerId] = teamId;
-      counts[teamId] += 1;
-    });
-    if (Math.abs(counts.red - counts.blue) > 2) {
-      throw new Error("Tim belum seimbang. Minta leader party mengatur ulang pilihan Merah/Biru.");
+      const currentMatch = Object.values(bracket.rounds).flatMap((round) =>
+        Object.values(round.matches)).find((item) => item.id === bracket.currentMatchId);
+      if (!currentMatch || currentMatch.status !== "ready") {
+        throw new Error("Tidak ada pertandingan turnamen yang siap dimainkan.");
+      }
+      const partyACode = currentMatch.partyA;
+      const partyBCode = currentMatch.partyB;
+      const partyA = social.parties?.[partyACode];
+      const partyB = social.parties?.[partyBCode];
+      if (!partyA || !partyB) throw new Error("Data salah satu party peserta tidak ditemukan.");
+      const activePlayers = new Map(players);
+      const assignParty = (party, partyCode, teamId) => {
+        Object.values(party.members || {}).forEach((member) => {
+          const playerId = String(member?.uid || "");
+          if (!playerId || social.playerParties?.[playerId] !== partyCode || !activePlayers.has(playerId)) return;
+          members[playerId] = teamId;
+          counts[teamId] += 1;
+        });
+      };
+      assignParty(partyA, partyACode, "red");
+      assignParty(partyB, partyBCode, "blue");
+      if (!counts.red || !counts.blue) {
+        throw new Error("Kedua party harus memiliki minimal satu pemain online sebelum match dimulai.");
+      }
+      tournamentMatch = {
+        tournamentId, tournamentMatchId: currentMatch.id,
+        partyA: partyACode, partyB: partyBCode
+      };
+    } else {
+      if (players.length < 2) throw new Error("Minimal dua pemain harus bergabung sebelum Team Battle dimulai.");
+      const solos = [];
+      players.forEach(([playerId]) => {
+        const code = social.playerParties?.[playerId];
+        const party = code ? social.parties?.[code] : null;
+        const isPartyMember = Object.values(party?.members || {}).some((member) => member?.uid === playerId);
+        const selectedTeam = isPartyMember && ["red", "blue"].includes(party.teamId) ? party.teamId : null;
+        if (selectedTeam) {
+          members[playerId] = selectedTeam;
+          counts[selectedTeam] += 1;
+        } else solos.push(playerId);
+      });
+      solos.forEach((playerId) => {
+        const teamId = counts.red <= counts.blue ? "red" : "blue";
+        members[playerId] = teamId;
+        counts[teamId] += 1;
+      });
+      if (Math.abs(counts.red - counts.blue) > 2) {
+        throw new Error("Tim belum seimbang. Minta leader party mengatur ulang pilihan Merah/Biru.");
+      }
     }
+
     const nextSessionId = Number(session?.sessionId || 0) + 1;
     if (session?.status === "finished") {
-      await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners`), null);
+      await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/winners"), null);
     }
-    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
+    const nextSession = {
       sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0,
-      startedAt: Math.round(serverNow())
-    });
-    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/teams`), {
+      startedAt: Math.round(serverNow()), ...(tournamentMatch || {})
+    };
+    await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/session"), nextSession);
+    await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/teams"), {
       sessionId: nextSessionId, members
     });
     teamBattleData = {
-      ...(teamBattleData || {}),
-      session: { sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0 },
+      ...(teamBattleData || {}), session: nextSession,
       teams: { sessionId: nextSessionId, members }
     };
     teamBattleBusy = false;
@@ -585,10 +633,12 @@ async function finishTeamColorBattle() {
   const winners = teamBattleData?.winners || {};
   const winner = winners["round" + Number(round?.roundId || 0)];
   const resolved = Boolean(winner) || (round?.phase === "active" && serverNow() > Number(round.endsAt));
-  if (!session || session.status !== "active" ||
-      Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved) return;
+  if (!session || !["active", "finished"].includes(session.status) ||
+      (session.status === "active" &&
+        (Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved))) return;
   teamBattleBusy = true;
   try {
+    const wasActive = session.status === "active";
     const sessionId = Number(session.sessionId);
     const teams = teamBattleData?.teams?.sessionId === sessionId ? teamBattleData.teams.members || {} : {};
     const roundResults = Object.values(teamBattleData?.winners || {})
@@ -597,21 +647,76 @@ async function finishTeamColorBattle() {
     const blueScore = roundResults.filter((item) => item.teamId === "blue").length;
     const winningTeam = redScore === blueScore ? null : redScore > blueScore ? "red" : "blue";
     const finishedAt = Math.round(serverNow());
-    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
-      status: "finished", finishedAt
-    });
-    await Promise.all(Object.entries(teams).map(([playerId, teamId]) =>
-      set(dbPath(`rooms/${roomPin}/socialCompetition/stats/${playerId}/matches/session-${sessionId}`), {
-        sessionId, teamId,
-        result: !winningTeam ? "draw" : teamId === winningTeam ? "win" : "loss",
-        finishedAt
-      })
-    ));
+    if (wasActive) {
+      await update(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/session"), {
+        status: "finished", finishedAt
+      });
+      await Promise.all(Object.entries(teams).map(([playerId, teamId]) =>
+        set(dbPath("rooms/" + roomPin + "/socialCompetition/stats/" + playerId +
+          "/matches/session-" + sessionId), {
+          sessionId, teamId,
+          result: !winningTeam ? "draw" : teamId === winningTeam ? "win" : "loss",
+          finishedAt
+        })
+      ));
+    }
+    if (session.tournamentId && session.tournamentMatchId) {
+      const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+      const social = socialSnap.val() || {};
+      const meta = social.tournament?.meta;
+      if (meta?.phase === "active" && meta.tournamentId === session.tournamentId) {
+        if (!winningTeam) {
+          $("teamBattleStatus").textContent =
+            "Skor turnamen seri. Match ini belum menghasilkan pemenang. Host dapat mengulang pertandingan.";
+        } else {
+          const winnerPartyCode = winningTeam === "red" ? session.partyA : session.partyB;
+          const resultRoot = "rooms/" + roomPin + "/socialCompetition/tournament/results/" +
+            session.tournamentId + "/" + session.tournamentMatchId;
+          const existingResult = await get(dbPath(resultRoot));
+          if (!existingResult.exists()) {
+            await set(dbPath(resultRoot), {
+              matchId: session.tournamentMatchId, partyA: session.partyA, partyB: session.partyB,
+              winnerPartyCode, winningTeam, teamSessionId: sessionId, finishedAt
+            });
+          }
+          const registrations = social.tournament?.registrations?.[session.tournamentId] || {};
+          const entrants = tournamentEntrantList(registrations);
+          const previousResults = social.tournament?.results?.[session.tournamentId] || {};
+          const nextResults = {
+            ...previousResults,
+            [session.tournamentMatchId]: { winnerPartyCode, matchId: session.tournamentMatchId }
+          };
+          const bracket = buildSingleEliminationBracket(entrants,
+            Object.fromEntries(Object.entries(nextResults)
+              .filter(([, item]) => item?.winnerPartyCode)
+              .map(([id, item]) => [id, item.winnerPartyCode])));
+          if (bracket.championPartyCode) {
+            await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+              phase: "completed", completedAt: finishedAt,
+              championPartyCode: bracket.championPartyCode
+            });
+            $("teamBattleStatus").textContent =
+              "🏆 Turnamen selesai! Juara: " + (entrants.find((entry) =>
+                entry.partyCode === bracket.championPartyCode)?.name || bracket.championPartyCode);
+          } else {
+            $("teamBattleStatus").textContent =
+              "Pemenang match " + session.tournamentMatchId.toUpperCase() +
+              " maju ke babak berikutnya. Host dapat memulai match selanjutnya.";
+          }
+        }
+      }
+    }
   } catch (error) {
     $("teamBattleStatus").textContent = "Gagal menyelesaikan battle: " + explainError(error);
   } finally {
     teamBattleBusy = false;
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition")).catch(() => null);
+    if (fresh?.exists()) socialCompetitionData = fresh.val() || {};
+    const teamFresh = await get(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle")).catch(() => null);
+    if (teamFresh?.exists()) teamBattleData = teamFresh.val() || {};
+    renderPartyCenter();
     renderTeamColorBattle();
+    renderTournamentCenter();
   }
 }
 async function submitTeamColorAnswer(colorIndex) {
@@ -664,6 +769,7 @@ function subscribeSocialCompetition() {
     (snap) => {
       socialCompetitionData = snap.val() || {};
       renderPartyCenter();
+      renderTournamentCenter();
     },
     (error) => {
       $("partyStatus").textContent = "Party Center tidak dapat dimuat: " + error.message;
@@ -690,6 +796,10 @@ function renderPartyCenter() {
   const leave = $("leaveParty");
   const codeInput = $("partyJoinCode");
   const teamPicker = $("partyTeamPicker");
+  const tournamentRegistrationButton = $("registerPartyTournament");
+  const tournamentSnapshot = getTournamentSnapshot();
+  const partyRegistration = Object.entries(tournamentSnapshot.registrations)
+    .find(([, item]) => item?.partyCode === party?.code);
   const partyStatus = $("partyStatus");
   const myMatches = data.stats?.[uid]?.matches || {};
   const matchRows = Object.values(myMatches);
@@ -700,6 +810,11 @@ function renderPartyCenter() {
   hostNote.classList.toggle("hidden", !isHost);
   createJoin.classList.toggle("hidden", isHost || Boolean(party));
   current.classList.toggle("hidden", isHost || !party);
+  tournamentRegistrationButton.classList.toggle("hidden", isHost || !party ||
+    party.leaderUid !== uid || tournamentSnapshot.meta?.phase !== "registration");
+  tournamentRegistrationButton.disabled = partyBusy || tournamentBusy;
+  tournamentRegistrationButton.textContent = partyRegistration
+    ? "Batalkan Pendaftaran Turnamen" : "Daftarkan Party ke Turnamen";
   if (isHost) {
     partyStatus.textContent = "Host mengawasi kompetisi. Pemain dapat membuat party dari halaman Player.";
     return;
@@ -751,6 +866,268 @@ function renderPartyCenter() {
     partyStatus.textContent = "Party siap! Pilih tim bersama lalu ajak teman bergabung.";
   }
 }
+
+function getTournamentSnapshot() {
+  const tournament = socialCompetitionData?.tournament || {};
+  const meta = tournament.meta || null;
+  const tournamentId = String(meta?.tournamentId || "");
+  return {
+    tournament, meta, tournamentId,
+    registrations: tournamentId ? tournament.registrations?.[tournamentId] || {} : {},
+    results: tournamentId ? tournament.results?.[tournamentId] || {} : {}
+  };
+}
+function tournamentEntrantList(registrations) {
+  return Object.values(registrations || {})
+    .filter((entry) => entry?.partyCode && entry?.leaderUid)
+    .sort((a, b) => Number(a.registeredAt || 0) - Number(b.registeredAt || 0) ||
+      String(a.partyCode).localeCompare(String(b.partyCode)))
+    .map((entry) => ({
+      partyCode: String(entry.partyCode),
+      leaderUid: String(entry.leaderUid),
+      name: String(entry.partyName || ("Party " + entry.partyCode))
+    }));
+}
+function tournamentMatchName(match, entrantByCode) {
+  const name = (code) => code
+    ? (entrantByCode.get(code)?.name || "Party " + code)
+    : "BYE / MENUNGGU";
+  return { a: name(match.partyA), b: name(match.partyB) };
+}
+function renderTournamentCenter() {
+  const snapshot = getTournamentSnapshot();
+  const meta = snapshot.meta;
+  const tournamentId = snapshot.tournamentId;
+  const registrations = snapshot.registrations;
+  const results = snapshot.results;
+  const entrants = tournamentEntrantList(registrations);
+  const resultsByMatch = Object.fromEntries(Object.entries(results)
+    .filter(([, item]) => item?.matchId && item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  if (meta?.phase === "active" || meta?.phase === "completed") {
+    try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); }
+    catch (error) { console.warn("Tournament bracket:", error); }
+  }
+
+  $("tournamentHostControls").classList.toggle("hidden", !isHost);
+  $("tournamentTitleInput").disabled = tournamentBusy || meta?.phase === "active";
+  $("createTournament").disabled = tournamentBusy || activeState?.phase !== "lobby" ||
+    teamBattleData?.session?.status === "active" || meta?.phase === "active";
+  $("createTournament").textContent = meta?.phase === "completed"
+    ? "Buat Turnamen Baru" : "Buka Pendaftaran Turnamen";
+  $("startTournament").disabled = tournamentBusy || meta?.phase !== "registration" ||
+    entrants.length < 2 || entrants.length > 16 || activeState?.phase !== "lobby" ||
+    teamBattleData?.session?.status === "active";
+  $("startTournament").textContent = "Kunci Peserta & Susun Bracket";
+
+  $("tournamentTitle").textContent = meta?.title || "QuizVerse Cup";
+  $("tournamentPhase").textContent = !meta ? "BELUM DIBUKA" :
+    meta.phase === "registration" ? "PENDAFTARAN DIBUKA" :
+      meta.phase === "active" ? "TURNAMEN BERJALAN" : "TURNAMEN SELESAI";
+  $("tournamentCount").textContent = meta ? entrants.length + "/16 PARTY" : "MAKSIMAL 16 PARTY";
+
+  const registrationList = $("tournamentRegistrationList");
+  registrationList.replaceChildren();
+  entrants.forEach((entrant, index) => {
+    const chip = document.createElement("span");
+    chip.className = "tournament-entrant-chip";
+    chip.textContent = (index + 1) + ". " + entrant.name + " · " + entrant.partyCode;
+    registrationList.appendChild(chip);
+  });
+  if (meta?.phase === "registration" && !entrants.length) {
+    const empty = document.createElement("p");
+    empty.className = "tournament-empty";
+    empty.textContent = "Belum ada party mendaftar. Leader party bisa mendaftarkan tim dari Party Center.";
+    registrationList.appendChild(empty);
+  }
+
+  const bracketRoot = $("tournamentBracket");
+  bracketRoot.replaceChildren();
+  if (bracket) {
+    const entrantByCode = new Map(entrants.map((entrant) => [entrant.partyCode, entrant]));
+    Object.values(bracket.rounds).forEach((round) => {
+      const roundColumn = document.createElement("section");
+      roundColumn.className = "tournament-round";
+      const roundTitle = document.createElement("h4");
+      roundTitle.textContent = round.label;
+      roundColumn.appendChild(roundTitle);
+      Object.values(round.matches).forEach((match) => {
+        const card = document.createElement("article");
+        card.className = "tournament-match tournament-match-" + match.status +
+          (match.id === bracket.currentMatchId ? " is-current" : "");
+        const matchTitle = document.createElement("small");
+        matchTitle.textContent = match.id.toUpperCase();
+        card.appendChild(matchTitle);
+        const names = tournamentMatchName(match, entrantByCode);
+        [["a", match.partyA], ["b", match.partyB]].forEach(([side, code]) => {
+          const line = document.createElement("div");
+          line.className = "tournament-match-party" +
+            (match.winnerPartyCode && match.winnerPartyCode === code ? " is-winner" : "");
+          line.textContent = code ? names[side] : "Menunggu peserta";
+          card.appendChild(line);
+        });
+        const status = document.createElement("span");
+        status.className = "tournament-match-status";
+        status.textContent = match.status === "ready" ? "SIAP DIMAINKAN" :
+          match.status === "finished" ? "PEMENANG LOLOS" :
+            match.status === "bye" ? "BYE · LANGSUNG MAJU" : "MENUNGGU";
+        card.appendChild(status);
+        roundColumn.appendChild(card);
+      });
+      bracketRoot.appendChild(roundColumn);
+    });
+    if (bracket.championPartyCode) {
+      const champion = document.createElement("div");
+      champion.className = "tournament-champion";
+      champion.textContent = "🏆 JUARA: " +
+        (entrantByCode.get(bracket.championPartyCode)?.name || bracket.championPartyCode);
+      bracketRoot.appendChild(champion);
+    }
+  }
+
+  let message = "Host dapat membuka pendaftaran. Peserta berupa party, bukan pemain satuan.";
+  if (meta?.phase === "registration") {
+    message = isHost
+      ? "Pendaftaran terbuka. Minimal 2 party untuk mulai, maksimal 16 party."
+      : "Pendaftaran sedang dibuka. Leader party dapat mendaftarkan party.";
+  } else if (meta?.phase === "active" && bracket?.currentMatchId) {
+    const match = Object.values(bracket.rounds).flatMap((round) =>
+      Object.values(round.matches)).find((item) => item.id === bracket.currentMatchId);
+    const names = match ? tournamentMatchName(match,
+      new Map(entrants.map((entrant) => [entrant.partyCode, entrant]))) : null;
+    const activeSession = teamBattleData?.session;
+    const matchRunning = activeSession?.status === "active" &&
+      activeSession.tournamentId === tournamentId &&
+      activeSession.tournamentMatchId === bracket.currentMatchId;
+    message = matchRunning
+      ? "Pertandingan berlangsung: " + names.a + " vs " + names.b + ". Host memantau dari Team Color Battle."
+      : "Match berikutnya: " + names.a + " vs " + names.b +
+        ". Host dapat memulai atau mengulang pertandingan melalui Team Color Battle.";
+  } else if (meta?.phase === "completed") {
+    message = "Turnamen selesai. Juara sudah ditentukan. Host dapat membuka turnamen baru.";
+  }
+  if (activeState?.phase !== "lobby" && meta?.phase === "active") {
+    message = "Turnamen sedang berjalan. Selesaikan bracket sebelum memulai kuis utama.";
+  }
+  $("tournamentStatus").textContent = message;
+}
+async function createTournament() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
+      teamBattleData?.session?.status === "active") return;
+  const currentMeta = socialCompetitionData?.tournament?.meta;
+  if (currentMeta?.phase === "active" || currentMeta?.phase === "registration") return;
+  tournamentBusy = true;
+  renderTournamentCenter();
+  try {
+    const tournamentId = "cup-" + Math.round(serverNow());
+    const title = String($("tournamentTitleInput").value || "QuizVerse Cup")
+      .trim().slice(0, 36) || "QuizVerse Cup";
+    await set(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+      tournamentId, title, phase: "registration",
+      createdAt: Math.round(serverNow()), maxParties: 16
+    });
+    const snapshot = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    socialCompetitionData = snapshot.val() || {};
+    $("tournamentStatus").textContent = "Pendaftaran " + title + " dibuka. Bagikan info turnamen kepada para pemain.";
+  } catch (error) {
+    $("tournamentStatus").textContent = "Gagal membuka turnamen: " + explainError(error);
+  } finally {
+    tournamentBusy = false;
+    renderTournamentCenter();
+  }
+}
+async function registerPartyTournament() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || tournamentBusy) return;
+  const party = getMyParty();
+  const snapshot = getTournamentSnapshot();
+  if (!party || party.leaderUid !== uid || snapshot.meta?.phase !== "registration") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const existing = Object.entries(snapshot.registrations)
+      .find(([, item]) => item?.partyCode === party.code);
+    const registrationRoot = "rooms/" + roomPin + "/socialCompetition/tournament/registrations/" + snapshot.tournamentId;
+    if (existing) {
+      await set(dbPath(registrationRoot + "/" + existing[0]), null);
+      $("partyStatus").textContent = "Pendaftaran party " + party.code + " dibatalkan.";
+    } else {
+      const slots = Array.from({ length: 16 }, (_, index) =>
+        "slot" + String(index + 1).padStart(2, "0"));
+      const occupied = new Set(Object.keys(snapshot.registrations));
+      const freeSlot = slots.find((slot) => !occupied.has(slot));
+      if (!freeSlot) throw new Error("Turnamen sudah penuh. Maksimal 16 party.");
+      const leader = Object.values(party.members || {}).find((member) => member?.uid === uid);
+      const name = String(leader?.name || $("name").value.trim() || "Party " + party.code).slice(0, 28);
+      await set(dbPath(registrationRoot + "/" + freeSlot), {
+        partyCode: party.code, leaderUid: uid, partyName: name,
+        registeredAt: Math.round(serverNow())
+      });
+      $("partyStatus").textContent = "Party " + party.code + " resmi terdaftar di turnamen.";
+    }
+  } catch (error) {
+    $("partyStatus").textContent = "Pendaftaran belum berhasil: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition")).catch(() => null);
+    if (fresh?.exists()) socialCompetitionData = fresh.val() || {};
+    renderPartyCenter();
+    renderTournamentCenter();
+  }
+}
+async function startTournament() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
+      teamBattleData?.session?.status === "active") return;
+  tournamentBusy = true;
+  renderTournamentCenter();
+  try {
+    const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    const playersSnap = await get(dbPath("rooms/" + roomPin + "/players"));
+    const social = socialSnap.val() || {};
+    const meta = social.tournament?.meta;
+    if (!meta || meta.phase !== "registration") throw new Error("Belum ada pendaftaran yang terbuka.");
+    const tournamentId = String(meta.tournamentId);
+    const registrations = social.tournament?.registrations?.[tournamentId] || {};
+    const players = playersSnap.val() || {};
+    const entrants = [];
+    for (const [slot, entry] of Object.entries(registrations)) {
+      const party = social.parties?.[entry?.partyCode];
+      const leaderStillOwnsParty = party?.leaderUid === entry?.leaderUid &&
+        social.playerParties?.[entry?.leaderUid] === entry?.partyCode;
+      if (!leaderStillOwnsParty) {
+        await set(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/registrations/" +
+          tournamentId + "/" + slot), null);
+        continue;
+      }
+      const hasOnlineMember = Object.values(party.members || {}).some((member) =>
+        member?.uid && social.playerParties?.[member.uid] === entry.partyCode &&
+        players[member.uid] && players[member.uid].connected !== false
+      );
+      if (!hasOnlineMember) {
+        throw new Error("Party " + entry.partyCode + " belum memiliki anggota online. Minta anggota masuk kembali.");
+      }
+      entrants.push({
+        partyCode: entry.partyCode, leaderUid: entry.leaderUid,
+        name: entry.partyName || "Party " + entry.partyCode
+      });
+    }
+    if (entrants.length < 2) throw new Error("Minimal 2 party valid harus terdaftar.");
+    if (entrants.length > 16) throw new Error("Maksimal 16 party.");
+    buildSingleEliminationBracket(entrants);
+    await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+      phase: "active", startedAt: Math.round(serverNow())
+    });
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    socialCompetitionData = fresh.val() || {};
+    $("tournamentStatus").textContent = "Bracket terkunci. Pertandingan pertama siap dimulai dari Team Color Battle.";
+  } catch (error) {
+    $("tournamentStatus").textContent = "Turnamen belum dapat dimulai: " + explainError(error);
+  } finally {
+    tournamentBusy = false;
+    renderTournamentCenter();
+  }
+}
+
 function makePartyCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -3179,6 +3556,10 @@ async function joinRoom() {
 }
 async function startGame() {
   if (!isHost || !questionBank || !roomPin) return;
+  if (socialCompetitionData?.tournament?.meta?.phase === "active") {
+    status("Selesaikan Tournament Mode sebelum memulai kuis utama.", true);
+    return;
+  }
   try {
     const q = questionBank.questions[0];
     const duration = Number($("duration").value || questionBank.durationSeconds || 15);
@@ -3784,6 +4165,9 @@ $("joinParty").addEventListener("click", joinParty);
 $("leaveParty").addEventListener("click", leaveParty);
 $("partyTeamRed").addEventListener("click", () => setPartyTeam("red"));
 $("partyTeamBlue").addEventListener("click", () => setPartyTeam("blue"));
+$("registerPartyTournament").addEventListener("click", registerPartyTournament);
+$("createTournament").addEventListener("click", createTournament);
+$("startTournament").addEventListener("click", startTournament);
 $("partyJoinCode").addEventListener("input", () => {
   $("partyJoinCode").value = $("partyJoinCode").value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 6);
 });
