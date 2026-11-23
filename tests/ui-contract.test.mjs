@@ -387,3 +387,18 @@ assert.match(main, /function disposeAvatar\(mesh\)/, "Avatar instances release r
 assert.match(main, /Fine face,[\s\S]*?details remain lit, but do not create dozens of shadow casters/, "Avatar shadow pass is optimized for multiplayer scale");
 assert.match(main, /torsoBody\.castShadow = true;[\s\S]*?headBase\.castShadow = true;/, "Only core avatar silhouette casts shadows");
 assert.match(main, /!node\.isSprite && !sharedAvatarGeometries\.has\(node\.geometry\)/, "Avatar cleanup preserves shared sprite and rounded geometry");
+
+assert.match(index, /id="tournamentCenterCard"/, "Host sees Tournament Center in the lobby");
+assert.match(player, /id="tournamentCenterCard"/, "Player sees Tournament Center in the lobby");
+assert.match(player, /id="registerPartyTournament"/, "Party leaders can register their party for a tournament");
+assert.match(main, /function renderTournamentCenter\(\)/, "Host and Players render the synchronized tournament bracket");
+assert.match(main, /function createTournament\(\)/, "Host can open tournament registration");
+assert.match(main, /function startTournament\(\)/, "Host locks registered parties and starts the bracket");
+assert.match(main, /function registerPartyTournament\(\)/, "Party leaders can register or withdraw during registration");
+assert.match(main, /buildSingleEliminationBracket\(entrants, resultMap\)/, "The live bracket uses deterministic elimination progression");
+assert.match(main, /tournamentMatchId: currentMatch\.id/, "Team Color Battle is linked to its current tournament match");
+assert.match(main, /winnerPartyCode, winningTeam, teamSessionId: sessionId/, "A finished match records which party advances");
+assert.match(main, /Skor turnamen seri\.[\s\S]*?mengulang pertandingan/, "A drawn tournament match remains unresolved until a rematch");
+assert.match(main, /championPartyCode: bracket\.championPartyCode/, "The tournament stores the final champion");
+assert.match(main, /Selesaikan Tournament Mode sebelum memulai kuis utama/, "The quiz cannot interrupt an active tournament");
+assert.match(css, /\.tournament-match\.is-current/, "The current tournament matchup is highlighted");
