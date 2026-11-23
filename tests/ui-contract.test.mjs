@@ -154,6 +154,16 @@ assert.match(main, /All face details point toward \+Z/, "Avatar face orientation
 assert.match(main, /const eyes = \[\]/, "Avatar eyes are grouped for facial animation");
 assert.match(main, /g\.userData\.rig = \{ torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes \}/, "Avatar exposes articulated body and facial rig");
 assert.match(main, /function animateAvatar\(mesh, time, moving = false\)/, "Avatar has a shared animation controller");
+assert.match(main, /mesh\.userData\.motion = \{[\s\S]*?stridePhase:[\s\S]*?gaitBlend:[\s\S]*?wasAirborne:[\s\S]*?landedAt:/, "Each avatar owns reusable gait, jump, and landing animation state");
+assert.match(main, /motion\.gaitBlend \+= \(gaitTarget - motion\.gaitBlend\) \* \(1 - Math\.exp\(-13 \* dt\)\)/, "Walking smoothly accelerates and decelerates instead of snapping");
+assert.match(main, /motion\.stridePhase \+= dt \* 10\.8/, "Each avatar advances its own continuous walk cycle");
+assert.match(main, /const leftLift = Math\.max\(0, Math\.sin\(phase\)\) \* 0\.095 \* gait/, "Left foot visibly lifts during its alternating stride");
+assert.match(main, /const rightLift = Math\.max\(0, Math\.sin\(phase \+ Math\.PI\)\) \* 0\.095 \* gait/, "Right foot visibly lifts opposite the left foot");
+assert.match(main, /const jumpHeight = THREE\.MathUtils\.clamp\(\(mesh\.position\.y - groundHeight\) \/ 1\.12, 0, 1\)/, "Jump animation blends from the actual height above the current floor");
+assert.match(main, /rig\.leftLeg\.rotation\.x = -swing \* 0\.78 \* walkLegBlend - jumpHeight \* 0\.42/, "Jump pose tucks the legs while preserving the walking pose");
+assert.match(main, /const landingImpact = landedFor >= 0 && landedFor < 0\.24/, "Landing creates a short, reusable squash-and-rebound effect");
+assert.match(main, /rig\.torso\.scale\.y = 1 - landingImpact \* 0\.075/, "Landing response includes a subtle body squash");
+assert.match(main, /animateAvatar\(entry\.mesh, now, moving\)/, "Remote and local players use the same avatar motion controller");
 assert.match(main, /function avatarGroundHeight\(mesh\)/, "Avatar animation reads the real floor height under the character");
 assert.match(main, /const groundHeight = avatarGroundHeight\(mesh\);\s*const airborne = mesh\.position\.y > groundHeight \+ 0\.16;/, "Standing on raised answer bays and winner podiums is not mistaken for jumping");
 assert.match(main, /function triggerAvatarReaction\(mesh, kind, duration = 1\.7\)/, "Avatar reactions use a shared timed animation trigger");
