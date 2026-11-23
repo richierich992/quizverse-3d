@@ -248,7 +248,7 @@ assert.match(main, /function triggerLobbyArrival\(mesh, kind = "arrive", delay =
 assert.match(main, /function maybeStartLobbyArrival\(\)/, "A player's first lobby appearance triggers a welcome animation after the roster snapshot");
 assert.match(main, /const newcomerIds = playersSnapshotReady && activeState\?\.phase === "lobby"/, "Only players added after the initial lobby roster receive newcomer choreography");
 assert.match(main, /function welcomeNearbyLobbyPlayers\(newcomer\)/, "Nearby participants greet a newly joined player");
-assert.match(main, /const arrivalWave = 0;/, "Lobby arrival animation blends a friendly wave into the existing avatar rig");
+assert.match(main, /let arrivalWave = 0;/, "Lobby arrival animation blends a friendly wave into the existing avatar rig");
 assert.match(main, /arrivalBounce = Math\.abs\(Math\.sin\(arrivalProgress \* Math\.PI \* 3\.1\)\)/, "Newly arrived avatars get a small, time-limited welcome bounce");
 assert.match(main, /if \(inLobby\) \{[\s\S]*?input = getLobbyRoamVector\(performance\.now\(\)\)/, "Idle Player avatars move naturally while waiting in the lobby");
 assert.match(main, /if \(inQuestion && !answerBusy\)/, "Ambient lobby movement cannot submit quiz answers");
