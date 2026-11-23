@@ -235,6 +235,14 @@ assert.match(main, /function resetLobbyRoam\(\)/, "Lobby roaming initializes aro
 assert.match(main, /function chooseLobbyRoamTarget\(now\)/, "Lobby wander destinations are selected deterministically");
 assert.match(main, /function getLobbyRoamVector\(now\)/, "Lobby avatars walk between short ambient destinations");
 assert.match(main, /function lobbySeparationVector\(x, z\)/, "Lobby avatars softly steer away from nearby participants");
+assert.match(main, /function lobbySocialVector\(x, z\)/, "Idle lobby avatars drift toward nearby participants to form small groups");
+assert.match(main, /distance <= 3\.8 \|\| distance >= 9\.5/, "Social groups approach gently while preserving conversational space");
+assert.match(main, /socialPartnerId/, "Lobby avatars keep a local conversational partner identity");
+assert.match(main, /conversationTarget = nearest && nearest\.distance < 6\.2 \? 1 : 0/, "Conversation gestures activate only for nearby players");
+assert.match(main, /const socialNod = socialConversation > 0\.42/, "Conversation animation includes subtle listening nods");
+assert.match(main, /const socialChat = socialConversation > 0\.42/, "Conversation animation includes small talking hand gestures");
+assert.match(main, /const socialWave = socialConversation > 0\.42/, "Greeting waves happen when another avatar is nearby");
+assert.match(main, /socialPull\.x \* 0\.42/, "Autonomous lobby wandering gently joins nearby social clusters");
 assert.match(main, /const avoidanceWeight = manual \? 0\.90 : 2\.60/, "Lobby separation actively steers idle and manually moving avatars apart");
 assert.match(main, /if \(inLobby\) \{[\s\S]*?input = getLobbyRoamVector\(performance\.now\(\)\)/, "Idle Player avatars move naturally while waiting in the lobby");
 assert.match(main, /if \(inQuestion && !answerBusy\)/, "Ambient lobby movement cannot submit quiz answers");
