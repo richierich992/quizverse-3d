@@ -49,6 +49,7 @@ assert.match(main, /function joinParty\(\)/, "Players can join a party with an i
 assert.match(main, /function leaveParty\(\)/, "Players can leave a party and transfer leadership");
 assert.match(main, /function setPartyTeam\(teamId\)/, "Party leaders can choose the team's side");
 assert.match(main, /const selectedTeam = party\?\.members\?\.\[playerId\] && \["red", "blue"\]\.includes\(party\.teamId\)/, "Team Battle respects each party's chosen team");
+assert.match(main, /winners\["round" \+ roundId\]/, "Team Battle uses the fixed winner-slot key for the current round");
 assert.match(main, /socialCompetition\/stats\/\$\{playerId\}\/matches\/session-\$\{sessionId\}/, "Completed Team Battle writes separate per-player match records");
 assert.match(main, /function subscribeSocialCompetition\(\)/, "Party membership and personal statistics are synchronized live");
 assert.match(main, /function renderPartyCenter\(\)/, "Party Center renders membership, team choice and win/loss record");
