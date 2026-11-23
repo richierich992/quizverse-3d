@@ -42,7 +42,8 @@ assert.match(main, /function createArenaFloorTexture\(\)/, "Arena floor has a pr
 assert.match(main, /function answerBaySurfaceAt\(x, z\)/, "Raised answer podium surface height is shared by all clients");
 assert.match(main, /const groundHeight = answerBaySurfaceAt\(ownPosition\.x, ownPosition\.z\)/, "Local player stands on raised answer podiums");
 assert.match(main, /targetX: x, targetY: y, targetZ: z/, "Remote player avatar receives the matching podium height");
-assert.match(main, /entry\.mesh\.position\.y \+= \(Number\(entry\.targetY \|\| 0\) - entry\.mesh\.position\.y\) \* remoteBlend/, "Remote player avatar smoothly follows podium height changes");
+assert.match(main, /const dy = targetY - entry\.mesh\.position\.y/, "Remote avatar calculates vertical travel toward the raised platform or winner podium");
+assert.match(main, /entry\.mesh\.position\.y \+= dy \* positionBlend/, "Remote avatar smoothly follows podium height changes with the same finish-walk interpolation");
 assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclosed indoor competition venue");
 assert.match(main, /Low-poly audience figures: lightweight, decorative silhouettes/, "Arena includes a decorative audience");
 assert.match(main, /Four sweeping light beams are translucent and rotate slowly overhead/, "Arena includes moving translucent spotlights");
