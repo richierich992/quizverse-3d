@@ -22,6 +22,7 @@ assert.match(main, /function startQuickColorMatch\(\)/, "Host can publish a new 
 assert.match(main, /phase: "preparing"/, "A new round closes the previous one before clearing its winner");
 assert.match(main, /await set\(winnerRef, null\)[\s\S]*?await update\(roundRef, \{ phase: "active" \}\)/, "Players can only answer after the host activates the new round");
 assert.match(main, /function submitQuickColorAnswer\(colorIndex\)/, "Participants submit color choices to the shared room");
+assert.match(main, /const canPlay = !isHost && activeState\?\.phase === "lobby"/, "Host remains the spectator and only joined Players compete");
 assert.match(main, /quickColorWrongUntil = performance\.now\(\) \+ 420/, "Incorrect color taps receive a short retry delay");
 assert.match(main, /roundId: Number\(round\.roundId\),\s*answerIndex: Number\(colorIndex\)/, "Winning answer is tied to the current round and target color");
 assert.match(main, /winner\.uid === uid \? "Kamu menang! 🎉"/, "The winning player sees a personalized result");
