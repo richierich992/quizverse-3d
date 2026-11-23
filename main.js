@@ -690,6 +690,11 @@ const celebrationParticles = Array.from({ length: 24 }, (_, index) => {
 });
 
 function triggerQuestionStart() {
+  const questionNumber = Math.max(1, Number(activeState?.questionIndex ?? 0) + 1);
+  const totalQuestions = Math.max(questionNumber, Number(activeState?.totalQuestions || questionNumber));
+  $("roundIntroTitle").textContent = questionNumber === 1 ? "PERTANDINGAN DIMULAI" : "SOAL BERIKUTNYA";
+  $("roundIntroMeta").textContent = "SOAL " + String(questionNumber).padStart(2, "0") +
+    " / " + String(totalQuestions).padStart(2, "0");
   winnerPodiumGroup.visible = false;
   if (playerMesh) {
     playerMesh.userData.winnerTarget = null;
