@@ -1356,21 +1356,66 @@ function avatarGroundHeight(mesh) {
 function animateAvatar(mesh, time, moving = false) {
   const rig = mesh?.userData?.rig;
   if (!rig) return;
+
+  // Motion state belongs to each avatar, so local and remote players share the same smooth gait.
+  const motion = mesh.userData.motion || (mesh.userData.motion = {
+    lastTime: time,
+    stridePhase: (mesh.id % 9) * 0.11,
+    gaitBlend: 0,
+    wasAirborne: false,
+    landedAt: -Infinity
+  });
+  const dt = THREE.MathUtils.clamp((time - motion.lastTime) / 1000, 0, 0.05);
+  motion.lastTime = time;
+
   const t = time * 0.001;
-  const stride = t * 10.5;
-  const walk = moving ? 1 : 0;
-  const swing = Math.sin(stride) * walk;
   const groundHeight = avatarGroundHeight(mesh);
-  const airborne = mesh.position.y > groundHeight + 0.16;
-  rig.leftArm.rotation.x = swing * 0.68 + Math.sin(t * 2.2) * 0.035;
-  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.035;
-  rig.leftArm.rotation.z = (airborne ? 0.42 : -0.035) - swing * 0.10;
-  rig.rightArm.rotation.z = (airborne ? -0.42 : 0.035) + swing * 0.10;
-  rig.leftLeg.rotation.x = airborne ? -0.42 : -swing * 0.78;
-  rig.rightLeg.rotation.x = airborne ? -0.42 : swing * 0.78;
-  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.05 : Math.sin(t * 3.1) * 0.04);
-  rig.torso.rotation.z = Math.sin(t * 1.5) * 0.018 + swing * 0.018;
-  rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
+  const jumpHeight = THREE.MathUtils.clamp((mesh.position.y - groundHeight) / 1.12, 0, 1);
+  const airborne = jumpHeight > 0.12;
+  const reducedMotion = matchMotionPreference.matches;
+  const motionScale = reducedMotion ? 0.58 : 1;
+
+  if (motion.wasAirborne && !airborne) motion.landedAt = time;
+  motion.wasAirborne = airborne;
+
+  const gaitTarget = moving && !airborne ? 1 : 0;
+  motion.gaitBlend += (gaitTarget - motion.gaitBlend) * (1 - Math.exp(-13 * dt));
+  if (motion.gaitBlend > 0.001) {
+    motion.stridePhase += dt * 10.8;
+  }
+  const gait = motion.gaitBlend * motionScale;
+  const phase = motion.stridePhase;
+  const swing = Math.sin(phase) * gait;
+  const leftLift = Math.max(0, Math.sin(phase)) * 0.095 * gait;
+  const rightLift = Math.max(0, Math.sin(phase + Math.PI)) * 0.095 * gait;
+  const idleBreath = Math.sin(t * 2.35 + (mesh.id % 7) * 0.22);
+  const idleSway = Math.sin(t * 1.15 + (mesh.id % 5) * 0.31);
+
+  // Alternating foot lift and opposite arm swing make the walk cycle read clearly at game scale.
+  rig.leftArm.rotation.x = swing * 0.68 + idleBreath * 0.025 + jumpHeight * 0.22;
+  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.025 + jumpHeight * 0.22;
+  rig.leftArm.rotation.z = -0.035 - swing * 0.10 + jumpHeight * 0.46;
+  rig.rightArm.rotation.z = 0.035 + swing * 0.10 - jumpHeight * 0.46;
+
+  const walkLegBlend = 1 - jumpHeight;
+  rig.leftLeg.rotation.x = -swing * 0.78 * walkLegBlend - jumpHeight * 0.42;
+  rig.rightLeg.rotation.x = swing * 0.78 * walkLegBlend - jumpHeight * 0.42;
+  rig.leftLeg.position.y = 0.83 + leftLift * walkLegBlend;
+  rig.rightLeg.position.y = 0.83 + rightLift * walkLegBlend;
+
+  const landedFor = (time - motion.landedAt) / 1000;
+  const landingImpact = landedFor >= 0 && landedFor < 0.24
+    ? Math.sin((landedFor / 0.24) * Math.PI)
+    : 0;
+  const runBounce = Math.abs(Math.sin(phase * 2)) * gait * 0.045;
+  rig.torso.position.y = 1.29 + idleBreath * 0.018 +
+    runBounce + jumpHeight * 0.10 + landingImpact * 0.045;
+  rig.torso.rotation.x = gait * 0.055 - jumpHeight * 0.14 + landingImpact * 0.045;
+  rig.torso.rotation.z = idleSway * 0.014 + swing * 0.018;
+  rig.torso.scale.y = 1 - landingImpact * 0.075;
+  rig.head.rotation.x = idleBreath * 0.018 - gait * 0.045 -
+    jumpHeight * 0.11 - landingImpact * 0.035;
+
   const socialEnabled = activeState?.phase === "lobby" && !moving && !airborne;
   const socialOffset = Number(mesh.userData.socialOffset || 0);
   const socialCycle = (time + socialOffset) % 14500;
@@ -1379,7 +1424,7 @@ function animateAvatar(mesh, time, moving = false) {
     : 0;
   const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
   rig.head.rotation.y = socialLook * 0.48 + Math.sin(t * 0.72) * 0.035;
-  rig.head.rotation.z = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.55) * 0.012;
+  rig.head.rotation.z = idleSway * 0.025 + Math.sin(t * 0.55) * 0.012;
   if (socialWave > 0) {
     rig.rightArm.rotation.z -= 1.02 * socialWave;
     rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
@@ -1417,7 +1462,7 @@ function animateAvatar(mesh, time, moving = false) {
   }
 
   const winnerRank = mesh.userData.winnerMoving ? 0 : Number(mesh.userData.winnerRank || 0);
-  const celebrationMotion = matchMotionPreference.matches ? 0 : 1;
+  const celebrationMotion = reducedMotion ? 0 : 1;
   if (winnerRank === 1) {
     // Champion: both hands stay raised while the arms alternate in a friendly victory wave.
     const wave = Math.sin(t * 5.4);
@@ -1452,7 +1497,6 @@ function animateAvatar(mesh, time, moving = false) {
   else if (blinkPhase < 0.14) blinkScale = 0.12 + ((blinkPhase - 0.07) / 0.07) * 0.88;
   rig.eyes.forEach((eye) => { eye.scale.y = eye.userData.openScale * blinkScale; });
 }
-
 function disposeAvatar(mesh) {
   if (!mesh) return;
   const released = new Set();
