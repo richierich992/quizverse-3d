@@ -267,7 +267,81 @@ try {
     score: 200, streak: 2, lastScoredQuestionIndex: 1
   }));
 
-  console.log("PASS: private keys, one answer per round, Quick Color first-winner rules, deadline, reveal, score validation, and per-round progression.");
+
+  // Tournament Center: only party leaders can register, and only the Host advances results.
+  const tournamentPin = "654321";
+  const tournamentBase = `rooms/${tournamentPin}`;
+  const tournamentSocial = `${tournamentBase}/socialCompetition`;
+  await assertSucceeds(set(ref(host, `${tournamentBase}/meta`), {
+    hostUid: "host", title: "Tournament Rules", status: "lobby", maxPlayers: 10
+  }));
+  await assertSucceeds(set(ref(host, `${tournamentBase}/public`), {
+    phase: "lobby", questionIndex: -1, totalQuestions: 1, durationSeconds: 10,
+    question: { category: "", question: "", options: [] }, title: "Tournament Rules", deadlineAt: 0
+  }));
+  await assertSucceeds(set(ref(p1, `${tournamentBase}/players/player-1`), profile("player-1", "Player 1")));
+  await assertSucceeds(set(ref(p2, `${tournamentBase}/players/player-2`), profile("player-2", "Player 2")));
+  await assertSucceeds(set(ref(p1, `${tournamentSocial}/parties/PARY01`), {
+    leaderUid: "player-1", teamId: "red", createdAt: Date.now(),
+    members: { slot1: { uid: "player-1", name: "Player 1", joinedAt: Date.now() } }
+  }));
+  await assertSucceeds(set(ref(p1, `${tournamentSocial}/playerParties/player-1`), "PARY01"));
+  await assertSucceeds(set(ref(p2, `${tournamentSocial}/parties/PARY02`), {
+    leaderUid: "player-2", teamId: "blue", createdAt: Date.now(),
+    members: { slot1: { uid: "player-2", name: "Player 2", joinedAt: Date.now() } }
+  }));
+  await assertSucceeds(set(ref(p2, `${tournamentSocial}/playerParties/player-2`), "PARY02"));
+
+  const tournamentMeta = `${tournamentSocial}/tournament/meta`;
+  await assertSucceeds(set(ref(host, tournamentMeta), {
+    tournamentId: "cup-1", title: "QuizVerse Cup", phase: "registration",
+    createdAt: Date.now(), maxParties: 16
+  }));
+  const regOne = `${tournamentSocial}/tournament/registrations/cup-1/slot01`;
+  const regTwo = `${tournamentSocial}/tournament/registrations/cup-1/slot02`;
+  await assertFails(set(ref(p2, regOne), {
+    partyCode: "PARY01", leaderUid: "player-1", partyName: "Party One", registeredAt: Date.now()
+  }));
+  await assertSucceeds(set(ref(p1, regOne), {
+    partyCode: "PARY01", leaderUid: "player-1", partyName: "Party One", registeredAt: Date.now()
+  }));
+  await assertSucceeds(set(ref(p2, regTwo), {
+    partyCode: "PARY02", leaderUid: "player-2", partyName: "Party Two", registeredAt: Date.now()
+  }));
+  await assertSucceeds(update(ref(host, tournamentMeta), { phase: "active", startedAt: Date.now() }));
+  await assertFails(set(ref(p1, `${tournamentSocial}/tournament/registrations/cup-1/slot03`), {
+    partyCode: "PARY01", leaderUid: "player-1", partyName: "Party One", registeredAt: Date.now()
+  }));
+  await assertFails(set(ref(p1, `${tournamentSocial}/parties/PARY01/members/slot1`), null));
+
+  const tournamentTeamSession = `${tournamentBase}/miniGames/teamColorBattle/session`;
+  const tournamentTeamRound = `${tournamentBase}/miniGames/teamColorBattle/round`;
+  await assertSucceeds(set(ref(host, tournamentTeamSession), {
+    sessionId: 1, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now(),
+    tournamentId: "cup-1", tournamentMatchId: "r1m1", partyA: "PARY01", partyB: "PARY02"
+  }));
+  for (let roundId = 1; roundId <= 5; roundId++) {
+    await assertSucceeds(update(ref(host, tournamentTeamSession), { roundId }));
+    const end = Date.now() - 100;
+    await assertSucceeds(set(ref(host, tournamentTeamRound), {
+      sessionId: 1, roundId, phase: "preparing", targetIndex: roundId % 4,
+      startsAt: end - 1000, endsAt: end
+    }));
+    await assertSucceeds(update(ref(host, tournamentTeamRound), { phase: "active" }));
+  }
+  await assertSucceeds(update(ref(host, tournamentTeamSession), { status: "finished", finishedAt: Date.now() }));
+  const tournamentResult = `${tournamentSocial}/tournament/results/cup-1/r1m1`;
+  const resultRecord = {
+    matchId: "r1m1", partyA: "PARY01", partyB: "PARY02",
+    winnerPartyCode: "PARY01", winningTeam: "red", teamSessionId: 1, finishedAt: Date.now()
+  };
+  await assertFails(set(ref(p1, tournamentResult), resultRecord));
+  await assertFails(set(ref(host, tournamentResult), { ...resultRecord, winnerPartyCode: "PARY03" }));
+  await assertSucceeds(set(ref(host, tournamentResult), resultRecord));
+  await assertSucceeds(update(ref(host, tournamentMeta), {
+    phase: "completed", completedAt: Date.now(), championPartyCode: "PARY01"
+  }));
+  console.log("PASS: private keys, one answer per round, mini-game security, party permissions, tournament registrations, and host-only bracket results.");
 } finally {
   await env.cleanup();
 }
