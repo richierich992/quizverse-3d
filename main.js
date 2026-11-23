@@ -2744,7 +2744,7 @@ function movePlayer(dt) {
       speed = 1.55;
     }
     const separation = lobbySeparationVector(ownPosition.x, ownPosition.z);
-    const avoidanceWeight = manual ? 0.24 : 1.55;
+    const avoidanceWeight = manual ? 0.90 : 2.60;
     input = {
       x: input.x + separation.x * avoidanceWeight,
       z: input.z + separation.z * avoidanceWeight
