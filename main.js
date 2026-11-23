@@ -1373,7 +1373,11 @@ function updateLobbySocial() {
   Object.values(remotePlayers).forEach((entry) => avatars.push(entry.mesh));
 
   if (activeState?.phase !== "lobby") {
-    avatars.forEach((mesh) => { mesh.userData.socialLookYaw = 0; });
+    avatars.forEach((mesh) => {
+      mesh.userData.socialLookYaw = 0;
+      mesh.userData.socialConversation = 0;
+      mesh.userData.socialPartnerId = "";
+    });
     return;
   }
   avatars.forEach((mesh) => {
@@ -1386,9 +1390,10 @@ function updateLobbySocial() {
       const distance = Math.hypot(dx, dz);
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearest = { dx, dz };
+        nearest = { mesh: other, dx, dz, distance };
       }
     });
+
     let desiredYaw = 0;
     if (nearest) {
       desiredYaw = Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y;
@@ -1400,6 +1405,15 @@ function updateLobbySocial() {
       Math.cos(desiredYaw - currentYaw)
     );
     mesh.userData.socialLookYaw = currentYaw + yawDelta * 0.075;
+
+    // A little hysteresis avoids flickering between conversation and idle when people move.
+    const conversationTarget = nearest && nearest.distance < 6.2 ? 1 : 0;
+    const currentConversation = Number(mesh.userData.socialConversation || 0);
+    mesh.userData.socialConversation = currentConversation +
+      (conversationTarget - currentConversation) * 0.065;
+    mesh.userData.socialPartnerId = conversationTarget
+      ? String(nearest.mesh.userData.socialId || "")
+      : "";
   });
 }
 
@@ -1479,16 +1493,34 @@ function animateAvatar(mesh, time, moving = false) {
   const socialEnabled = activeState?.phase === "lobby" && !moving && !airborne;
   const socialOffset = Number(mesh.userData.socialOffset || 0);
   const socialCycle = (time + socialOffset) % 14500;
-  const socialWave = socialEnabled && socialCycle < 920
-    ? Math.sin((socialCycle / 920) * Math.PI)
+  const socialConversation = socialEnabled
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialConversation || 0), 0, 1)
+    : 0;
+  const socialWave = socialConversation > 0.42 && socialCycle < 920
+    ? Math.sin((socialCycle / 920) * Math.PI) * socialConversation
+    : 0;
+  const socialNod = socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
+    ? Math.sin(((socialCycle - 1450) / 900) * Math.PI) * socialConversation
+    : 0;
+  const socialChat = socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
+    ? Math.sin(((socialCycle - 2650) / 1550) * Math.PI) * socialConversation
     : 0;
   const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
-  rig.head.rotation.y = socialLook * 0.48 + Math.sin(t * 0.72) * 0.035;
+  rig.head.rotation.y = socialLook * (0.48 + socialConversation * 0.18) + Math.sin(t * 0.72) * 0.035;
+  rig.head.rotation.x += socialNod * 0.11;
   rig.head.rotation.z = idleSway * 0.025 + Math.sin(t * 0.55) * 0.012;
   if (socialWave > 0) {
     rig.rightArm.rotation.z -= 1.02 * socialWave;
     rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
     rig.torso.rotation.z -= 0.045 * socialWave;
+  }
+  if (socialChat > 0) {
+    const chatBeat = Math.sin(t * 8.5 + Number(mesh.userData.socialOffset || 0) * 0.001);
+    rig.leftArm.rotation.z += 0.13 * socialChat;
+    rig.rightArm.rotation.z -= 0.17 * socialChat;
+    rig.leftArm.rotation.x += chatBeat * 0.10 * socialChat;
+    rig.rightArm.rotation.x -= chatBeat * 0.12 * socialChat;
+    rig.torso.rotation.z += chatBeat * 0.018 * socialChat;
   }
 
   const reaction = mesh.userData.reaction;
@@ -1581,8 +1613,11 @@ function socialOffsetFor(identity) {
 }
 function setAvatarSocialIdentity(mesh, identity) {
   if (!mesh) return;
-  mesh.userData.socialOffset = socialOffsetFor(identity);
+  mesh.userData.socialId = String(identity || "player");
+  mesh.userData.socialOffset = socialOffsetFor(mesh.userData.socialId);
   mesh.userData.socialLookYaw = 0;
+  mesh.userData.socialConversation = 0;
+  mesh.userData.socialPartnerId = "";
 }
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
@@ -2719,6 +2754,28 @@ function lobbySeparationVector(x, z) {
   }
   return { x: steerX, z: steerZ };
 }
+
+function lobbySocialVector(x, z) {
+  let pullX = 0;
+  let pullZ = 0;
+  let totalWeight = 0;
+  for (const entry of Object.values(remotePlayers)) {
+    const dx = entry.mesh.position.x - x;
+    const dz = entry.mesh.position.z - z;
+    const distance = Math.hypot(dx, dz);
+    // Approach nearby people gently, but keep a comfortable conversational gap.
+    if (distance <= 3.8 || distance >= 9.5) continue;
+    const weight = (9.5 - distance) / 5.7;
+    pullX += (dx / distance) * weight;
+    pullZ += (dz / distance) * weight;
+    totalWeight += weight;
+  }
+  if (totalWeight > 0) {
+    pullX /= totalWeight;
+    pullZ /= totalWeight;
+  }
+  return { x: pullX, z: pullZ };
+}
 function movePlayer(dt) {
   if (!playerMesh) return;
   const phase = activeState?.phase;
@@ -2744,10 +2801,11 @@ function movePlayer(dt) {
       speed = 1.55;
     }
     const separation = lobbySeparationVector(ownPosition.x, ownPosition.z);
+    const socialPull = manual ? { x: 0, z: 0 } : lobbySocialVector(ownPosition.x, ownPosition.z);
     const avoidanceWeight = manual ? 0.90 : 2.60;
     input = {
-      x: input.x + separation.x * avoidanceWeight,
-      z: input.z + separation.z * avoidanceWeight
+      x: input.x + separation.x * avoidanceWeight + socialPull.x * 0.42,
+      z: input.z + separation.z * avoidanceWeight + socialPull.z * 0.42
     };
     const inputLength = Math.hypot(input.x, input.z);
     if (inputLength > 1) {
