@@ -170,7 +170,7 @@ assert.match(main, /const groundHeight = avatarGroundHeight\(mesh\);\s*const jum
 assert.match(main, /function triggerAvatarReaction\(mesh, kind, duration = 1\.7\)/, "Avatar reactions use a shared timed animation trigger");
 assert.match(main, /function updateLobbySocial\(\)/, "Lobby avatars look toward a nearby participant");
 assert.match(main, /nearestDistance = 12/, "Social attention is limited to nearby players");
-assert.match(main, /const socialWave = socialEnabled && socialCycle < 920/, "Lobby greeting waves are staggered and time-limited");
+assert.match(main, /const socialWave = socialConversation > 0\.42 && socialCycle < 920/, "Lobby greeting waves are proximity-gated, staggered, and time-limited");
 assert.match(main, /const yawDelta = Math\.atan2\([\s\S]*?Math\.cos\(desiredYaw - currentYaw\)/, "Social head turns take the shortest angular path");
 assert.match(main, /rig\.rightArm\.rotation\.z -= 1\.02 \* socialWave/, "Idle greeting includes a clear waving arm pose");
 assert.match(main, /setAvatarSocialIdentity\(mesh, id\)/, "Remote social gestures are staggered by player identity");
