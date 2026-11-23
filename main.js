@@ -71,7 +71,7 @@ let ownPosition = { x: 0, z: 0 }, moveKeys = {}, joystick = { x: 0, y: 0 };
 let jumpVelocity = 0, grounded = true, serverOffset = 0;
 let stateUnsubscribe = null, playersUnsubscribe = null;
 let lastQuestionIndex = -1;
-let localAnswerRound = -1, answerBusy = false, scoreBusyRound = -1;
+let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
 let lastVisualStateKey = "";
 const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
@@ -645,9 +645,23 @@ function triggerQuestionStart() {
   $("app").classList.add("question-enter");
   celebrationParticles.forEach((particle) => { particle.visible = false; });
 }
+function triggerAvatarReaction(mesh, kind, duration = 1.7) {
+  if (!mesh?.userData) return;
+  mesh.userData.reaction = {
+    kind,
+    startedAt: performance.now(),
+    duration: Math.max(0.35, duration)
+  };
+}
+
 function triggerAnswerReveal(state) {
   const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
   const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
+  // Remote avatars only show a shared reveal reaction; their private answer stays private.
+  Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "reveal", 1.2));
+  if (playerMesh && localAnswerRound === Number(state.questionIndex) && localAnswerIndex >= 0) {
+    triggerAvatarReaction(playerMesh, localAnswerIndex === correctIndex ? "correct" : "wrong", 1.85);
+  }
   matchVisualEvent.kind = "reveal";
   matchVisualEvent.startedAt = performance.now();
   matchVisualEvent.duration = 1.65;
@@ -674,6 +688,32 @@ function triggerAnswerReveal(state) {
     particle.visible = true;
   });
 }
+function triggerGameFinish() {
+  if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
+  Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
+
+  matchVisualEvent.kind = "victory";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 2.25;
+  matchVisualEvent.x = 0;
+  matchVisualEvent.z = 0;
+  matchVisualEvent.color = "#ffd166";
+  $("app").classList.remove("timer-critical", "question-enter", "answer-revealed");
+  celebrationParticles.forEach((particle, index) => {
+    const angle = (index / celebrationParticles.length) * Math.PI * 2;
+    const speed = 1.7 + (index % 4) * 0.42;
+    particle.position.set(0, 1.7 + (index % 3) * 0.2, 0);
+    particle.userData.velocity.set(
+      Math.cos(angle) * speed,
+      3.0 + (index % 5) * 0.38,
+      Math.sin(angle) * speed
+    );
+    particle.rotation.set(index * 0.17, index * 0.23, index * 0.11);
+    particle.material.opacity = 1;
+    particle.visible = true;
+  });
+}
+
 function updateMatchVisualEffects(now, dt) {
   const event = matchVisualEvent;
   const elapsed = event.kind ? (now - event.startedAt) / 1000 : Infinity;
@@ -1110,6 +1150,37 @@ function animateAvatar(mesh, time, moving = false) {
   rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
   rig.head.rotation.y = Math.sin(t * 0.72) * 0.035;
   rig.head.rotation.z = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.55) * 0.012;
+
+  const reaction = mesh.userData.reaction;
+  if (reaction) {
+    const progress = (time - reaction.startedAt) / reaction.duration;
+    if (progress >= 1) {
+      mesh.userData.reaction = null;
+    } else if (progress >= 0) {
+      const strength = Math.sin(Math.PI * THREE.MathUtils.clamp(progress, 0, 1));
+      if (reaction.kind === "correct" || reaction.kind === "victory") {
+        const bounce = Math.abs(Math.sin(t * 10.5)) * strength;
+        rig.leftArm.rotation.z += 0.78 * strength;
+        rig.rightArm.rotation.z -= 0.78 * strength;
+        rig.leftLeg.rotation.x -= 0.34 * strength;
+        rig.rightLeg.rotation.x -= 0.34 * strength;
+        rig.torso.position.y += 0.12 * strength + 0.13 * bounce;
+        rig.head.rotation.z += Math.sin(t * 7.5) * 0.055 * strength;
+      } else if (reaction.kind === "wrong" || reaction.kind === "missed") {
+        rig.leftArm.rotation.z -= 0.28 * strength;
+        rig.rightArm.rotation.z += 0.28 * strength;
+        rig.leftArm.rotation.x += 0.18 * strength;
+        rig.rightArm.rotation.x += 0.18 * strength;
+        rig.torso.rotation.z += 0.105 * strength;
+        rig.head.rotation.x += 0.13 * strength;
+        rig.head.rotation.z += 0.12 * strength;
+      } else if (reaction.kind === "reveal") {
+        rig.head.rotation.x -= 0.095 * strength;
+        rig.head.rotation.z += Math.sin(t * 3.2) * 0.035 * strength;
+      }
+    }
+  }
+
   // A quick, staggered blink keeps the faces from looking like static dolls.
   const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
   let blinkScale = 1;
@@ -1220,6 +1291,8 @@ function updateRemoteAvatar(id, data) {
     };
     remotePlayers[id] = entry;
     scene.add(entry.mesh);
+    if (activeState?.phase === "reveal") triggerAvatarReaction(entry.mesh, "reveal", 1.2);
+    else if (activeState?.phase === "finished") triggerAvatarReaction(entry.mesh, "victory", 2.25);
   } else {
     setAvatarNameTag(entry.mesh, name);
   }
@@ -1295,6 +1368,7 @@ function subscribeRoom() {
       if (lastQuestionIndex !== Number(activeState.questionIndex)) {
         lastQuestionIndex = Number(activeState.questionIndex);
         localAnswerRound = -1;
+        localAnswerIndex = -1;
         answerBusy = false;
         ownPosition = { x: 0, z: 0 };
         if (playerMesh) playerMesh.position.set(0, 0, 0);
@@ -1319,6 +1393,7 @@ function subscribeRoom() {
       });
       settleMyScore(activeState).catch((error) => console.warn("Settle score:", error));
     } else if (activeState.phase === "finished") {
+      if (visualPhaseChanged) triggerGameFinish();
       $("roundLeaderboard").classList.add("hidden");
       renderPodium(activeState.podium || []);
       showScreen("endScreen");
@@ -1499,6 +1574,7 @@ async function submitPlatformAnswer(index) {
       questionIndex: localAnswerRound,
       answerIndex: index
     });
+    localAnswerIndex = Number(index);
     $("feedback").textContent = "Jawaban terkirim. Tunggu pengungkapan hasil.";
   } catch (error) {
     answerBusy = false;
@@ -1509,13 +1585,20 @@ async function settleMyScore(state) {
   const round = Number(state.questionIndex);
   if (!db || !roomPin || !uid || scoreBusyRound === round) return;
   const own = playerData[uid];
-  if (!own || Number(own.lastScoredQuestionIndex ?? -1) >= round) return;
+  if (!own) return;
+  const alreadyScored = Number(own.lastScoredQuestionIndex ?? -1) >= round;
   scoreBusyRound = round;
   try {
     const answerSnap = await get(dbPath(`submissions/${roomPin}/current/${uid}`));
     const answer = answerSnap.val();
     const hasThisAnswer = answer && Number(answer.questionIndex) === round;
     const correct = Boolean(hasThisAnswer && Number(answer.answerIndex) === Number(state.correctOption));
+    if (playerMesh && (localAnswerRound !== round || localAnswerIndex < 0)) {
+      localAnswerRound = round;
+      localAnswerIndex = hasThisAnswer ? Number(answer.answerIndex) : -1;
+      triggerAvatarReaction(playerMesh, correct ? "correct" : hasThisAnswer ? "wrong" : "missed", 1.85);
+    }
+    if (alreadyScored) return;
     const nextScore = Number(own.score || 0) + (correct ? 100 : 0);
     const nextStreak = correct ? Number(own.streak || 0) + 1 : 0;
     await update(dbPath(`rooms/${roomPin}/players/${uid}`), {
