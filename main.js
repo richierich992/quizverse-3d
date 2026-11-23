@@ -862,7 +862,7 @@ function animateAudience(now) {
     : Infinity;
   const eventActive = elapsed >= 0 && elapsed < audienceReaction.duration;
   const eventKind = audienceReaction.kind;
-  const intensity = eventActive
+  const intensity = !matchMotionPreference.matches && eventActive
     ? (eventKind === "victory" ? 1 : 0.68) *
       Math.sin(Math.PI * THREE.MathUtils.clamp(elapsed / audienceReaction.duration, 0, 1))
     : 0;
