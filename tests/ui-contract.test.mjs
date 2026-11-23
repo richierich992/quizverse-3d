@@ -203,7 +203,7 @@ assert.match(main, /activeState\?\.phase === "finished"\) \{\s*updateWinnerCamer
 assert.match(main, /const winnerBlend = 1 - Math\.exp\(-2\.6 \* dt\)/, "Local champion walks smoothly toward the podium");
 assert.match(main, /const positionBlend = winnerTarget \? 1 - Math\.exp\(-2\.6 \* dt\) : remoteBlend/, "Remote champions use the same walking speed as local champion");
 assert.match(main, /animateAvatar\(playerMesh, now, Boolean\(playerMesh\.userData\.moving\) \|\| localWinnerWalking\)/, "Local champion uses a walking cycle during podium approach");
-assert.match(main, /const moving = winnerWalking \|\| \(distanceToTarget > 0\.025/, "Remote champions use a walking cycle during podium approach");
+assert.match(main, /const moving = winnerWalking \\|\\| networkMoving/, "Remote avatars keep their gait between network position updates");
 assert.match(main, /if \(activeState\?\.phase === "finished"\) applyWinnerPlacements\(activeState\.podium \|\| \[\]\)/, "Late player roster updates still place podium winners");
 
 assert.match(main, /reaction\.kind === "correct" \|\| reaction\.kind === "victory"/, "Correct answers and final victory use an upbeat pose");
@@ -230,6 +230,7 @@ assert.match(main, /const ARENA_STATIC_CIRCLE_COLLIDERS = \[/, "Arena support co
 assert.match(main, /function isArenaStaticBlocked\(x, z\)/, "Movement checks the static arena geometry");
 assert.match(main, /function isPlayerMovementBlocked\(x, z, fromX, fromZ\)/, "Players cannot walk through nearby remote avatars");
 assert.match(main, /let lobbyRoamState = null/, "Lobby ambient motion is stored as client-side state");
+assert.match(main, /const syncInterval = inLobby \? 320 : 200/, "Lobby movement sync is less frequent than live quiz movement");
 assert.match(main, /function resetLobbyRoam\(\)/, "Lobby roaming initializes around the player's safe spawn point");
 assert.match(main, /function chooseLobbyRoamTarget\(now\)/, "Lobby wander destinations are selected deterministically");
 assert.match(main, /function getLobbyRoamVector\(now\)/, "Lobby avatars walk between short ambient destinations");
