@@ -579,6 +579,66 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
     transform:translate(-50%,0);
   }
 }
+.champion-banner{
+  position:absolute;
+  z-index:4;
+  top:clamp(70px,9vh,104px);
+  left:50%;
+  display:grid;
+  justify-items:center;
+  gap:6px;
+  width:min(520px,90vw);
+  padding:13px 22px 14px;
+  border:1px solid #f4d27b88;
+  border-radius:16px;
+  background:linear-gradient(108deg,rgba(35,25,16,.92),rgba(61,45,20,.90),rgba(27,24,18,.94));
+  box-shadow:0 18px 56px #0008,0 0 32px #f5c75d30,inset 0 1px #fff3;
+  backdrop-filter:blur(14px);
+  opacity:0;
+  transform:translate(-50%,14px) scale(.94);
+  text-align:center;
+  pointer-events:none;
+}
+#app.champions-reveal .champion-banner{
+  animation:championBannerEntrance .82s cubic-bezier(.18,.82,.24,1) both;
+}
+.champion-banner-kicker{
+  color:#ffdf92;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:3px;
+}
+.champion-banner strong{
+  color:#fff5d9;
+  font:800 clamp(14px,2.1vw,21px)/1.1 'Space Grotesk',sans-serif;
+  letter-spacing:1.2px;
+  text-shadow:0 0 20px #f5c75d66;
+}
+.champion-banner>span:last-child{
+  max-width:100%;
+  color:#fff;
+  font:700 clamp(17px,2.8vw,25px)/1.15 'Space Grotesk',sans-serif;
+  overflow-wrap:anywhere;
+  text-shadow:0 2px 14px #000;
+}
+@keyframes championBannerEntrance{
+  0%{opacity:0;transform:translate(-50%,18px) scale(.92);filter:blur(6px)}
+  72%{opacity:1;transform:translate(-50%,-2px) scale(1.015);filter:blur(0)}
+  100%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}
+}
+@media(max-width:650px){
+  .champion-banner{top:68px;padding:10px 12px 11px;gap:5px;border-radius:13px}
+  .champion-banner-kicker{font-size:7px;letter-spacing:2px}
+  .champion-banner strong{font-size:13px}
+  .champion-banner>span:last-child{font-size:17px}
+}
+@media(prefers-reduced-motion:reduce){
+  #app.champions-reveal .champion-banner{
+    animation:none!important;
+    opacity:1;
+    transform:translate(-50%,0);
+  }
+}
 @media(prefers-reduced-motion:reduce){
   #app.question-enter .question-card,
   #app.question-enter .round-intro,
