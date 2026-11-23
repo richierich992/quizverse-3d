@@ -52,7 +52,7 @@ assert.match(main, /function leaveParty\(\)/, "Players can leave a party and tra
 assert.match(main, /function setPartyTeam\(teamId\)/, "Party leaders can choose the team's side");
 assert.match(main, /Object\.values\(party\?\.members \|\| \{\}\)\.some\(\(member\) => member\?\.uid === playerId\)/, "Team Battle respects each party's chosen team");
 assert.match(main, /winners\["round" \+ roundId\]/, "Team Battle uses the fixed winner-slot key for the current round");
-assert.match(main, /socialCompetition\\/stats\\/" \\+ playerId[\\s\\S]*?\\/matches\\/session-/, "Completed Team Battle writes separate per-player match records");
+assert.match(main, /socialCompetition\/stats\/" \+ playerId[\s\S]*?\/matches\/session-/, "Completed Team Battle writes separate per-player match records");
 assert.match(main, /function subscribeSocialCompetition\(\)/, "Party membership and personal statistics are synchronized live");
 assert.match(main, /function renderPartyCenter\(\)/, "Party Center renders membership, team choice and win/loss record");
 assert.match(css, /\.party-team-button\.is-selected/, "The selected party team is visibly highlighted");
