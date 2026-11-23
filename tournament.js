@@ -35,9 +35,11 @@ export function buildSingleEliminationBracket(entrants, matchResults = {}) {
   let bracketSize = 2;
   while (bracketSize < list.length) bracketSize *= 2;
   const roundCount = Math.log2(bracketSize);
-  let previousWinners = Array.from({ length: bracketSize }, (_, index) =>
-    list[index]?.partyCode || null
-  );
+  let previousWinners = Array.from({ length: bracketSize }, (_, index) => ({
+    partyCode: list[index]?.partyCode || null,
+    // An unseeded slot is an actual empty slot; a seeded party is ready to compete.
+    resolved: !list[index]
+  }));
   const rounds = {};
 
   for (let roundIndex = 1; roundIndex <= roundCount; roundIndex++) {
@@ -47,8 +49,10 @@ export function buildSingleEliminationBracket(entrants, matchResults = {}) {
 
     for (let matchIndex = 0; matchIndex < matchCount; matchIndex++) {
       const id = "r" + roundIndex + "m" + (matchIndex + 1);
-      const partyA = previousWinners[matchIndex * 2] || null;
-      const partyB = previousWinners[matchIndex * 2 + 1] || null;
+      const slotA = previousWinners[matchIndex * 2] || { partyCode: null, resolved: true };
+      const slotB = previousWinners[matchIndex * 2 + 1] || { partyCode: null, resolved: true };
+      const partyA = slotA.partyCode || null;
+      const partyB = slotB.partyCode || null;
       const recordedWinner = String(matchResults?.[id] || "");
       let status = "empty";
       let winnerPartyCode = null;
@@ -61,8 +65,15 @@ export function buildSingleEliminationBracket(entrants, matchResults = {}) {
           status = "ready";
         }
       } else if (partyA || partyB) {
-        status = "bye";
-        winnerPartyCode = partyA || partyB;
+        const emptySideResolved = partyA ? slotB.resolved : slotA.resolved;
+        if (emptySideResolved) {
+          status = "bye";
+          winnerPartyCode = partyA || partyB;
+        } else {
+          status = "waiting";
+        }
+      } else if (!slotA.resolved || !slotB.resolved) {
+        status = "waiting";
       }
 
       matches["match" + (matchIndex + 1)] = {
@@ -72,7 +83,10 @@ export function buildSingleEliminationBracket(entrants, matchResults = {}) {
         status,
         winnerPartyCode
       };
-      nextWinners.push(winnerPartyCode);
+      nextWinners.push({
+        partyCode: winnerPartyCode,
+        resolved: status === "finished" || status === "bye" || status === "empty"
+      });
     }
 
     rounds["round" + roundIndex] = {
