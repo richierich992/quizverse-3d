@@ -163,6 +163,12 @@ try {
   }
   await assertSucceeds(update(ref(host, teamSession), { status: "finished" }));
   await assertSucceeds(set(ref(host, `${teamBase}/winners`), null));
+  await assertSucceeds(set(ref(host, `${socialBase}/stats/player-1/matches/session-1`), {
+    sessionId: 1, teamId: "red", result: "win", finishedAt: Date.now()
+  }));
+  await assertFails(set(ref(host, `${socialBase}/stats/player-1/matches/session-1`), {
+    sessionId: 1, teamId: "red", result: "win", finishedAt: Date.now()
+  }));
   await assertSucceeds(set(ref(host, teamSession), {
     sessionId: 2, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now()
   }));
@@ -171,6 +177,40 @@ try {
   }));
   await assertFails(set(ref(p1, `${teamBase}/winners/round1`), {
     sessionId: 2, roundId: 1, uid: "player-1", name: "Player 1", teamId: "red", answerIndex: 1
+  }));
+
+  const socialBase = `${base}/socialCompetition`;
+  const partyCode = "ABC234";
+  const partyRef = `${socialBase}/parties/${partyCode}`;
+  const pointer1 = `${socialBase}/playerParties/player-1`;
+  const pointer2 = `${socialBase}/playerParties/player-2`;
+  await assertFails(set(ref(p1, `${partyRef}`), {
+    leaderUid: "player-1", teamId: "red", createdAt: Date.now(),
+    members: { "player-1": { name: "Player 1", joinedAt: Date.now() } }
+  }));
+  await assertSucceeds(set(ref(p1, `${partyRef}`), {
+    leaderUid: "player-1", teamId: "red", createdAt: Date.now(),
+    members: { "player-1": { name: "Player 1", joinedAt: Date.now() } }
+  }));
+  await assertSucceeds(set(ref(p1, pointer1), partyCode));
+  await assertSucceeds(update(ref(p1, socialBase), {
+    [`parties/${partyCode}/members/player-2`]: { name: "Player 2", joinedAt: Date.now() },
+    "playerParties/player-2": partyCode
+  }));
+  await assertFails(set(ref(p2, `${socialBase}/parties/${partyCode}/teamId`), "blue"));
+  await assertSucceeds(set(ref(p1, `${socialBase}/parties/${partyCode}/teamId`), "blue"));
+  await assertSucceeds(update(ref(p2, socialBase), {
+    [`parties/${partyCode}/members/player-2`]: null,
+    "playerParties/player-2": null
+  }));
+  await assertSucceeds(update(ref(p1, socialBase), {
+    [`parties/${partyCode}/members/player-1`]: null,
+    "parties/${partyCode}`: null,
+    "playerParties/player-1": null
+  }));
+  const statsPath = `${socialBase}/stats/player-1/matches/session-1`;
+  await assertFails(set(ref(p1, statsPath), {
+    sessionId: 1, teamId: "red", result: "win", finishedAt: Date.now()
   }));
 
   const deadline0 = Date.now() + 5000;
