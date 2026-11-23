@@ -685,3 +685,86 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   #endScreen .podium-name,#endScreen .podium-score{font-size:11px}
   #endScreen .primary{padding:9px 12px;font-size:10px}
 }
+
+
+/* Optional lobby mini-game: Reaction Rush */
+.reaction-rush-card{
+  margin-top:17px;
+  padding:14px 15px;
+  border:1px solid #39708a88;
+  border-radius:15px;
+  background:linear-gradient(132deg,rgba(14,45,64,.92),rgba(11,27,45,.94));
+  box-shadow:inset 0 1px #ffffff10,0 8px 24px #0003;
+}
+.reaction-rush-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.reaction-rush-heading .eyebrow{font-size:8px;letter-spacing:1.7px}
+.reaction-rush-card>strong{display:block;color:#f1fbff;font:700 17px 'Space Grotesk',sans-serif}
+.reaction-rush-card>p{margin:5px 0 11px;color:#9bb5ca;font-size:10px;line-height:1.45}
+.reaction-rush-best{color:#7899b3;font-size:8px;font-weight:800;letter-spacing:1.2px;white-space:nowrap}
+.reaction-rush-best b{color:#8ef1c7;font-size:10px;letter-spacing:0}
+.reaction-rush-overlay{
+  position:absolute;z-index:12;inset:0;display:grid;place-items:center;
+  padding:18px;background:rgba(2,9,17,.72);backdrop-filter:blur(10px);
+}
+.reaction-rush-dialog{
+  position:relative;display:grid;justify-items:center;gap:11px;
+  width:min(420px,calc(100vw - 32px));padding:25px 24px 19px;
+  border:1px solid #5daacb88;border-radius:22px;
+  background:linear-gradient(145deg,rgba(13,37,57,.98),rgba(6,19,34,.98));
+  box-shadow:0 25px 90px #000b,inset 0 1px #ffffff16;
+  text-align:center;
+}
+.reaction-rush-close{
+  position:absolute;right:12px;top:11px;width:30px;height:30px;
+  border:1px solid #44647c;border-radius:10px;background:#10283d;color:#c4d9e9;
+  font-size:20px;line-height:1;
+}
+.reaction-rush-dialog .eyebrow{font-size:8px;letter-spacing:2.3px}
+.reaction-rush-dialog h2{margin:0;color:#f2fbff;font:700 25px/1.1 'Space Grotesk',sans-serif}
+.reaction-rush-signal{
+  display:grid;place-items:center;width:154px;height:154px;margin:5px 0 1px;
+  border:8px solid #31516d;border-radius:50%;
+  background:radial-gradient(circle at 40% 30%,#244d69,#0a1d31 72%);
+  box-shadow:0 0 0 8px #132e45,0 0 32px #234c6888,inset 0 4px 18px #0008;
+  transition:background .16s,border-color .16s,box-shadow .16s;
+}
+.reaction-rush-signal span{color:#e7f5ff;font:800 17px 'Space Grotesk',sans-serif;letter-spacing:2px}
+.reaction-rush-signal[data-phase="waiting"]{
+  border-color:#e49b59;background:radial-gradient(circle,#79452d,#251b24 75%);
+  box-shadow:0 0 0 8px #402c31,0 0 24px #ffad5b45,inset 0 4px 18px #0008;
+}
+.reaction-rush-signal[data-phase="go"]{
+  border-color:#73f0b5;background:radial-gradient(circle,#36d99a,#0b503e 76%);
+  box-shadow:0 0 0 8px #164b3d,0 0 42px #45f0ad99,inset 0 4px 18px #0005;
+  animation:reactionRushGo .42s ease-out both;
+}
+.reaction-rush-signal[data-phase="go"] span{color:#052b20;text-shadow:0 1px #ffffff55}
+.reaction-rush-signal[data-phase="false-start"]{
+  border-color:#ff718b;background:radial-gradient(circle,#a93855,#3b172a 76%);
+  box-shadow:0 0 0 8px #4f2437,0 0 30px #ff587355,inset 0 4px 18px #0008;
+}
+.reaction-rush-signal[data-phase="result"]{
+  border-color:#76caff;background:radial-gradient(circle,#2f86bc,#15375b 76%);
+  box-shadow:0 0 0 8px #1b3e5e,0 0 32px #58b9ff66,inset 0 4px 18px #0008;
+}
+@keyframes reactionRushGo{
+  0%{transform:scale(.92);filter:brightness(.7)}
+  65%{transform:scale(1.045);filter:brightness(1.2)}
+  100%{transform:scale(1);filter:brightness(1)}
+}
+.reaction-rush-result{min-height:21px;color:#f1fbff;font:700 15px 'Space Grotesk',sans-serif}
+.reaction-rush-dialog>p{max-width:330px;min-height:34px;margin:0;color:#a9c0d4;font-size:11px;line-height:1.5}
+.reaction-rush-dialog>.primary{max-width:290px}
+.reaction-rush-dialog-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;border-top:1px solid #ffffff18;padding-top:12px;color:#819cb4;font-size:9px}
+.reaction-rush-dialog-footer b{color:#8ef1c7;font-size:11px}
+.reaction-rush-dialog-footer .secondary{padding:7px 12px;font-size:9px}
+@media(max-width:650px){
+  .reaction-rush-card{margin-top:13px;padding:12px}
+  .reaction-rush-dialog{gap:9px;padding:22px 18px 15px;border-radius:18px}
+  .reaction-rush-dialog h2{font-size:22px}
+  .reaction-rush-signal{width:138px;height:138px}
+}
+@media(prefers-reduced-motion:reduce){
+  .reaction-rush-signal{transition:none}
+  .reaction-rush-signal[data-phase="go"]{animation:none}
+}
