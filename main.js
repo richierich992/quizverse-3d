@@ -1374,6 +1374,7 @@ function animateAvatar(mesh, time, moving = false) {
   const airborne = jumpHeight > 0.12;
   const reducedMotion = matchMotionPreference.matches;
   const motionScale = reducedMotion ? 0.58 : 1;
+  const jumpPose = jumpHeight * motionScale;
 
   if (motion.wasAirborne && !airborne) motion.landedAt = time;
   motion.wasAirborne = airborne;
@@ -1392,14 +1393,14 @@ function animateAvatar(mesh, time, moving = false) {
   const idleSway = Math.sin(t * 1.15 + (mesh.id % 5) * 0.31);
 
   // Alternating foot lift and opposite arm swing make the walk cycle read clearly at game scale.
-  rig.leftArm.rotation.x = swing * 0.68 + idleBreath * 0.025 + jumpHeight * 0.22;
-  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.025 + jumpHeight * 0.22;
-  rig.leftArm.rotation.z = -0.035 - swing * 0.10 + jumpHeight * 0.46;
-  rig.rightArm.rotation.z = 0.035 + swing * 0.10 - jumpHeight * 0.46;
+  rig.leftArm.rotation.x = swing * 0.68 + idleBreath * 0.025 + jumpPose * 0.22;
+  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.025 + jumpPose * 0.22;
+  rig.leftArm.rotation.z = -0.035 - swing * 0.10 + jumpPose * 0.46;
+  rig.rightArm.rotation.z = 0.035 + swing * 0.10 - jumpPose * 0.46;
 
-  const walkLegBlend = 1 - jumpHeight;
-  rig.leftLeg.rotation.x = -swing * 0.78 * walkLegBlend - jumpHeight * 0.42;
-  rig.rightLeg.rotation.x = swing * 0.78 * walkLegBlend - jumpHeight * 0.42;
+  const walkLegBlend = 1 - jumpPose;
+  rig.leftLeg.rotation.x = -swing * 0.78 * walkLegBlend - jumpPose * 0.42;
+  rig.rightLeg.rotation.x = swing * 0.78 * walkLegBlend - jumpPose * 0.42;
   rig.leftLeg.position.y = 0.83 + leftLift * walkLegBlend;
   rig.rightLeg.position.y = 0.83 + rightLift * walkLegBlend;
 
