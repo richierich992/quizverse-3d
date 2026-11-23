@@ -75,6 +75,7 @@ let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyR
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
 let lastVisualStateKey = "";
 const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
+const matchMotionPreference = matchMedia("(prefers-reduced-motion: reduce)");
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -503,10 +504,13 @@ function buildArenaArchitecture() {
         scene.add(spectator);
         arenaAudience.push({
           group: spectator,
+          torso,
           head,
           baseY: y,
+          side,
           phase: (side + 1) * 1.3 + row * 0.81 + n * 0.47,
-          cheerDelay: ((n * 7 + row * 5 + (side > 0 ? 3 : 0)) % 11) * 0.045
+          // The central seats react first, then the cheer travels outward through the stands.
+          cheerDelay: Math.abs(n - 6.5) * 0.058 + row * 0.11 + (side > 0 ? 0.10 : 0)
         });
       }
     }
@@ -866,14 +870,21 @@ function animateAudience(now) {
   arenaAudience.forEach((spectator) => {
     const localTime = time + spectator.phase;
     const cheerElapsed = elapsed - spectator.cheerDelay;
-    const delayedCheer = eventActive && cheerElapsed >= 0
+    const delayedCheer = !matchMotionPreference.matches && eventActive && cheerElapsed >= 0
       ? Math.max(0, Math.sin(cheerElapsed * 8.5))
       : 0;
+    const cheerImpact = intensity * delayedCheer;
     const bounce = 0.018 + intensity * (0.045 + delayedCheer * 0.075);
     spectator.group.position.y = spectator.baseY + Math.abs(Math.sin(localTime * 2.1)) * 0.012 +
       Math.abs(Math.sin(localTime * 5.2)) * bounce;
     spectator.group.rotation.z = Math.sin(localTime * 1.3) * 0.012 +
       Math.sin(localTime * 4.8) * intensity * 0.025;
+    spectator.torso.rotation.x = Math.sin(localTime * 1.1) * 0.022 - cheerImpact * 0.17;
+    spectator.torso.rotation.z = Math.sin(localTime * 1.7) * 0.018 +
+      spectator.side * cheerImpact * 0.045;
+    // Side spectators subtly turn toward the winners as the stand-wide cheer reaches them.
+    spectator.head.rotation.y = -spectator.side * (0.26 + cheerImpact * 0.16) +
+      Math.sin(localTime * 0.72) * 0.025;
     spectator.head.rotation.z = Math.sin(localTime * 1.8) * 0.035 -
       Math.sin(localTime * 5.5) * intensity * 0.045;
     spectator.head.rotation.x = -0.025 - intensity * (0.035 + delayedCheer * 0.06);
@@ -1406,17 +1417,31 @@ function animateAvatar(mesh, time, moving = false) {
   }
 
   const winnerRank = mesh.userData.winnerMoving ? 0 : Number(mesh.userData.winnerRank || 0);
+  const celebrationMotion = matchMotionPreference.matches ? 0 : 1;
   if (winnerRank === 1) {
-    rig.leftArm.rotation.z += 0.88;
-    rig.rightArm.rotation.z -= 0.88;
+    // Champion: both hands stay raised while the arms alternate in a friendly victory wave.
+    const wave = Math.sin(t * 5.4);
+    rig.leftArm.rotation.z += 0.88 + wave * 0.10 * celebrationMotion;
+    rig.rightArm.rotation.z -= 0.88 - wave * 0.10 * celebrationMotion;
+    rig.leftArm.rotation.x += wave * 0.16 * celebrationMotion;
+    rig.rightArm.rotation.x -= wave * 0.16 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, Math.sin(t * 4.5)) * 0.035 * celebrationMotion;
     rig.head.rotation.z += Math.sin(t * 2.2) * 0.025;
   } else if (winnerRank === 2) {
-    rig.rightArm.rotation.z -= 0.92;
-    rig.rightArm.rotation.x += Math.sin(t * 3.1) * 0.12;
+    // Runner-up: one arm gives a warm, repeating salute.
+    const salute = Math.sin(t * 4.2 + 0.6);
+    rig.rightArm.rotation.z -= 0.92 + salute * 0.08 * celebrationMotion;
+    rig.rightArm.rotation.x += salute * 0.18 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, salute) * 0.025 * celebrationMotion;
     rig.head.rotation.z -= 0.035;
   } else if (winnerRank === 3) {
-    rig.leftArm.rotation.z += 0.64;
-    rig.rightArm.rotation.z -= 0.64;
+    // Third place: a cheerful two-fist pump with a gentle body sway.
+    const pump = Math.sin(t * 5.0 + 1.2);
+    rig.leftArm.rotation.z += 0.64 + pump * 0.08 * celebrationMotion;
+    rig.rightArm.rotation.z -= 0.64 - pump * 0.08 * celebrationMotion;
+    rig.leftArm.rotation.x += pump * 0.13 * celebrationMotion;
+    rig.rightArm.rotation.x -= pump * 0.13 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, pump) * 0.028 * celebrationMotion;
     rig.torso.rotation.z += Math.sin(t * 3.8) * 0.035;
   }
 
