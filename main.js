@@ -391,7 +391,7 @@ function renderTeamColorBattle() {
   const redMembers = Object.values(teamMap).filter((team) => team === "red").length;
   const blueMembers = Object.values(teamMap).filter((team) => team === "blue").length;
   const roundId = Number(round?.roundId || 0);
-  const winner = roundId ? winners[String(roundId)] || null : null;
+  const winner = roundId ? winners["round" + roundId] || null : null;
   const now = serverNow();
   const targetIndex = Number(round?.targetIndex);
   const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
@@ -590,10 +590,10 @@ async function finishTeamColorBattle() {
   try {
     const sessionId = Number(session.sessionId);
     const teams = teamBattleData?.teams?.sessionId === sessionId ? teamBattleData.teams.members || {} : {};
-    const winners = Object.values(teamBattleData?.winners || {})
+    const roundResults = Object.values(teamBattleData?.winners || {})
       .filter((item) => Number(item?.sessionId) === sessionId);
-    const redScore = winners.filter((item) => item.teamId === "red").length;
-    const blueScore = winners.filter((item) => item.teamId === "blue").length;
+    const redScore = roundResults.filter((item) => item.teamId === "red").length;
+    const blueScore = roundResults.filter((item) => item.teamId === "blue").length;
     const winningTeam = redScore === blueScore ? null : redScore > blueScore ? "red" : "blue";
     const finishedAt = Math.round(serverNow());
     await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
@@ -642,7 +642,7 @@ async function submitTeamColorAnswer(colorIndex) {
     });
   } catch (error) {
     const winnerSnap = await get(dbPath(
-      `rooms/${roomPin}/miniGames/teamColorBattle/winners/${session.sessionId}/${round.roundId}`
+      `rooms/${roomPin}/miniGames/teamColorBattle/winners/round${round.roundId}`
     )).catch(() => null);
     if (!winnerSnap?.exists()) $("teamBattleStatus").textContent = "Jawaban belum diterima: " + explainError(error);
   } finally {
@@ -829,7 +829,8 @@ async function joinParty() {
 }
 async function leaveParty() {
   const party = getMyParty();
-  if (isHost || !party || partyBusy || activeState?.phase !== "lobby") return;
+  if (isHost || !party || partyBusy || activeState?.phase !== "lobby" ||
+      teamBattleData?.session?.status === "active") return;
   partyBusy = true;
   renderPartyCenter();
   try {
