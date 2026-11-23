@@ -768,3 +768,54 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   .reaction-rush-signal{transition:none}
   .reaction-rush-signal[data-phase="go"]{animation:none}
 }
+
+
+/* Multiplayer lobby mini-game: Quick Color Match */
+.quick-color-card{
+  margin-top:14px;padding:14px 14px 12px;border:1px solid #3f7d8f88;border-radius:15px;
+  background:linear-gradient(140deg,rgba(14,43,61,.96),rgba(8,24,40,.96));
+  box-shadow:inset 0 1px #ffffff10,0 8px 25px #0003;
+}
+.quick-color-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.quick-color-head>div:first-child{min-width:0}
+.quick-color-head .eyebrow{display:block;font-size:8px;letter-spacing:1.6px;margin-bottom:6px}
+.quick-color-head strong{display:block;color:#f2fbff;font:700 17px 'Space Grotesk',sans-serif}
+.quick-color-head p{margin:5px 0 0;color:#9bb5ca;font-size:10px;line-height:1.45}
+.quick-color-clock{
+  flex:0 0 54px;display:grid;justify-items:center;gap:2px;padding:7px 5px;
+  border:1px solid #42627a;border-radius:11px;background:#0a2033;
+}
+.quick-color-clock small{color:#7898b1;font-size:7px;font-weight:800;letter-spacing:1px}
+.quick-color-clock b{color:#a5f3d0;font:700 16px 'Space Grotesk',sans-serif}
+.quick-color-target{
+  display:grid;justify-items:center;gap:3px;margin:12px 0 10px;padding:10px;
+  border:1px solid #49718a66;border-radius:12px;background:#081b2caa;
+}
+.quick-color-target span{color:#84a7c0;font-size:8px;font-weight:800;letter-spacing:2px}
+.quick-color-target strong{font:800 clamp(19px,2.5vw,25px)/1.1 'Space Grotesk',sans-serif;letter-spacing:1px;text-shadow:0 0 20px currentColor}
+.quick-color-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.quick-color-option{
+  min-width:0;min-height:47px;padding:7px 3px;border:1px solid #ffffff30;border-radius:10px;
+  color:#fff;font:800 9px 'Space Grotesk',sans-serif;letter-spacing:.45px;
+  text-shadow:0 2px 6px #0008;box-shadow:inset 0 1px #ffffff35,0 4px 9px #0003;
+  transition:transform .12s,border-color .12s,filter .12s,opacity .12s;
+}
+.quick-color-option[data-color-index="0"]{background:linear-gradient(145deg,#fa6b7d,#bd2948)}
+.quick-color-option[data-color-index="1"]{background:linear-gradient(145deg,#65b1ff,#2258b8)}
+.quick-color-option[data-color-index="2"]{background:linear-gradient(145deg,#ffdf72,#bd861d);color:#33240a;text-shadow:0 1px #ffffff55}
+.quick-color-option[data-color-index="3"]{background:linear-gradient(145deg,#54e0ad,#14865e)}
+.quick-color-option:disabled{cursor:not-allowed;filter:saturate(.48);opacity:.48}
+.quick-color-option:not(:disabled):active{transform:translateY(2px) scale(.97)}
+.quick-color-option.is-target:not(:disabled){border-color:#eafff5;box-shadow:0 0 0 2px #73f0b555,0 0 18px #5ae6b788}
+.quick-color-status{min-height:30px;margin:10px 0 8px;color:#b7cde0;font-size:10px;line-height:1.45;text-align:center}
+.quick-color-card .primary{margin-top:2px}
+.quick-color-footnote{display:block;margin-top:8px;color:#718da5;font-size:8px;text-align:center}
+@media(max-width:650px){
+  .quick-color-card{padding:12px 11px 10px;margin-top:12px}
+  .quick-color-head strong{font-size:15px}
+  .quick-color-option{min-height:44px;font-size:8px}
+  .quick-color-target{margin:10px 0 8px;padding:9px}
+}
+@media(prefers-reduced-motion:reduce){
+  .quick-color-option{transition:none}
+}
