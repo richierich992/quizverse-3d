@@ -255,9 +255,9 @@ assert.match(main, /const highFiveSlap = socialHighFive \*/, "High-five includes
 assert.match(main, /rig\.rightArm\.rotation\.z -= 1\.92 \* socialHighFive/, "Right-side partner reach raises the inward hand");
 assert.match(main, /rig\.leftArm\.rotation\.z \+= 1\.92 \* socialHighFive/, "Left-side partner reach raises the inward hand");
 assert.match(main, /entry\.mesh\.userData\.moving = moving/, "Remote movement suppresses social handshakes while walking");
-assert.match(main, /const socialNod = socialConversation > 0\.42/, "Conversation animation includes subtle listening nods");
-assert.match(main, /const socialChat = socialConversation > 0\.42/, "Conversation animation includes small talking hand gestures");
-assert.match(main, /const socialWave = socialConversation > 0\.42/, "Greeting waves happen when another avatar is nearby");
+assert.match(main, /const socialNod = socialHighFive < 0\.25 && socialConversation > 0\.42/, "Conversation nods yield priority to the paired high-five");
+assert.match(main, /const socialChat = socialHighFive < 0\.25 && socialConversation > 0\.42/, "Conversation gestures yield priority to the paired high-five");
+assert.match(main, /const socialWave = socialHighFive < 0\.25 && socialConversation > 0\.42/, "Greeting waves yield priority to the paired high-five");
 assert.match(main, /socialPull\.x \* 0\.42/, "Autonomous lobby wandering gently joins nearby social clusters");
 assert.match(main, /const avoidanceWeight = manual \? 0\.90 : 2\.60/, "Lobby separation actively steers idle and manually moving avatars apart");
 assert.match(main, /function triggerLobbyArrival\(mesh, kind = "arrive", delay = 0\)/, "Lobby arrivals and welcomes use short-lived local avatar states");
