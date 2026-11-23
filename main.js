@@ -913,7 +913,7 @@ function renderTournamentCenter() {
   $("tournamentHostControls").classList.toggle("hidden", !isHost);
   $("tournamentTitleInput").disabled = tournamentBusy || meta?.phase === "active";
   $("createTournament").disabled = tournamentBusy || activeState?.phase !== "lobby" ||
-    teamBattleData?.session?.status === "active" || meta?.phase === "active";
+    teamBattleData?.session?.status === "active" || meta?.phase === "active" || meta?.phase === "registration";
   $("createTournament").textContent = meta?.phase === "completed"
     ? "Buat Turnamen Baru" : "Buka Pendaftaran Turnamen";
   $("startTournament").disabled = tournamentBusy || meta?.phase !== "registration" ||
