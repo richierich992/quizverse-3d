@@ -220,7 +220,7 @@ assert.match(main, /triggerAvatarReaction\(playerMesh, correct \? "correct" : ha
 assert.match(main, /const blinkPhase =/, "Avatar performs staggered idle blinking");
 assert.match(main, /rig\.leftLeg\.rotation\.x/, "Avatar has an animated walking cycle");
 assert.match(main, /entry\.targetYaw = Math\.atan2\(dx, dz\)/, "Remote players interpolate toward their movement direction");
-assert.match(main, /playerMesh\.userData\.targetYaw = Math\.atan2\(input\.x, input\.z\)/, "Local movement stores a target heading instead of snapping the body");
+assert.match(main, /if \(moved\) playerMesh\.userData\.targetYaw = Math\.atan2\(movedX, movedZ\)/, "Local movement stores the collision-resolved target heading instead of snapping the body");
 assert.match(main, /if \(playerMesh && !playerMesh\.userData\.winnerTarget\) \{[\s\S]*?const desiredYaw = Number\(playerMesh\.userData\.targetYaw\)[\s\S]*?playerMesh\.rotation\.y \+= yawDelta \* \(1 - Math\.exp\(-14 \* dt\)\)/, "Local avatar smoothly turns along the shortest angular path");
 
 assert.match(main, /const AVATAR_COLLISION_RADIUS = 0\.56/, "Arena collision uses a consistent avatar radius");
@@ -229,6 +229,15 @@ assert.match(main, /const ARENA_STATIC_RECT_COLLIDERS = \[/, "Ground-level grand
 assert.match(main, /const ARENA_STATIC_CIRCLE_COLLIDERS = \[/, "Arena support columns have circular collision bounds");
 assert.match(main, /function isArenaStaticBlocked\(x, z\)/, "Movement checks the static arena geometry");
 assert.match(main, /function isPlayerMovementBlocked\(x, z, fromX, fromZ\)/, "Players cannot walk through nearby remote avatars");
+assert.match(main, /let lobbyRoamState = null/, "Lobby ambient motion is stored as client-side state");
+assert.match(main, /function resetLobbyRoam\(\)/, "Lobby roaming initializes around the player's safe spawn point");
+assert.match(main, /function chooseLobbyRoamTarget\(now\)/, "Lobby wander destinations are selected deterministically");
+assert.match(main, /function getLobbyRoamVector\(now\)/, "Lobby avatars walk between short ambient destinations");
+assert.match(main, /function lobbySeparationVector\(x, z\)/, "Lobby avatars softly steer away from nearby participants");
+assert.match(main, /const avoidanceWeight = manual \? 0\.24 : 1\.55/, "Separation gently influences autonomous movement and manual steering");
+assert.match(main, /if \(inLobby\) \{[\s\S]*?input = getLobbyRoamVector\(performance\.now\(\)\)/, "Idle Player avatars move naturally while waiting in the lobby");
+assert.match(main, /if \(inQuestion && !answerBusy\)/, "Ambient lobby movement cannot submit quiz answers");
+assert.match(main, /if \(moved\) playerMesh\.userData\.targetYaw = Math\.atan2\(movedX, movedZ\)/, "Local heading follows the resolved movement vector");
 assert.match(main, /const previousDistance = Math\.hypot\(fromX - otherX, fromZ - otherZ\)/, "Overlapping reconnects can move apart instead of getting stuck");
 assert.match(main, /if \(isPlayerMovementBlocked\(nextX, nextZ, startX, startZ\)\) nextX = startX/, "Horizontal collision resolution allows wall sliding");
 assert.match(main, /if \(isPlayerMovementBlocked\(nextX, nextZ, startX, startZ\)\) nextZ = startZ/, "Vertical collision resolution allows wall sliding");
