@@ -56,6 +56,42 @@ try {
 
   await assertFails(get(ref(p1, `answerKeys/${pin}/questions`)));
 
+  const colorRoundRef = `${base}/miniGames/quickColorMatch/round`;
+  const colorWinnerRef = `${base}/miniGames/quickColorMatch/winner`;
+  const colorRound1 = {
+    roundId: 1, phase: "preparing", targetIndex: 2,
+    startsAt: Date.now() - 100, endsAt: Date.now() + 5000
+  };
+  await assertFails(set(ref(p1, colorRoundRef), colorRound1));
+  await assertSucceeds(set(ref(host, colorRoundRef), colorRound1));
+  await assertFails(set(ref(p1, colorWinnerRef), {
+    uid: "player-1", name: "Player 1", roundId: 1, answerIndex: 2
+  }));
+  await assertSucceeds(set(ref(host, colorWinnerRef), null));
+  await assertSucceeds(update(ref(host, colorRoundRef), { phase: "active" }));
+  await assertFails(set(ref(p1, colorWinnerRef), {
+    uid: "player-1", name: "Player 1", roundId: 1, answerIndex: 1
+  }));
+  await assertSucceeds(set(ref(p1, colorWinnerRef), {
+    uid: "player-1", name: "Player 1", roundId: 1, answerIndex: 2
+  }));
+  await assertFails(set(ref(p2, colorWinnerRef), {
+    uid: "player-2", name: "Player 2", roundId: 1, answerIndex: 2
+  }));
+
+  const colorRound2 = {
+    roundId: 2, phase: "preparing", targetIndex: 0,
+    startsAt: Date.now() - 100, endsAt: Date.now() + 5000
+  };
+  await assertSucceeds(set(ref(host, colorRoundRef), colorRound2));
+  await assertSucceeds(set(ref(host, colorWinnerRef), null));
+  await assertSucceeds(update(ref(host, colorRoundRef), { phase: "active" }));
+  await assertSucceeds(set(ref(p2, colorWinnerRef), {
+    uid: "player-2", name: "Player 2", roundId: 2, answerIndex: 0
+  }));
+  await assertFails(set(ref(p1, colorWinnerRef), {
+    uid: "player-1", name: "Player 1", roundId: 2, answerIndex: 0
+  }));
 
   const deadline0 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
@@ -108,7 +144,7 @@ try {
     score: 200, streak: 2, lastScoredQuestionIndex: 1
   }));
 
-  console.log("PASS: private keys, one answer per round, deadline, reveal, score validation, and per-round progression.");
+  console.log("PASS: private keys, one answer per round, Quick Color first-winner rules, deadline, reveal, score validation, and per-round progression.");
 } finally {
   await env.cleanup();
 }
