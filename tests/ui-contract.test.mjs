@@ -123,10 +123,13 @@ assert.match(main, /All face details point toward \+Z/, "Avatar face orientation
 assert.match(main, /const eyes = \[\]/, "Avatar eyes are grouped for facial animation");
 assert.match(main, /g\.userData\.rig = \{ torso, head, leftArm, rightArm, leftLeg, rightLeg, eyes \}/, "Avatar exposes articulated body and facial rig");
 assert.match(main, /function animateAvatar\(mesh, time, moving = false\)/, "Avatar has a shared animation controller");
+assert.match(main, /function avatarGroundHeight\(mesh\)/, "Avatar animation reads the real floor height under the character");
+assert.match(main, /const groundHeight = avatarGroundHeight\(mesh\);\s*const airborne = mesh\.position\.y > groundHeight \+ 0\.16;/, "Standing on raised answer bays and winner podiums is not mistaken for jumping");
 assert.match(main, /function triggerAvatarReaction\(mesh, kind, duration = 1\.7\)/, "Avatar reactions use a shared timed animation trigger");
 assert.match(main, /function updateLobbySocial\(\)/, "Lobby avatars look toward a nearby participant");
 assert.match(main, /nearestDistance = 12/, "Social attention is limited to nearby players");
 assert.match(main, /const socialWave = socialEnabled && socialCycle < 920/, "Lobby greeting waves are staggered and time-limited");
+assert.match(main, /const yawDelta = Math\.atan2\([\s\S]*?Math\.cos\(desiredYaw - currentYaw\)/, "Social head turns take the shortest angular path");
 assert.match(main, /rig\.rightArm\.rotation\.z -= 1\.02 \* socialWave/, "Idle greeting includes a clear waving arm pose");
 assert.match(main, /setAvatarSocialIdentity\(mesh, id\)/, "Remote social gestures are staggered by player identity");
 assert.match(main, /const winnerPodiumGroup = new THREE\.Group\(\)/, "Arena includes physical 3D winner podiums");
@@ -136,6 +139,8 @@ assert.match(main, /winnerRank === 1/, "First place has a persistent champion po
 assert.match(main, /winnerRank === 2/, "Second place has a distinct podium pose");
 assert.match(main, /winnerRank === 3/, "Third place has a distinct podium pose");
 assert.match(main, /function updateWinnerCamera\(dt\)/, "All clients receive a dedicated final podium camera");
+assert.match(main, /const horizontalHalfFovTangent = verticalHalfFov \* Math\.max\(0\.35, Number\(camera\.aspect\) \|\| 1\)/, "Winner camera accounts for portrait and landscape screen aspect ratios");
+assert.match(main, /const frameDistance = THREE\.MathUtils\.clamp\([\s\S]*?5\.2 \/ Math\.max\(0\.12, horizontalHalfFovTangent\)/, "Winner camera backs up enough to frame all podiums on narrow screens");
 assert.match(main, /activeState\?\.phase === "finished"\) \{\s*updateWinnerCamera\(dt\)/, "Finished match camera frames the podium instead of the player");
 assert.match(main, /if \(activeState\?\.phase === "finished"\) applyWinnerPlacements\(activeState\.podium \|\| \[\]\)/, "Late player roster updates still place podium winners");
 
