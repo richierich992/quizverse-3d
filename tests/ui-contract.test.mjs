@@ -247,6 +247,14 @@ assert.match(main, /else if \(socialActivity === "team"\)/, "Team station trigge
 assert.match(main, /distance <= 3\.8 \|\| distance >= 9\.5/, "Social groups approach gently while preserving conversational space");
 assert.match(main, /socialPartnerId/, "Lobby avatars keep a local conversational partner identity");
 assert.match(main, /conversationTarget = nearest && nearest\.distance < 6\.2 \? 1 : 0/, "Conversation gestures activate only for nearby players");
+assert.match(main, /const nearestByMesh = new Map\(\)/, "Lobby behaviour resolves one nearest partner per avatar");
+assert.match(main, /partnerNearest\?\.mesh === mesh/, "High-five pairs must mutually select one another");
+assert.match(main, /nearest\.distance >= 1\.18 && nearest\.distance <= 3\.2/, "High-fives only start inside the close interaction range");
+assert.match(main, /socialOffsetFor\("high-five:" \+ pairIds\.join\("\|"\)\)/, "Both sides use a deterministic shared high-five rhythm");
+assert.match(main, /const highFiveSlap = socialHighFive \*/, "High-five includes a synchronized hand-contact beat");
+assert.match(main, /rig\.rightArm\.rotation\.z -= 1\.92 \* socialHighFive/, "Right-side partner reach raises the inward hand");
+assert.match(main, /rig\.leftArm\.rotation\.z \+= 1\.92 \* socialHighFive/, "Left-side partner reach raises the inward hand");
+assert.match(main, /entry\.mesh\.userData\.moving = moving/, "Remote movement suppresses social handshakes while walking");
 assert.match(main, /const socialNod = socialConversation > 0\.42/, "Conversation animation includes subtle listening nods");
 assert.match(main, /const socialChat = socialConversation > 0\.42/, "Conversation animation includes small talking hand gestures");
 assert.match(main, /const socialWave = socialConversation > 0\.42/, "Greeting waves happen when another avatar is nearby");
