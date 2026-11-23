@@ -93,6 +93,20 @@ try {
     uid: "player-1", name: "Player 1", roundId: 2, answerIndex: 0
   }));
 
+  const colorRound3 = {
+    roundId: 3, phase: "preparing", targetIndex: 3,
+    startsAt: Date.now() - 1000, endsAt: Date.now() - 100
+  };
+  await assertSucceeds(set(ref(host, colorRoundRef), colorRound3));
+  await assertSucceeds(set(ref(host, colorWinnerRef), null));
+  await assertSucceeds(update(ref(host, colorRoundRef), { phase: "active" }));
+  await assertFails(set(ref(p1, colorWinnerRef), {
+    uid: "player-1", name: "Player 1", roundId: 3, answerIndex: 3
+  }));
+  await assertFails(set(ref(latePlayer, colorWinnerRef), {
+    uid: "late-player", name: "Late Player", roundId: 3, answerIndex: 3
+  }));
+
   const deadline0 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
     id: "q0", category: "Test", question: "Question one?", options: ["A", "B", "C", "D"]
