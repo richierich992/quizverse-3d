@@ -64,6 +64,63 @@ function answerBaySurfaceAt(x, z) {
   return inside ? ANSWER_BAY_SURFACE_Y : 0;
 }
 
+const AVATAR_COLLISION_RADIUS = 0.56;
+const PLAYER_COLLISION_DISTANCE = AVATAR_COLLISION_RADIUS * 2 + 0.10;
+const ARENA_WALK_RADIUS = 23.15;
+
+// Ground-level arena objects that should stop a walking avatar.
+// Raised answer bays remain walkable and the winners' podium is only used after the match.
+const ARENA_STATIC_RECT_COLLIDERS = [
+  { minX: 13.64, maxX: 17.35, minZ: -6.82, maxZ: 6.82 },
+  { minX: -17.35, maxX: -13.64, minZ: -6.82, maxZ: 6.82 },
+  { minX: 18.02, maxX: 18.98, minZ: -7.34, maxZ: -7.06 },
+  { minX: 18.02, maxX: 18.98, minZ: 7.06, maxZ: 7.34 },
+  { minX: -18.98, maxX: -18.02, minZ: -7.34, maxZ: -7.06 },
+  { minX: -18.98, maxX: -18.02, minZ: 7.06, maxZ: 7.34 }
+];
+const ARENA_STATIC_CIRCLE_COLLIDERS = [
+  { x: -21.7, z: -18, radius: 0.42 },
+  { x: -21.7, z: 0, radius: 0.42 },
+  { x: -21.7, z: 18, radius: 0.42 },
+  { x: 21.7, z: -18, radius: 0.42 },
+  { x: 21.7, z: 0, radius: 0.42 },
+  { x: 21.7, z: 18, radius: 0.42 }
+];
+
+function isArenaStaticBlocked(x, z) {
+  // Keep the whole avatar inside the circular floor and away from the illuminated rim.
+  if (Math.hypot(x, z) > ARENA_WALK_RADIUS - AVATAR_COLLISION_RADIUS) return true;
+
+  for (const obstacle of ARENA_STATIC_RECT_COLLIDERS) {
+    const nearestX = THREE.MathUtils.clamp(x, obstacle.minX, obstacle.maxX);
+    const nearestZ = THREE.MathUtils.clamp(z, obstacle.minZ, obstacle.maxZ);
+    if (Math.hypot(x - nearestX, z - nearestZ) < AVATAR_COLLISION_RADIUS) return true;
+  }
+
+  for (const obstacle of ARENA_STATIC_CIRCLE_COLLIDERS) {
+    if (Math.hypot(x - obstacle.x, z - obstacle.z) <
+      AVATAR_COLLISION_RADIUS + obstacle.radius) return true;
+  }
+  return false;
+}
+
+function isPlayerMovementBlocked(x, z, fromX, fromZ) {
+  if (isArenaStaticBlocked(x, z)) return true;
+
+  // Use the visible interpolated position so collision matches what the player sees.
+  // When already overlapping because of a stale reconnect, allow movement that separates avatars.
+  for (const [playerId, entry] of Object.entries(remotePlayers)) {
+    if (playerId === uid || !entry?.mesh?.position) continue;
+    const otherX = entry.mesh.position.x;
+    const otherZ = entry.mesh.position.z;
+    const nextDistance = Math.hypot(x - otherX, z - otherZ);
+    if (nextDistance >= PLAYER_COLLISION_DISTANCE) continue;
+    const previousDistance = Math.hypot(fromX - otherX, fromZ - otherZ);
+    if (nextDistance <= previousDistance + 0.001) return true;
+  }
+  return false;
+}
+
 let app = null, auth = null, db = null, uid = "";
 let roomPin = "", isHost = false, questionBank = null;
 let activeState = null, playerData = {}, remotePlayers = {}, ownAvatar = null;
@@ -1810,11 +1867,13 @@ async function makeRoom() {
   }
 }
 
-function findSpawnPosition(players = {}) {
-  const occupied = Object.values(players || {}).map((person) => ({
-    x: Number(person?.x || 0),
-    z: Number(person?.z || 0)
-  }));
+function findSpawnPosition(players = {}, ignorePlayerId = "") {
+  const occupied = Object.entries(players || {})
+    .filter(([playerId]) => playerId !== ignorePlayerId)
+    .map(([, person]) => ({
+      x: Number(person?.x || 0),
+      z: Number(person?.z || 0)
+    }));
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < 160; i++) {
     const radius = 13 + Math.sqrt(i) * 0.48;
@@ -1825,9 +1884,10 @@ function findSpawnPosition(players = {}) {
     };
     const clearPlayers = occupied.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 2.2);
     const clearPlatforms = PAD_POINTS.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 5.2);
-    if (clearPlayers && clearPlatforms) return candidate;
+    const clearArenaObjects = !isArenaStaticBlocked(candidate.x, candidate.z);
+    if (clearPlayers && clearPlatforms && clearArenaObjects) return candidate;
   }
-  // The room cap is 40; this fallback is only defensive if stored coordinates are malformed.
+  // The center is kept clear of the answer bays and acts as a safe defensive fallback.
   return { x: 0, z: 0 };
 }
 async function createOwnPlayer() {
@@ -1839,8 +1899,8 @@ async function createOwnPlayer() {
   };
   const existing = await get(playerRef);
   if (existing.exists()) {
-    // Rejoining preserves the score and scoring cursor; only refresh the profile.
-    await update(playerRef, profile);
+    // Rejoining preserves the score and scoring cursor; refresh profile and validated position.
+    await update(playerRef, { ...profile, x: ownPosition.x, z: ownPosition.z });
   } else {
     await set(playerRef, {
       uid, ...profile, x: ownPosition.x, z: ownPosition.z, score: 0, streak: 0,
@@ -1867,9 +1927,17 @@ async function joinRoom() {
     roomPin = pin;
     isHost = false;
     const savedProfile = existingPlayer.val() || {};
-    ownPosition = existingPlayer.exists()
-      ? { x: Number(savedProfile.x || 0), z: Number(savedProfile.z || 0) }
-      : findSpawnPosition(players);
+    const savedPosition = {
+      x: Number(savedProfile.x || 0),
+      z: Number(savedProfile.z || 0)
+    };
+    const savedPositionClear = !isArenaStaticBlocked(savedPosition.x, savedPosition.z) &&
+      Object.entries(players).every(([playerId, person]) => playerId === uid ||
+        Math.hypot(Number(person?.x || 0) - savedPosition.x,
+          Number(person?.z || 0) - savedPosition.z) >= PLAYER_COLLISION_DISTANCE);
+    ownPosition = existingPlayer.exists() && savedPositionClear
+      ? savedPosition
+      : findSpawnPosition(players, uid);
     await createOwnPlayer();
     setOwnAvatar(appearance());
     await enterLobby();
@@ -2575,15 +2643,27 @@ function movePlayer(dt) {
     return;
   }
   const input = moveInput();
-  playerMesh.userData.moving = Math.abs(input.x) + Math.abs(input.z) > 0.04;
   const speed = 7.2;
-  ownPosition.x = THREE.MathUtils.clamp(ownPosition.x + input.x * speed * dt, -21, 21);
-  ownPosition.z = THREE.MathUtils.clamp(ownPosition.z + input.z * speed * dt, -21, 21);
+  const startX = ownPosition.x;
+  const startZ = ownPosition.z;
+  let nextX = startX + input.x * speed * dt;
+  let nextZ = startZ;
+
+  // Resolve each axis separately so the avatar can slide along a wall, stand or another player.
+  if (isPlayerMovementBlocked(nextX, nextZ, startX, startZ)) nextX = startX;
+  nextZ = startZ + input.z * speed * dt;
+  if (isPlayerMovementBlocked(nextX, nextZ, startX, startZ)) nextZ = startZ;
+
+  ownPosition.x = nextX;
+  ownPosition.z = nextZ;
   playerMesh.position.x = ownPosition.x;
   playerMesh.position.z = ownPosition.z;
-  if (Math.abs(input.x) + Math.abs(input.z) > 0.04) {
-    playerMesh.userData.targetYaw = Math.atan2(input.x, input.z);
-  }
+
+  const movedX = ownPosition.x - startX;
+  const movedZ = ownPosition.z - startZ;
+  const moved = Math.hypot(movedX, movedZ) > 0.002;
+  playerMesh.userData.moving = moved;
+  if (moved) playerMesh.userData.targetYaw = Math.atan2(movedX, movedZ);
   // Answer bays are raised podiums. Keep players standing on their top surface
   // while they are inside the answer area, then return to the main floor.
   const groundHeight = answerBaySurfaceAt(ownPosition.x, ownPosition.z);
