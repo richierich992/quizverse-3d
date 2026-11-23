@@ -384,3 +384,47 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   #app.host-spectator #spectatorBadge{font-size:7px;padding:5px 7px}
   #app.host-spectator .hud-bottom{font-size:8px}
 }
+
+
+/* Live match feedback: question entrance, last-five-second urgency, and answer reveal. */
+#app.question-enter .question-card{
+  animation:questionEntrance .52s cubic-bezier(.18,.75,.25,1) both;
+}
+@keyframes questionEntrance{
+  0%{opacity:0;transform:translateY(15px) scale(.965);filter:blur(5px)}
+  72%{opacity:1;transform:translateY(-2px) scale(1.012);filter:blur(0)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+#app.timer-critical .timer i{
+  background:linear-gradient(90deg,#ff6b73,#ffb05e)!important;
+  animation:timerUrgency .38s ease-in-out infinite alternate;
+}
+#app.timer-critical .timer-row>b{
+  color:#ff9e9e;
+  text-shadow:0 0 14px #ff536888;
+  animation:timerNumber .55s ease-in-out infinite alternate;
+}
+#app.timer-critical .hud{
+  border-color:#ff777766;
+  box-shadow:0 15px 44px #0006,0 0 22px #ff526622;
+}
+@keyframes timerUrgency{from{filter:brightness(.92)}to{filter:brightness(1.55)}}
+@keyframes timerNumber{from{transform:scale(1)}to{transform:scale(1.13)}}
+#app.answer-revealed .answer-legend span.is-correct-answer{
+  border-color:#8ff4c5!important;
+  background:linear-gradient(135deg,#17634e,#123f42)!important;
+  color:#f2fff9;
+  box-shadow:0 0 0 1px #8ff4c544,0 0 23px #57e6ad55;
+  animation:correctAnswerPop .56s cubic-bezier(.16,.85,.28,1.25) both;
+}
+@keyframes correctAnswerPop{
+  0%{transform:scale(.93);filter:brightness(.7)}
+  65%{transform:scale(1.055);filter:brightness(1.45)}
+  100%{transform:scale(1);filter:brightness(1)}
+}
+@media(prefers-reduced-motion:reduce){
+  #app.question-enter .question-card,
+  #app.timer-critical .timer i,
+  #app.timer-critical .timer-row>b,
+  #app.answer-revealed .answer-legend span.is-correct-answer{animation:none!important}
+}
