@@ -235,7 +235,7 @@ assert.match(main, /function resetLobbyRoam\(\)/, "Lobby roaming initializes aro
 assert.match(main, /function chooseLobbyRoamTarget\(now\)/, "Lobby wander destinations are selected deterministically");
 assert.match(main, /function getLobbyRoamVector\(now\)/, "Lobby avatars walk between short ambient destinations");
 assert.match(main, /function lobbySeparationVector\(x, z\)/, "Lobby avatars softly steer away from nearby participants");
-assert.match(main, /const avoidanceWeight = manual \? 0\.24 : 1\.55/, "Separation gently influences autonomous movement and manual steering");
+assert.match(main, /const avoidanceWeight = manual \? 0\.90 : 2\.60/, "Lobby separation actively steers idle and manually moving avatars apart");
 assert.match(main, /if \(inLobby\) \{[\s\S]*?input = getLobbyRoamVector\(performance\.now\(\)\)/, "Idle Player avatars move naturally while waiting in the lobby");
 assert.match(main, /if \(inQuestion && !answerBusy\)/, "Ambient lobby movement cannot submit quiz answers");
 assert.match(main, /if \(moved\) playerMesh\.userData\.targetYaw = Math\.atan2\(movedX, movedZ\)/, "Local heading follows the resolved movement vector");
