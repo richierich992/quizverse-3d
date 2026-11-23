@@ -153,6 +153,9 @@ let quickColorWrongUntil = 0;
 let teamBattleUnsubscribe = null;
 let teamBattleData = null, teamBattleBusy = false, teamBattleSubmitting = false;
 let teamBattleWrongUntil = 0;
+let socialCompetitionUnsubscribe = null;
+let socialCompetitionData = null;
+let partyBusy = false;
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -369,6 +372,7 @@ function subscribeTeamColorBattle() {
   teamBattleUnsubscribe = onValue(dbPath(base), (snap) => {
     teamBattleData = snap.val() || null;
     renderTeamColorBattle();
+    renderPartyCenter();
   }, (error) => {
     $("teamBattleStatus").textContent = "Team Battle tidak dapat dimuat: " + error.message;
   });
@@ -449,6 +453,7 @@ function renderTeamColorBattle() {
     message = "Ronde selesai. Host dapat melanjutkan ronde berikutnya.";
   }
   $("teamBattleStatus").textContent = message;
+  renderPartyCenter();
   const hostAction = $("teamBattleHostAction");
   hostAction.classList.toggle("hidden", !isHost);
   if (!session || finished) {
@@ -485,10 +490,31 @@ async function startTeamColorBattle() {
       .sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")) ||
         a[0].localeCompare(b[0]));
     if (players.length < 2) throw new Error("Minimal dua pemain harus bergabung sebelum Team Battle dimulai.");
+    const socialSnap = await get(dbPath(`rooms/${roomPin}/socialCompetition`));
+    const social = socialSnap.val() || {};
     const members = {};
-    players.forEach(([playerId], index) => {
-      members[playerId] = index % 2 === 0 ? "red" : "blue";
+    const counts = { red: 0, blue: 0 };
+    const solos = [];
+    players.forEach(([playerId]) => {
+      const code = social.playerParties?.[playerId];
+      const party = code ? social.parties?.[code] : null;
+      const selectedTeam = party?.members?.[playerId] && ["red", "blue"].includes(party.teamId)
+        ? party.teamId : null;
+      if (selectedTeam) {
+        members[playerId] = selectedTeam;
+        counts[selectedTeam] += 1;
+      } else {
+        solos.push(playerId);
+      }
     });
+    solos.forEach((playerId) => {
+      const teamId = counts.red <= counts.blue ? "red" : "blue";
+      members[playerId] = teamId;
+      counts[teamId] += 1;
+    });
+    if (Math.abs(counts.red - counts.blue) > 2) {
+      throw new Error("Tim belum seimbang. Minta leader party mengatur ulang pilihan Merah/Biru.");
+    }
     const nextSessionId = Number(session?.sessionId || 0) + 1;
     if (session?.status === "finished") {
       await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners`), null);
@@ -562,9 +588,24 @@ async function finishTeamColorBattle() {
       Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved) return;
   teamBattleBusy = true;
   try {
+    const sessionId = Number(session.sessionId);
+    const teams = teamBattleData?.teams?.sessionId === sessionId ? teamBattleData.teams.members || {} : {};
+    const winners = Object.values(teamBattleData?.winners || {})
+      .filter((item) => Number(item?.sessionId) === sessionId);
+    const redScore = winners.filter((item) => item.teamId === "red").length;
+    const blueScore = winners.filter((item) => item.teamId === "blue").length;
+    const winningTeam = redScore === blueScore ? null : redScore > blueScore ? "red" : "blue";
+    const finishedAt = Math.round(serverNow());
     await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
-      status: "finished", finishedAt: Math.round(serverNow())
+      status: "finished", finishedAt
     });
+    await Promise.all(Object.entries(teams).map(([playerId, teamId]) =>
+      set(dbPath(`rooms/${roomPin}/socialCompetition/stats/${playerId}/matches/session-${sessionId}`), {
+        sessionId, teamId,
+        result: !winningTeam ? "draw" : teamId === winningTeam ? "win" : "loss",
+        finishedAt
+      })
+    ));
   } catch (error) {
     $("teamBattleStatus").textContent = "Gagal menyelesaikan battle: " + explainError(error);
   } finally {
@@ -608,6 +649,230 @@ async function submitTeamColorAnswer(colorIndex) {
     teamBattleSubmitting = false;
     renderTeamColorBattle();
   }
+}
+function stopSocialCompetitionListener() {
+  if (socialCompetitionUnsubscribe) socialCompetitionUnsubscribe();
+  socialCompetitionUnsubscribe = null;
+  socialCompetitionData = null;
+  partyBusy = false;
+}
+function subscribeSocialCompetition() {
+  stopSocialCompetitionListener();
+  socialCompetitionUnsubscribe = onValue(
+    dbPath(`rooms/${roomPin}/socialCompetition`),
+    (snap) => {
+      socialCompetitionData = snap.val() || {};
+      renderPartyCenter();
+    },
+    (error) => {
+      $("partyStatus").textContent = "Party Center tidak dapat dimuat: " + error.message;
+    }
+  );
+}
+function getMyParty() {
+  const data = socialCompetitionData || {};
+  const code = data.playerParties?.[uid];
+  const party = code ? data.parties?.[code] : null;
+  if (!code || !party?.members?.[uid]) return null;
+  return { code, ...party };
+}
+function renderPartyCenter() {
+  const data = socialCompetitionData || {};
+  const party = getMyParty();
+  const hostNote = $("partyHostNote");
+  const createJoin = $("partyCreateJoin");
+  const current = $("partyCurrent");
+  const create = $("createParty");
+  const join = $("joinParty");
+  const leave = $("leaveParty");
+  const codeInput = $("partyJoinCode");
+  const teamPicker = $("partyTeamPicker");
+  const partyStatus = $("partyStatus");
+  const myMatches = data.stats?.[uid]?.matches || {};
+  const matchRows = Object.values(myMatches);
+  const wins = matchRows.filter((item) => item?.result === "win").length;
+  const losses = matchRows.filter((item) => item?.result === "loss").length;
+  $("partyWins").textContent = String(wins);
+  $("partyLosses").textContent = String(losses);
+  hostNote.classList.toggle("hidden", !isHost);
+  createJoin.classList.toggle("hidden", isHost || Boolean(party));
+  current.classList.toggle("hidden", isHost || !party);
+  if (isHost) {
+    partyStatus.textContent = "Host mengawasi kompetisi. Pemain dapat membuat party dari halaman Player.";
+    return;
+  }
+  if (!party) {
+    create.disabled = partyBusy || activeState?.phase !== "lobby";
+    join.disabled = partyBusy || activeState?.phase !== "lobby";
+    codeInput.disabled = partyBusy || activeState?.phase !== "lobby";
+    partyStatus.textContent = activeState?.phase === "lobby"
+      ? "Belum tergabung dalam party. Buat party atau masukkan kode teman."
+      : "Party hanya dapat diubah saat lobby.";
+    return;
+  }
+  const members = Object.entries(party.members || {})
+    .map(([memberId, info]) => ({
+      uid: memberId,
+      name: String(info?.name || playerData[memberId]?.name || "Pemain"),
+      joinedAt: Number(info?.joinedAt || 0)
+    }))
+    .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid));
+  const isLeader = party.leaderUid === uid;
+  $("partyCodeValue").textContent = party.code;
+  $("partyMemberCount").textContent = members.length + "/4";
+  $("partyLeaderNote").textContent = isLeader
+    ? "Kamu leader party. Bagikan kode ini dan tentukan tim bersama."
+    : "Leader: " + (playerData[party.leaderUid]?.name || members.find((m) => m.uid === party.leaderUid)?.name || "Pemain");
+  const memberRoot = $("partyMembers");
+  memberRoot.replaceChildren();
+  members.forEach((member) => {
+    const chip = document.createElement("span");
+    chip.className = "party-member-chip" + (member.uid === party.leaderUid ? " is-leader" : "");
+    chip.textContent = member.name + (member.uid === uid ? " (Kamu)" : "") +
+      (member.uid === party.leaderUid ? " ★" : "");
+    memberRoot.appendChild(chip);
+  });
+  teamPicker.classList.toggle("hidden", !isLeader || activeState?.phase !== "lobby" ||
+    teamBattleData?.session?.status === "active");
+  $("partyTeamRed").classList.toggle("is-selected", party.teamId === "red");
+  $("partyTeamBlue").classList.toggle("is-selected", party.teamId === "blue");
+  $("partyTeamRed").disabled = partyBusy;
+  $("partyTeamBlue").disabled = partyBusy;
+  leave.disabled = partyBusy || activeState?.phase !== "lobby";
+  if (activeState?.phase !== "lobby") {
+    partyStatus.textContent = "Party terkunci selama kuis berjalan.";
+  } else if (teamBattleData?.session?.status === "active") {
+    partyStatus.textContent = "Pilihan party terkunci selama Team Battle berlangsung.";
+  } else {
+    partyStatus.textContent = "Party siap! Pilih tim bersama lalu ajak teman bergabung.";
+  }
+}
+function makePartyCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return code;
+}
+async function createParty() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || getMyParty()) return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const players = await get(dbPath(`rooms/${roomPin}/players`));
+    if (!players.child(uid).exists()) throw new Error("Profil pemain belum siap.");
+    const socialSnap = await get(dbPath(`rooms/${roomPin}/socialCompetition`));
+    const social = socialSnap.val() || {};
+    const counts = { red: 0, blue: 0 };
+    Object.entries(social.parties || {}).forEach(([code, item]) => {
+      const teamId = item?.teamId;
+      if (teamId === "red" || teamId === "blue") {
+        const memberCount = Object.keys(item?.members || {}).filter((id) =>
+          social.playerParties?.[id] === code
+        ).length;
+        counts[teamId] += memberCount;
+      }
+    });
+    const preferredTeam = counts.red <= counts.blue ? "red" : "blue";
+    let code = "";
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = makePartyCode();
+      const existing = await get(dbPath(`rooms/${roomPin}/socialCompetition/parties/${candidate}`));
+      if (!existing.exists()) { code = candidate; break; }
+    }
+    if (!code) throw new Error("Kode party belum tersedia. Coba lagi.");
+    const name = String($("name").value.trim() || "Pemain").slice(0, 18);
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${code}`), {
+      leaderUid: uid,
+      teamId: preferredTeam,
+      createdAt: Math.round(serverNow()),
+      members: { [uid]: { name, joinedAt: Math.round(serverNow()) } }
+    });
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/playerParties/${uid}`), code);
+    $("partyStatus").textContent = "Party berhasil dibuat. Bagikan kode " + code + " kepada teman.";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal membuat party: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function joinParty() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || getMyParty()) return;
+  const code = String($("partyJoinCode").value || "").trim().toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) {
+    $("partyStatus").textContent = "Masukkan kode party 6 karakter.";
+    return;
+  }
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const partySnap = await get(dbPath(`rooms/${roomPin}/socialCompetition/parties/${code}`));
+    const party = partySnap.val();
+    if (!party) throw new Error("Party tidak ditemukan. Periksa kode undangannya.");
+    if (party.members?.[uid]) throw new Error("Kamu sudah menjadi anggota party ini.");
+    if (Object.keys(party.members || {}).length >= 4) throw new Error("Party sudah penuh. Maksimal 4 pemain.");
+    if (teamBattleData?.session?.status === "active") throw new Error("Tunggu Team Battle selesai sebelum bergabung.");
+    const name = String($("name").value.trim() || "Pemain").slice(0, 18);
+    const joinedAt = Math.round(serverNow());
+    await update(dbPath(`rooms/${roomPin}/socialCompetition`), {
+      [`parties/${code}/members/${uid}`]: { name, joinedAt },
+      [`playerParties/${uid}`]: code
+    });
+    $("partyJoinCode").value = "";
+    $("partyStatus").textContent = "Berhasil bergabung dengan party " + code + ".";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal bergabung: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function leaveParty() {
+  const party = getMyParty();
+  if (isHost || !party || partyBusy || activeState?.phase !== "lobby") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const memberIds = Object.keys(party.members || {});
+    const changes = {
+      [`playerParties/${uid}`]: null,
+      [`parties/${party.code}/members/${uid}`]: null
+    };
+    if (party.leaderUid === uid && memberIds.length > 1) {
+      const replacement = memberIds
+        .filter((id) => id !== uid)
+        .sort((a, b) => Number(party.members[a]?.joinedAt || 0) - Number(party.members[b]?.joinedAt || 0) || a.localeCompare(b))[0];
+      changes[`parties/${party.code}/leaderUid`] = replacement;
+    } else if (party.leaderUid === uid && memberIds.length === 1) {
+      changes[`parties/${party.code}`] = null;
+    }
+    await update(dbPath(`rooms/${roomPin}/socialCompetition`), changes);
+    $("partyStatus").textContent = "Kamu sudah keluar dari party.";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal keluar dari party: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function setPartyTeam(teamId) {
+  const party = getMyParty();
+  if (!party || party.leaderUid !== uid || !["red", "blue"].includes(teamId) ||
+      activeState?.phase !== "lobby" || partyBusy || teamBattleData?.session?.status === "active") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${party.code}/teamId`), teamId);
+    $("partyStatus").textContent = "Party memilih Team " + (teamId === "red" ? "Merah." : "Biru.");
+  } catch (error) {
+    $("partyStatus").textContent = "Tim belum dapat diubah: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+function renderPersonalCompetitionStats() {
+  renderPartyCenter();
 }
 function startReactionRushRound() {
   if (activeState?.phase !== "lobby") {
@@ -2516,6 +2781,7 @@ async function ensureFirebase() {
 function stopListeners() {
   stopQuickColorMatchListeners();
   stopTeamColorBattleListener();
+  stopSocialCompetitionListener();
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
@@ -2668,6 +2934,7 @@ function subscribeRoom() {
   stopListeners();
   subscribeQuickColorMatch();
   subscribeTeamColorBattle();
+  subscribeSocialCompetition();
   // A new room subscription must render its first live question, even after switching rooms.
   lastQuestionIndex = -1;
   lastVisualStateKey = "";
@@ -3498,6 +3765,28 @@ $("reactionRushOpen").addEventListener("click", openReactionRush);
 $("reactionRushAction").addEventListener("click", handleReactionRushAction);
 $("startQuickColorMatch").addEventListener("click", startQuickColorMatch);
 $("teamBattleHostAction").addEventListener("click", startTeamColorBattle);
+$("createParty").addEventListener("click", createParty);
+$("joinParty").addEventListener("click", joinParty);
+$("leaveParty").addEventListener("click", leaveParty);
+$("partyTeamRed").addEventListener("click", () => setPartyTeam("red"));
+$("partyTeamBlue").addEventListener("click", () => setPartyTeam("blue"));
+$("partyJoinCode").addEventListener("input", () => {
+  $("partyJoinCode").value = $("partyJoinCode").value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 6);
+});
+$("partyJoinCode").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") joinParty();
+});
+$("copyPartyCode").addEventListener("click", async () => {
+  const party = getMyParty();
+  if (!party) return;
+  try {
+    await navigator.clipboard.writeText(party.code);
+    $("copyPartyCode").textContent = "Tersalin";
+    setTimeout(() => $("copyPartyCode").textContent = "Salin", 1200);
+  } catch {
+    $("partyCodeValue").textContent = party.code;
+  }
+});
 $("teamBattleChoices").addEventListener("click", (event) => {
   const button = event.target.closest("[data-team-color-index]");
   if (button && !button.disabled) submitTeamColorAnswer(Number(button.dataset.teamColorIndex));
