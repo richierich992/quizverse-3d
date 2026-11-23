@@ -48,9 +48,12 @@ assert.match(main, /function buildArenaArchitecture\(\)/, "Arena builds an enclo
 assert.match(main, /Low-poly audience figures: lightweight, decorative silhouettes/, "Arena includes a decorative audience");
 assert.match(main, /const arenaAudience = \[\]/, "Audience figures are tracked in a bounded render-only collection");
 assert.match(main, /arenaAudience\.push\(\{\s*group: spectator,\s*head,\s*baseY: y/, "Each decorative spectator groups existing body parts for efficient animation");
-assert.match(main, /function triggerAudienceReaction\(\)/, "Audience responds to answer reveals and the match finish");
+assert.match(main, /function triggerAudienceReaction\(kind, duration\)/, "Audience uses a local timed reaction for reveals and match finish");
+assert.match(main, /triggerAudienceReaction\("reveal", 1\.65\)/, "Audience starts a staggered cheer when the answer is revealed");
+assert.match(main, /triggerAudienceReaction\("victory", 2\.25\)/, "Audience gives a longer celebration when the match finishes");
 assert.match(main, /function animateAudience\(now\)/, "Audience idle and cheering motion uses the render loop");
-assert.match(main, /event\.kind === "victory" \? 1 : 0\.68/, "Victory creates a stronger crowd cheer than a regular answer reveal");
+assert.match(main, /eventKind === "victory" \? 1 : 0\.68/, "Victory creates a stronger crowd cheer than a regular answer reveal");
+assert.match(main, /const cheerElapsed = elapsed - spectator\.cheerDelay/, "Crowd cheering starts at staggered offsets instead of in unison");
 assert.match(main, /animateAudience\(now\);\s*updateMatchVisualEffects\(now, dt\)/, "Audience animation remains client-side and independent of Firebase writes");
 assert.match(main, /Four sweeping light beams are translucent and rotate slowly overhead/, "Arena includes moving translucent spotlights");
 assert.match(main, /Perimeter LED segments animate as a subtle venue heartbeat/, "Arena perimeter lighting animates");
