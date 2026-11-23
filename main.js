@@ -263,7 +263,7 @@ function renderQuickColorMatch() {
   const isActive = round?.phase === "active";
   const countdown = Math.max(0, Math.ceil((startedAt - now) / 1000));
   const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
-  const canPlay = activeState?.phase === "lobby" && isActive && now >= startedAt &&
+  const canPlay = !isHost && activeState?.phase === "lobby" && isActive && now >= startedAt &&
     now <= endsAt && !winner && !quickColorSubmitting && performance.now() >= quickColorWrongUntil;
   $("quickColorTargetLabel").textContent = hasTarget ? "TEKAN WARNA INI" : "MENUNGGU RONDE";
   $("quickColorTarget").textContent = hasTarget ? COLOR_NAMES[targetIndex] : "SIAP?";
@@ -280,7 +280,8 @@ function renderQuickColorMatch() {
   else if (isActive && now < startedAt) message = "Bersiap! Target warna sudah terlihat. Mulai dalam " + countdown + "...";
   else if (isActive && winner) {
     message = winner.uid === uid ? "Kamu menang! 🎉" : winner.name + " paling cepat menemukan warna yang benar! 🎉";
-  } else if (isActive && now <= endsAt) message = "GO! Tekan tombol warna yang sesuai sekarang!";
+  } else if (isActive && now <= endsAt && performance.now() < quickColorWrongUntil) message = "Belum tepat! Coba warna yang lain.";
+  else if (isActive && now <= endsAt) message = "GO! Tekan tombol warna yang sesuai sekarang!";
   else if (isActive && !winner && now > endsAt) message = "Waktu habis. Belum ada pemenang ronde ini.";
   $("quickColorStatus").textContent = message;
   startButton.classList.toggle("hidden", !isHost);
