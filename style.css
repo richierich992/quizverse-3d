@@ -925,3 +925,51 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   .social-party-header strong{font-size:15px}
   .party-code-line strong{font-size:20px}
 }
+
+
+/* Tournament Center and live single-elimination bracket */
+.tournament-center-card{
+  margin-top:14px;padding:14px;border:1px solid #846eaa88;border-radius:16px;
+  background:linear-gradient(145deg,rgba(39,30,70,.98),rgba(12,23,46,.98));
+  box-shadow:inset 0 1px #ffffff12,0 9px 28px #0004;
+}
+.tournament-center-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.tournament-center-header>div:first-child{min-width:0}
+.tournament-center-header .eyebrow{display:block;margin-bottom:6px;color:#d5a9ff;font-size:8px;letter-spacing:1.5px}
+.tournament-center-header strong{display:block;color:#fff;font:700 17px 'Space Grotesk',sans-serif}
+.tournament-center-header p{margin:5px 0 0;color:#c0b0e0;font-size:10px;line-height:1.4}
+.tournament-meta{flex:0 0 auto;display:grid;gap:5px;justify-items:end}
+.tournament-meta b{padding:6px 8px;border:1px solid #9a7bd0aa;border-radius:9px;background:#291e45;color:#e4c8ff;font-size:7px;letter-spacing:.8px}
+.tournament-meta span{color:#a99bc6;font-size:7px;font-weight:800;letter-spacing:1px}
+.tournament-host-controls{display:grid;gap:8px;margin-top:13px}
+.tournament-host-controls input{
+  width:100%;min-width:0;border:1px solid #65558a;border-radius:9px;background:#101c36;
+  color:#f7f2ff;padding:10px 11px;font:700 11px 'Space Grotesk',sans-serif;
+}
+.tournament-host-controls .primary,.tournament-host-controls .secondary{width:100%;margin:0}
+.tournament-section-label{margin:14px 0 7px;color:#b6a6d7;font-size:8px;font-weight:800;letter-spacing:1.2px}
+.tournament-registration-list{display:flex;flex-wrap:wrap;gap:6px}
+.tournament-entrant-chip{padding:7px 9px;border:1px solid #66548c;border-radius:999px;background:#1a2442;color:#eee3ff;font-size:8px}
+.tournament-empty{width:100%;margin:0;padding:10px;border:1px dashed #554b77;border-radius:9px;color:#a99fc0;font-size:9px;line-height:1.5;text-align:center}
+.tournament-bracket{display:flex;gap:10px;overflow-x:auto;padding:3px 2px 8px;scroll-snap-type:x proximity}
+.tournament-round{flex:0 0 min(190px,70vw);min-width:155px;scroll-snap-align:start}
+.tournament-round h4{margin:8px 0;color:#d7c2fa;font-size:8px;letter-spacing:1.2px;text-align:center}
+.tournament-match{display:grid;gap:5px;margin-bottom:8px;padding:9px;border:1px solid #4e5275;border-radius:10px;background:linear-gradient(140deg,#1a2744,#141d36)}
+.tournament-match>small{color:#8e9cbd;font-size:7px;font-weight:800;letter-spacing:1px}
+.tournament-match-party{overflow:hidden;padding:6px 7px;border:1px solid #3e4b68;border-radius:6px;background:#101b31;color:#dbe5f8;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+.tournament-match-party.is-winner{border-color:#c5a1ff;background:#382b55;color:#f2e5ff;font-weight:800}
+.tournament-match-status{color:#9fabc5;font-size:7px;font-weight:800;letter-spacing:.6px}
+.tournament-match-ready{border-color:#a88ad6;box-shadow:0 0 0 1px #a88ad633}
+.tournament-match-ready .tournament-match-status{color:#d3b2ff}
+.tournament-match-bye .tournament-match-status{color:#8ee1c0}
+.tournament-match-finished .tournament-match-status{color:#a9edc9}
+.tournament-match.is-current{outline:2px solid #d2a9ff;box-shadow:0 0 18px #a77fe733}
+.tournament-champion{flex:0 0 100%;margin:8px 0;padding:12px;border:1px solid #d7b56f;border-radius:11px;background:linear-gradient(120deg,#564322,#2f2945);color:#ffe6a6;font:800 12px 'Space Grotesk',sans-serif;text-align:center}
+.tournament-status{min-height:32px;margin:11px 0 5px;color:#d0c8e2;font-size:9px;line-height:1.5;text-align:center}
+.tournament-footnote{display:block;margin-top:6px;color:#9c91b6;font-size:8px;line-height:1.45;text-align:center}
+@media(max-width:650px){
+  .tournament-center-card{padding:12px 11px}
+  .tournament-center-header strong{font-size:15px}
+  .tournament-round{flex-basis:160px}
+}
+@media(prefers-reduced-motion:reduce){.tournament-bracket{scroll-behavior:auto}}
