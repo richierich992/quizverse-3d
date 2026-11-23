@@ -114,6 +114,7 @@ camera.position.set(0, 13, 20);
 camera.lookAt(0, 0.85, 0);
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
+const winnerCameraFocus = new THREE.Vector3(0, 1.62, -17.15);
 const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -2473,10 +2474,9 @@ function updateJoystick(event) {
 // live group of participants without switching to a top-down overview.
 function updateWinnerCamera(dt) {
   const desiredCamera = spectatorCameraPosition.set(0, 7.35, -4.0);
-  const focus = new THREE.Vector3(0, 1.62, -17.15);
   const blend = 1 - Math.exp(-2.5 * dt);
   camera.position.lerp(desiredCamera, blend);
-  camera.lookAt(focus);
+  camera.lookAt(winnerCameraFocus);
 }
 
 function updateHostSpectatorCamera(dt) {
