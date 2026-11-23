@@ -236,6 +236,14 @@ assert.match(main, /function chooseLobbyRoamTarget\(now\)/, "Lobby wander destin
 assert.match(main, /function getLobbyRoamVector\(now\)/, "Lobby avatars walk between short ambient destinations");
 assert.match(main, /function lobbySeparationVector\(x, z\)/, "Lobby avatars softly steer away from nearby participants");
 assert.match(main, /function lobbySocialVector\(x, z\)/, "Idle lobby avatars drift toward nearby participants to form small groups");
+assert.match(main, /const LOBBY_ACTIVITY_ZONES = \[/, "Lobby has three marked ambient activity locations");
+assert.match(main, /function buildLobbyActivityPlaza\(\)/, "A dedicated activity hub is assembled from local scene geometry");
+assert.match(main, /lobbyActivityPlaza\.group\.visible = activeState\?\.phase === "lobby"/, "The activity hub is visible only while waiting in the lobby");
+assert.match(main, /const visitActivity = lobbyRoamRandom\(roam\.step, 23\) < 0\.24/, "Ambient roaming occasionally visits one of the activity spots");
+assert.match(main, /mesh\.userData\.socialActivity = activityZone\?\.zone\.id \|\| ""/, "Nearby avatars locally activate the closest activity zone");
+assert.match(main, /if \(socialActivity === "cheer"\)/, "Cheer station triggers a friendly looping celebration emote");
+assert.match(main, /else if \(socialActivity === "dance"\)/, "Dance station triggers a small, child-friendly dance emote");
+assert.match(main, /else if \(socialActivity === "team"\)/, "Team station triggers a friendly team-up gesture");
 assert.match(main, /distance <= 3\.8 \|\| distance >= 9\.5/, "Social groups approach gently while preserving conversational space");
 assert.match(main, /socialPartnerId/, "Lobby avatars keep a local conversational partner identity");
 assert.match(main, /conversationTarget = nearest && nearest\.distance < 6\.2 \? 1 : 0/, "Conversation gestures activate only for nearby players");
