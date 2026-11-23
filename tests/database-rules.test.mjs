@@ -107,6 +107,57 @@ try {
     uid: "late-player", name: "Late Player", roundId: 3, answerIndex: 3
   }));
 
+  const teamBase = `${base}/miniGames/teamColorBattle`;
+  const teamSession = `${teamBase}/session`;
+  const teamTeams = `${teamBase}/teams`;
+  const teamRound = `${teamBase}/round`;
+  const teamWinner = `${teamBase}/winners/1`;
+  await assertFails(set(ref(p1, teamSession), {
+    sessionId: 1, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now()
+  }));
+  await assertSucceeds(set(ref(host, teamSession), {
+    sessionId: 1, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now()
+  }));
+  await assertSucceeds(set(ref(host, teamTeams), {
+    sessionId: 1, members: { "player-1": "red", "player-2": "blue" }
+  }));
+  const teamRound1 = {
+    sessionId: 1, roundId: 1, phase: "preparing", targetIndex: 1,
+    startsAt: Date.now() - 100, endsAt: Date.now() + 5000
+  };
+  await assertSucceeds(update(ref(host, teamSession), { roundId: 1 }));
+  await assertSucceeds(set(ref(host, teamRound), teamRound1));
+  await assertSucceeds(update(ref(host, teamRound), { phase: "active" }));
+  await assertFails(set(ref(p1, teamWinner), {
+    sessionId: 1, roundId: 1, uid: "player-1", name: "Player 1", teamId: "red", answerIndex: 0
+  }));
+  await assertFails(set(ref(p1, teamWinner), {
+    sessionId: 1, roundId: 1, uid: "player-1", name: "Player 1", teamId: "blue", answerIndex: 1
+  }));
+  await assertSucceeds(set(ref(p1, teamWinner), {
+    sessionId: 1, roundId: 1, uid: "player-1", name: "Player 1", teamId: "red", answerIndex: 1
+  }));
+  await assertFails(set(ref(p2, teamWinner), {
+    sessionId: 1, roundId: 1, uid: "player-2", name: "Player 2", teamId: "blue", answerIndex: 1
+  }));
+  const teamWinnerRound2 = `${teamBase}/winners/1/2`;
+  await assertSucceeds(update(ref(host, teamSession), { roundId: 2 }));
+  await assertSucceeds(set(ref(host, teamRound), {
+    sessionId: 1, roundId: 2, phase: "preparing", targetIndex: 2,
+    startsAt: Date.now() - 100, endsAt: Date.now() - 500
+  }));
+  await assertSucceeds(update(ref(host, teamRound), { phase: "active" }));
+  await assertFails(set(ref(p2, teamWinnerRound2), {
+    sessionId: 1, roundId: 2, uid: "player-2", name: "Player 2", teamId: "blue", answerIndex: 2
+  }));
+  await assertSucceeds(update(ref(host, teamSession), { status: "finished" }));
+  await assertSucceeds(set(ref(host, teamSession), {
+    sessionId: 2, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now()
+  }));
+  await assertFails(set(ref(p1, `${teamBase}/winners/2/1`), {
+    sessionId: 2, roundId: 1, uid: "player-1", name: "Player 1", teamId: "red", answerIndex: 1
+  }));
+
   const deadline0 = Date.now() + 5000;
   await assertSucceeds(set(ref(host, `${base}/public`), questionState(0, {
     id: "q0", category: "Test", question: "Question one?", options: ["A", "B", "C", "D"]
