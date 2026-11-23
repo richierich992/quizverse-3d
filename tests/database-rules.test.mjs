@@ -144,15 +144,26 @@ try {
   await assertSucceeds(update(ref(host, teamSession), { roundId: 2 }));
   await assertSucceeds(set(ref(host, teamRound), {
     sessionId: 1, roundId: 2, phase: "preparing", targetIndex: 2,
-    startsAt: Date.now() - 100, endsAt: Date.now() - 500
+    startsAt: Date.now() - 1000, endsAt: Date.now() - 500
   }));
   await assertSucceeds(update(ref(host, teamRound), { phase: "active" }));
   await assertFails(set(ref(p2, teamWinnerRound2), {
     sessionId: 1, roundId: 2, uid: "player-2", name: "Player 2", teamId: "blue", answerIndex: 2
   }));
+  for (const roundId of [3, 4, 5]) {
+    await assertSucceeds(update(ref(host, teamSession), { roundId }));
+    await assertSucceeds(set(ref(host, teamRound), {
+      sessionId: 1, roundId, phase: "preparing", targetIndex: roundId % 4,
+      startsAt: Date.now() - 1000, endsAt: Date.now() - 500
+    }));
+    await assertSucceeds(update(ref(host, teamRound), { phase: "active" }));
+  }
   await assertSucceeds(update(ref(host, teamSession), { status: "finished" }));
   await assertSucceeds(set(ref(host, teamSession), {
     sessionId: 2, status: "active", totalRounds: 5, roundId: 0, startedAt: Date.now()
+  }));
+  await assertSucceeds(set(ref(host, teamTeams), {
+    sessionId: 2, members: { "player-1": "blue", "player-2": "red" }
   }));
   await assertFails(set(ref(p1, `${teamBase}/winners/2/1`), {
     sessionId: 2, roundId: 1, uid: "player-1", name: "Player 1", teamId: "red", answerIndex: 1
