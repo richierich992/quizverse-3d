@@ -33,6 +33,8 @@ assert.match(main, /const celebrationParticles = Array\.from\(\{ length: 24 \}/,
 assert.match(css, /#app\.timer-critical \.timer i/, "HUD shows a visible last-five-second warning");
 assert.match(css, /#app\.answer-revealed \.answer-legend span\.is-correct-answer/, "Correct answer receives a celebratory highlight");
 assert.match(css, /prefers-reduced-motion:reduce/, "Match effects respect reduced-motion preferences");
+assert.match(css, /#endScreen\{[\s\S]*?bottom:clamp\(12px,2\.5vh,24px\)/, "Final results card moves away from the center of the 3D winners' stage");
+assert.match(css, /@media\(max-width:650px\)\{[\s\S]*?#endScreen\{[\s\S]*?max-height:min\(38dvh,310px\)/, "Mobile results card is compact so the winner podium remains visible");
 assert.match(main, /camera\.position\.set\(0, 13, 20\)/, "Players retain the original third-person camera height");
 assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.x \* 0\.28, -18\.5, 18\.5\)/, "Host spectator camera stays between the side walls");
 assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.z \+ distance, -19\.5, 19\.5\)/, "Host spectator camera stays inside the front and back walls");
