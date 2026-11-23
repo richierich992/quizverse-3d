@@ -172,6 +172,7 @@ assert.match(main, /winnerCameraStartPosition\.copy\(camera\.position\)/, "Podiu
 assert.match(main, /\/ 2350/, "Podium camera uses a deliberate 2.35-second cinematic transition");
 assert.match(main, /winnerCameraLookTarget\.lerpVectors\(winnerCameraStartTarget, winnerCameraFocus, eased\)/, "Podium camera smoothly transitions its viewing target");
 assert.match(main, /championName"\)\.textContent = champion\.slice\(0, 48\)/, "Winner banner uses the first-place player's public display name");
+assert.match(main, /if \(id !== "endScreen"\) \$\("app"\)\.classList\.remove\("champions-reveal"\)/, "Champion banner resets whenever the user leaves the finished screen");
 assert.match(index, /id="championBanner"/, "Host has a podium champion banner");
 assert.match(player, /id="championBanner"/, "Player has a podium champion banner");
 assert.match(css, /#app\.champions-reveal \.champion-banner/, "Champion banner reveals during the finished phase");
