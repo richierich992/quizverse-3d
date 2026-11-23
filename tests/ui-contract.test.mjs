@@ -134,14 +134,21 @@ assert.match(main, /rig\.rightArm\.rotation\.z -= 1\.02 \* socialWave/, "Idle gr
 assert.match(main, /setAvatarSocialIdentity\(mesh, id\)/, "Remote social gestures are staggered by player identity");
 assert.match(main, /const winnerPodiumGroup = new THREE\.Group\(\)/, "Arena includes physical 3D winner podiums");
 assert.match(main, /function applyWinnerPlacements\(podium = \[\]\)/, "Final ranking places matching avatars on winner podiums");
+assert.match(main, /approachYaw = Math\.atan2\(slot\.x - mesh\.position\.x, slot\.z - mesh\.position\.z\)/, "Winner avatars face the podium while approaching it");
+assert.match(main, /mesh\.userData\.winnerMoving = true/, "Podium placement begins a dedicated walking state");
 assert.match(main, /uid: playerUid/, "Final podium records identify the correct player avatar");
 assert.match(main, /winnerRank === 1/, "First place has a persistent champion pose");
 assert.match(main, /winnerRank === 2/, "Second place has a distinct podium pose");
 assert.match(main, /winnerRank === 3/, "Third place has a distinct podium pose");
+assert.match(main, /const winnerRank = mesh\.userData\.winnerMoving \? 0 : Number\(mesh\.userData\.winnerRank \|\| 0\)/, "Champion pose starts after the avatar reaches the podium");
 assert.match(main, /function updateWinnerCamera\(dt\)/, "All clients receive a dedicated final podium camera");
 assert.match(main, /const horizontalHalfFovTangent = verticalHalfFov \* Math\.max\(0\.35, Number\(camera\.aspect\) \|\| 1\)/, "Winner camera accounts for portrait and landscape screen aspect ratios");
 assert.match(main, /const frameDistance = THREE\.MathUtils\.clamp\([\s\S]*?5\.2 \/ Math\.max\(0\.12, horizontalHalfFovTangent\)/, "Winner camera backs up enough to frame all podiums on narrow screens");
 assert.match(main, /activeState\?\.phase === "finished"\) \{\s*updateWinnerCamera\(dt\)/, "Finished match camera frames the podium instead of the player");
+assert.match(main, /const winnerBlend = 1 - Math\.exp\(-2\.6 \* dt\)/, "Local champion walks smoothly toward the podium");
+assert.match(main, /const positionBlend = winnerTarget \? 1 - Math\.exp\(-2\.6 \* dt\) : remoteBlend/, "Remote champions use the same walking speed as local champion");
+assert.match(main, /animateAvatar\(playerMesh, now, Boolean\(playerMesh\.userData\.moving\) \|\| localWinnerWalking\)/, "Local champion uses a walking cycle during podium approach");
+assert.match(main, /const moving = winnerWalking \|\| \(distanceToTarget > 0\.025/, "Remote champions use a walking cycle during podium approach");
 assert.match(main, /if \(activeState\?\.phase === "finished"\) applyWinnerPlacements\(activeState\.podium \|\| \[\]\)/, "Late player roster updates still place podium winners");
 
 assert.match(main, /reaction\.kind === "correct" \|\| reaction\.kind === "victory"/, "Correct answers and final victory use an upbeat pose");
