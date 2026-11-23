@@ -380,7 +380,8 @@ function renderTeamColorBattle() {
   const round = data.round?.sessionId === sessionId ? data.round : null;
   const teamMap = data.teams?.sessionId === sessionId ? (data.teams.members || {}) : {};
   const myTeam = uid ? teamMap[uid] : null;
-  const winners = data.winners?.[String(sessionId)] || {};
+  const winners = Object.fromEntries(Object.entries(data.winners || {})
+    .filter(([key, item]) => /^round[1-5]$/.test(key) && Number(item?.sessionId) === sessionId));
   const redWins = Object.values(winners).filter((item) => item?.teamId === "red").length;
   const blueWins = Object.values(winners).filter((item) => item?.teamId === "blue").length;
   const redMembers = Object.values(teamMap).filter((team) => team === "red").length;
@@ -489,6 +490,9 @@ async function startTeamColorBattle() {
       members[playerId] = index % 2 === 0 ? "red" : "blue";
     });
     const nextSessionId = Number(session?.sessionId || 0) + 1;
+    if (session?.status === "finished") {
+      await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners`), null);
+    }
     await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
       sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0,
       startedAt: Math.round(serverNow())
@@ -516,9 +520,9 @@ async function startNextTeamColorRound() {
   const session = teamBattleData?.session;
   if (!session || session.status !== "active") return;
   const previousRound = teamBattleData?.round;
-  const winners = teamBattleData?.winners?.[String(session.sessionId)] || {};
+  const winners = teamBattleData?.winners || {};
   const previousWinner = previousRound
-    ? winners[String(previousRound.roundId)] : null;
+    ? winners["round" + previousRound.roundId] : null;
   if (previousRound?.sessionId === session.sessionId &&
       previousRound.phase === "active" && !previousWinner && serverNow() <= Number(previousRound.endsAt)) {
     $("teamBattleStatus").textContent = "Ronde masih berlangsung. Tunggu pemenang atau waktu habis.";
@@ -551,8 +555,8 @@ async function finishTeamColorBattle() {
   if (!isHost || !roomPin || teamBattleBusy) return;
   const session = teamBattleData?.session;
   const round = teamBattleData?.round;
-  const winners = teamBattleData?.winners?.[String(session?.sessionId || 0)] || {};
-  const winner = winners[String(round?.roundId || 0)];
+  const winners = teamBattleData?.winners || {};
+  const winner = winners["round" + Number(round?.roundId || 0)];
   const resolved = Boolean(winner) || (round?.phase === "active" && serverNow() > Number(round.endsAt));
   if (!session || session.status !== "active" ||
       Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved) return;
@@ -574,12 +578,13 @@ async function submitTeamColorAnswer(colorIndex) {
   const round = data.round || {};
   const teams = data.teams?.sessionId === session.sessionId ? data.teams.members || {} : {};
   const myTeam = teams[uid];
-  const winners = data.winners?.[String(session.sessionId || 0)] || {};
+  const winners = data.winners || {};
   const now = serverNow();
   if (isHost || !myTeam || session.status !== "active" || activeState?.phase !== "lobby" ||
       round.sessionId !== session.sessionId || round.phase !== "active" ||
       now < Number(round.startsAt) || now > Number(round.endsAt) ||
-      winners[String(round.roundId)] || teamBattleSubmitting) return;
+      (winners["round" + round.roundId] && Number(winners["round" + round.roundId].sessionId) === Number(session.sessionId)) ||
+      teamBattleSubmitting) return;
   if (Number(colorIndex) !== Number(round.targetIndex)) {
     teamBattleWrongUntil = performance.now() + 420;
     $("teamBattleStatus").textContent = "Warna belum tepat. Coba lagi untuk timmu!";
@@ -589,7 +594,7 @@ async function submitTeamColorAnswer(colorIndex) {
   teamBattleSubmitting = true;
   renderTeamColorBattle();
   try {
-    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners/${session.sessionId}/${round.roundId}`), {
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners/round${round.roundId}`), {
       sessionId: Number(session.sessionId), roundId: Number(round.roundId),
       uid, name: String($("name").value.trim() || "Pemain").slice(0, 18),
       teamId: myTeam, answerIndex: Number(colorIndex)
