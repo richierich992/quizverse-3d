@@ -160,6 +160,7 @@ assert.match(main, /motion\.stridePhase \+= dt \* 10\.8/, "Each avatar advances 
 assert.match(main, /const leftLift = Math\.max\(0, Math\.sin\(phase\)\) \* 0\.095 \* gait/, "Left foot visibly lifts during its alternating stride");
 assert.match(main, /const rightLift = Math\.max\(0, Math\.sin\(phase \+ Math\.PI\)\) \* 0\.095 \* gait/, "Right foot visibly lifts opposite the left foot");
 assert.match(main, /const jumpHeight = THREE\.MathUtils\.clamp\(\(mesh\.position\.y - groundHeight\) \/ 1\.12, 0, 1\)/, "Jump animation blends from the actual height above the current floor");
+assert.match(main, /const jumpPose = jumpHeight \* motionScale/, "Jump pose is reduced when reduced-motion is enabled");
 assert.match(main, /rig\.leftLeg\.rotation\.x = -swing \* 0\.78 \* walkLegBlend - jumpHeight \* 0\.42/, "Jump pose tucks the legs while preserving the walking pose");
 assert.match(main, /const landingImpact = landedFor >= 0 && landedFor < 0\.24/, "Landing creates a short, reusable squash-and-rebound effect");
 assert.match(main, /rig\.torso\.scale\.y = 1 - landingImpact \* 0\.075/, "Landing response includes a subtle body squash");
