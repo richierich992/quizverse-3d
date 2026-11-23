@@ -32,7 +32,9 @@ assert.match(player, /id="teamColorBattleCard"/, "Player lobby contains the Team
 assert.match(index, /id="teamBattleHostAction"/, "Host has the Team Battle session and round control");
 assert.match(player, /data-team-color-index="3"/, "Player can select from four Team Battle target colors");
 assert.match(main, /function subscribeTeamColorBattle\(\)/, "Both clients subscribe to the room Team Battle state");
-assert.match(main, /players\.forEach\(\(\[playerId\], index\) => \{\s*members\[playerId\] = index % 2 === 0 \? "red" : "blue";/, "Host distributes players evenly between Red and Blue teams");
+assert.match(main, /const socialSnap = await get\(dbPath\(\`rooms\/\$\{roomPin\}\/socialCompetition\`\)\)/, "Host reads party preferences before assigning teams");
+assert.match(main, /const selectedTeam = party\?\.members\?\.\[playerId\] && \["red", "blue"\]\.includes\(party\.teamId\)/, "Host assigns all party members to their leader-selected team");
+assert.match(main, /const teamId = counts\.red <= counts\.blue \? "red" : "blue"/, "Solo players are assigned to the smaller team");
 assert.match(main, /const canPlay = !isHost && Boolean\(myTeam\)/, "Only assigned Players can compete while Host stays a spectator");
 assert.match(main, /function startNextTeamColorRound\(\)/, "Host can advance the five-round team match");
 assert.match(main, /totalRounds: 5/, "Team Color Battle is a five-round match");
