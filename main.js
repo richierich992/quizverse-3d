@@ -2581,7 +2581,9 @@ function movePlayer(dt) {
   ownPosition.z = THREE.MathUtils.clamp(ownPosition.z + input.z * speed * dt, -21, 21);
   playerMesh.position.x = ownPosition.x;
   playerMesh.position.z = ownPosition.z;
-  if (Math.abs(input.x) + Math.abs(input.z) > 0.04) playerMesh.rotation.y = Math.atan2(input.x, input.z);
+  if (Math.abs(input.x) + Math.abs(input.z) > 0.04) {
+    playerMesh.userData.targetYaw = Math.atan2(input.x, input.z);
+  }
   // Answer bays are raised podiums. Keep players standing on their top surface
   // while they are inside the answer area, then return to the main floor.
   const groundHeight = answerBaySurfaceAt(ownPosition.x, ownPosition.z);
@@ -2731,6 +2733,16 @@ function animate() {
   const now = performance.now();
   updateLobbySocial();
   let localWinnerWalking = false;
+  if (playerMesh && !playerMesh.userData.winnerTarget) {
+    const desiredYaw = Number(playerMesh.userData.targetYaw);
+    if (Number.isFinite(desiredYaw)) {
+      const yawDelta = Math.atan2(
+        Math.sin(desiredYaw - playerMesh.rotation.y),
+        Math.cos(desiredYaw - playerMesh.rotation.y)
+      );
+      playerMesh.rotation.y += yawDelta * (1 - Math.exp(-14 * dt));
+    }
+  }
   if (playerMesh?.userData.winnerTarget) {
     const target = playerMesh.userData.winnerTarget;
     const remaining = Math.hypot(
