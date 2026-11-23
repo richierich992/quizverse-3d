@@ -72,6 +72,7 @@ assert.match(main, /const cheerElapsed = elapsed - spectator\.cheerDelay/, "Crow
 assert.match(main, /spectator\.torso\.rotation\.x = Math\.sin\(localTime \* 1\.1\)/, "Crowd torso leans into a cheering motion");
 assert.match(main, /spectator\.head\.rotation\.y = -spectator\.side \* \(0\.26 \+ cheerImpact \* 0\.16\)/, "Crowd heads turn toward the winners as the cheer spreads");
 assert.match(main, /matchMotionPreference = matchMedia\("\(prefers-reduced-motion: reduce\)"\)/, "Procedural celebration respects reduced-motion settings");
+assert.match(main, /const intensity = !matchMotionPreference\.matches && eventActive/, "Audience reaction effects are disabled for reduced-motion preferences");
 assert.match(main, /animateAudience\(now\);\s*updateMatchVisualEffects\(now, dt\)/, "Audience animation remains client-side and independent of Firebase writes");
 assert.match(main, /Four sweeping light beams are translucent and rotate slowly overhead/, "Arena includes moving translucent spotlights");
 assert.match(main, /Perimeter LED segments animate as a subtle venue heartbeat/, "Arena perimeter lighting animates");
