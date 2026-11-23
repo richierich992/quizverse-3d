@@ -166,7 +166,7 @@ assert.match(main, /const landingImpact = landedFor >= 0 && landedFor < 0\.24/, 
 assert.match(main, /rig\.torso\.scale\.y = 1 - landingImpact \* 0\.075/, "Landing response includes a subtle body squash");
 assert.match(main, /animateAvatar\(entry\.mesh, now, moving\)/, "Remote and local players use the same avatar motion controller");
 assert.match(main, /function avatarGroundHeight\(mesh\)/, "Avatar animation reads the real floor height under the character");
-assert.match(main, /const groundHeight = avatarGroundHeight\(mesh\);\s*const airborne = mesh\.position\.y > groundHeight \+ 0\.16;/, "Standing on raised answer bays and winner podiums is not mistaken for jumping");
+assert.match(main, /const groundHeight = avatarGroundHeight\(mesh\);\s*const jumpHeight = THREE\.MathUtils\.clamp\(\(mesh\.position\.y - groundHeight\) \/ 1\.12, 0, 1\);\s*const airborne = jumpHeight > 0\.12;/, "Raised answer bays and podiums are treated as the current floor when detecting jumps");
 assert.match(main, /function triggerAvatarReaction\(mesh, kind, duration = 1\.7\)/, "Avatar reactions use a shared timed animation trigger");
 assert.match(main, /function updateLobbySocial\(\)/, "Lobby avatars look toward a nearby participant");
 assert.match(main, /nearestDistance = 12/, "Social attention is limited to nearby players");
