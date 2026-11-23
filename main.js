@@ -1465,6 +1465,11 @@ function updateLobbySocial() {
       mesh.userData.socialHighFive = 0;
       mesh.userData.socialHighFiveSide = 0;
       mesh.userData.socialHighFivePartnerId = "";
+      mesh.userData.socialGroupCount = 0;
+      mesh.userData.socialGroupWave = 0;
+      mesh.userData.socialGroupListen = 0;
+      mesh.userData.socialGroupSide = 0;
+      mesh.userData.socialGroupPartnerId = "";
     });
     return;
   }
@@ -1513,13 +1518,92 @@ function updateLobbySocial() {
     mesh.userData.socialActivity = activityZone?.zone.id || "";
   });
 
-  // Both clients derive the same rhythm from the sorted pair of player identities.
+  // Greedily form compact groups from the same stable identity order on every client.
+  avatars.forEach((mesh) => {
+    mesh.userData.socialGroupCount = 0;
+    mesh.userData.socialGroupWave = 0;
+    mesh.userData.socialGroupListen = 0;
+    mesh.userData.socialGroupSide = 0;
+    mesh.userData.socialGroupPartnerId = "";
+  });
+  const idleAvatars = avatars
+    .filter((mesh) => !mesh.userData.moving && !mesh.userData.winnerMoving &&
+      !mesh.userData.winnerTarget)
+    .slice()
+    .sort((a, b) => String(a.userData.socialId || "").localeCompare(
+      String(b.userData.socialId || "")
+    ));
+  const assignedToGroup = new Set();
+  for (const seed of idleAvatars) {
+    if (assignedToGroup.has(seed)) continue;
+    const nearby = idleAvatars
+      .filter((other) => other !== seed && !assignedToGroup.has(other))
+      .map((other) => ({
+        mesh: other,
+        distance: Math.hypot(
+          other.position.x - seed.position.x,
+          other.position.z - seed.position.z
+        )
+      }))
+      .filter((entry) => entry.distance <= 7.2)
+      .sort((a, b) => a.distance - b.distance ||
+        String(a.mesh.userData.socialId || "").localeCompare(
+          String(b.mesh.userData.socialId || "")
+        ));
+    const members = [seed, ...nearby.slice(0, 3).map((entry) => entry.mesh)];
+    members.forEach((member) => assignedToGroup.add(member));
+    if (members.length < 2) continue;
+
+    const groupIds = members.map((member) =>
+      String(member.userData.socialId || "")
+    ).sort();
+    const groupKey = groupIds.join("|");
+    const groupDuration = members.length * 1350;
+    const groupOffset = socialOffsetFor("group-turn:" + groupKey) % groupDuration;
+    const groupCycle = (Date.now() + groupOffset) % groupDuration;
+    const activeMemberIndex = Math.floor(groupCycle / 1350);
+    const slotProgress = (groupCycle % 1350) / 1350;
+
+    members.forEach((member, index) => {
+      const nextMember = members[(index + 1) % members.length];
+      const dx = nextMember.position.x - member.position.x;
+      const dz = nextMember.position.z - member.position.z;
+      const relativeYaw = Math.atan2(dx, dz) - member.rotation.y;
+      const normalizedYaw = Math.atan2(Math.sin(relativeYaw), Math.cos(relativeYaw));
+      const currentYaw = Number(member.userData.socialLookYaw || 0);
+      const yawDelta = Math.atan2(
+        Math.sin(normalizedYaw - currentYaw),
+        Math.cos(normalizedYaw - currentYaw)
+      );
+      member.userData.socialLookYaw = currentYaw + yawDelta * 0.09;
+      member.userData.socialGroupCount = members.length;
+      member.userData.socialGroupIndex = index;
+      member.userData.socialGroupKey = groupKey;
+      member.userData.socialGroupPartnerId = String(nextMember.userData.socialId || "");
+      member.userData.socialGroupSide = Math.sin(relativeYaw) >= 0 ? 1 : -1;
+
+      const waveEnvelope = index === activeMemberIndex && slotProgress < 0.58
+        ? Math.sin((slotProgress / 0.58) * Math.PI)
+        : 0;
+      const listenerIndex = (activeMemberIndex + 1) % members.length;
+      const listenEnvelope = index === listenerIndex &&
+        slotProgress >= 0.16 && slotProgress < 0.82
+        ? Math.sin(((slotProgress - 0.16) / 0.66) * Math.PI)
+        : 0;
+      member.userData.socialGroupWave = waveEnvelope;
+      member.userData.socialGroupListen = listenEnvelope;
+    });
+  }
+
+  // Two-person pairs use high-five; groups of three or four take turns greeting and listening.
   avatars.forEach((mesh) => {
     const nearest = nearestByMesh.get(mesh);
     const partner = nearest?.mesh;
     const partnerNearest = partner ? nearestByMesh.get(partner) : null;
     const mutualPair = Boolean(
       partner && partnerNearest?.mesh === mesh &&
+      Number(mesh.userData.socialGroupCount || 0) === 2 &&
+      Number(partner.userData.socialGroupCount || 0) === 2 &&
       nearest.distance >= 1.18 && nearest.distance <= 3.2 &&
       !mesh.userData.moving && !partner.userData.moving
     );
@@ -1531,7 +1615,7 @@ function updateLobbySocial() {
         String(partner.userData.socialId || "")
       ].sort();
       const pairOffset = socialOffsetFor("high-five:" + pairIds.join("|")) % 16000;
-      const pairCycle = (performance.now() + pairOffset) % 16000;
+      const pairCycle = (Date.now() + pairOffset) % 16000;
       if (pairCycle < 2200) {
         phase = pairCycle / 2200;
         target = Math.sin(phase * Math.PI);
@@ -1632,20 +1716,31 @@ function animateAvatar(mesh, time, moving = false) {
     ? THREE.MathUtils.clamp(Number(mesh.userData.socialHighFive || 0), 0, 1)
     : 0;
   const socialHighFiveSide = Number(mesh.userData.socialHighFiveSide || 0);
+  const socialGroupCount = socialEnabled ? Number(mesh.userData.socialGroupCount || 0) : 0;
+  const socialGroupWave = socialGroupCount >= 3
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialGroupWave || 0), 0, 1)
+    : 0;
+  const socialGroupListen = socialGroupCount >= 3
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialGroupListen || 0), 0, 1)
+    : 0;
+  const socialGroupSide = Number(mesh.userData.socialGroupSide || 0);
   const highFivePhase = Number(mesh.userData.socialHighFivePhase || 0);
   const highFiveSlap = socialHighFive *
     Math.max(0, 1 - Math.abs(highFivePhase - 0.58) / 0.16);
-  const socialWave = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle < 920
+  const socialWave = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle < 920
     ? Math.sin((socialCycle / 920) * Math.PI) * socialConversation
     : 0;
-  const socialNod = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
+  const socialNod = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
     ? Math.sin(((socialCycle - 1450) / 900) * Math.PI) * socialConversation
     : 0;
-  const socialChat = socialHighFive < 0.25 && socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
+  const socialChat = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
     ? Math.sin(((socialCycle - 2650) / 1550) * Math.PI) * socialConversation
     : 0;
   const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
-  const socialActivity = socialEnabled && socialHighFive < 0.25
+  const socialActivity = socialEnabled && socialHighFive < 0.25 && socialGroupCount < 3
     ? String(mesh.userData.socialActivity || "")
     : "";
   const activityPhase = (time + socialOffset) % 4200;
@@ -1658,6 +1753,20 @@ function animateAvatar(mesh, time, moving = false) {
     rig.rightArm.rotation.z -= 1.02 * socialWave;
     rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
     rig.torso.rotation.z -= 0.045 * socialWave;
+  }
+  if (socialGroupWave > 0 && socialGroupSide !== 0) {
+    if (socialGroupSide > 0) {
+      rig.rightArm.rotation.z -= 1.40 * socialGroupWave;
+      rig.rightArm.rotation.x += Math.sin(t * 15) * 0.16 * socialGroupWave;
+    } else {
+      rig.leftArm.rotation.z += 1.40 * socialGroupWave;
+      rig.leftArm.rotation.x += Math.sin(t * 15) * 0.16 * socialGroupWave;
+    }
+    rig.torso.rotation.z += socialGroupSide * -0.035 * socialGroupWave;
+  }
+  if (socialGroupListen > 0) {
+    rig.head.rotation.x += 0.085 * socialGroupListen;
+    rig.torso.rotation.z += 0.018 * socialGroupListen;
   }
 
   const arrival = mesh.userData.lobbyArrival;
@@ -1825,6 +1934,11 @@ function setAvatarSocialIdentity(mesh, identity) {
   mesh.userData.socialHighFive = 0;
   mesh.userData.socialHighFiveSide = 0;
   mesh.userData.socialHighFivePartnerId = "";
+  mesh.userData.socialGroupCount = 0;
+  mesh.userData.socialGroupWave = 0;
+  mesh.userData.socialGroupListen = 0;
+  mesh.userData.socialGroupSide = 0;
+  mesh.userData.socialGroupPartnerId = "";
 }
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
