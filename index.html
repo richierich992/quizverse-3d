@@ -134,6 +134,41 @@
       <button id="startQuickColorMatch" type="button" class="primary full hidden">Mulai Ronde</button>
       <span class="quick-color-footnote">Tidak mengubah skor kuis utama.</span>
     </section>
+    <section id="teamColorBattleCard" class="team-battle-card" aria-labelledby="teamBattleTitle">
+      <div class="team-battle-heading">
+        <div>
+          <span class="eyebrow">TEAM MINI GAME · 5 RONDE</span>
+          <strong id="teamBattleTitle">Team Color Battle 🏆</strong>
+          <p>Merah vs Biru. Kerja sama tim dan refleks menentukan pemenang setiap ronde.</p>
+        </div>
+        <span id="teamBattleRound" class="team-battle-round">BELUM MULAI</span>
+      </div>
+      <div class="team-battle-scoreboard">
+        <div class="team-score team-score-red">
+          <span>TEAM MERAH</span><strong id="teamRedScore">0</strong>
+          <small id="teamRedMembers">0 pemain</small>
+        </div>
+        <div class="team-score team-score-blue">
+          <span>TEAM BIRU</span><strong id="teamBlueScore">0</strong>
+          <small id="teamBlueMembers">0 pemain</small>
+        </div>
+      </div>
+      <div id="teamBattleMyTeam" class="team-battle-my-team">Kamu belum masuk tim</div>
+      <div class="team-battle-target">
+        <small id="teamBattleTargetLabel">TARGET WARNA</small>
+        <strong id="teamBattleTarget">SIAP?</strong>
+        <span id="teamBattleCountdown">MENUNGGU HOST</span>
+      </div>
+      <div id="teamBattleChoices" class="team-battle-choices" aria-label="Pilihan warna Team Battle">
+        <button type="button" class="team-battle-option" data-team-color-index="0" disabled>MERAH</button>
+        <button type="button" class="team-battle-option" data-team-color-index="1" disabled>BIRU</button>
+        <button type="button" class="team-battle-option" data-team-color-index="2" disabled>KUNING</button>
+        <button type="button" class="team-battle-option" data-team-color-index="3" disabled>HIJAU</button>
+      </div>
+      <p id="teamBattleStatus" class="team-battle-status" aria-live="polite">Host dapat memulai Team Battle setelah minimal dua pemain bergabung.</p>
+      <button id="teamBattleHostAction" type="button" class="primary full hidden">Mulai Team Battle</button>
+      <span class="team-battle-footnote">5 ronde · 1 poin untuk tim pemenang setiap ronde · skor kuis utama tetap terpisah.</span>
+    </section>
   </section>
 
   <div id="reactionRushOverlay" class="reaction-rush-overlay hidden" aria-hidden="true">
