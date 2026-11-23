@@ -750,8 +750,12 @@ function applyWinnerPlacements(podium = []) {
   const place = (mesh, rankIndex) => {
     const slot = winnerPodiumSlots[rankIndex];
     if (!mesh || !slot) return;
+    const approachYaw = Math.atan2(slot.x - mesh.position.x, slot.z - mesh.position.z);
     mesh.userData.winnerRank = rankIndex + 1;
-    mesh.userData.winnerTarget = { x: slot.x, y: slot.y, z: slot.z, yaw: 0 };
+    mesh.userData.winnerMoving = true;
+    mesh.userData.winnerTarget = {
+      x: slot.x, y: slot.y, z: slot.z, yaw: 0, approachYaw
+    };
   };
 
   if (uid && slotByUid.has(String(uid))) place(playerMesh, slotByUid.get(String(uid)));
@@ -759,6 +763,7 @@ function applyWinnerPlacements(podium = []) {
     const rankIndex = slotByUid.get(String(id));
     if (rankIndex === undefined) {
       entry.mesh.userData.winnerRank = 0;
+      entry.mesh.userData.winnerMoving = false;
       entry.mesh.userData.winnerTarget = null;
       return;
     }
@@ -767,7 +772,7 @@ function applyWinnerPlacements(podium = []) {
     entry.targetX = slot.x;
     entry.targetY = slot.y;
     entry.targetZ = slot.z;
-    entry.targetYaw = 0;
+    entry.targetYaw = entry.mesh.userData.winnerTarget.approachYaw;
   });
 }
 
@@ -1323,7 +1328,7 @@ function animateAvatar(mesh, time, moving = false) {
     }
   }
 
-  const winnerRank = Number(mesh.userData.winnerRank || 0);
+  const winnerRank = mesh.userData.winnerMoving ? 0 : Number(mesh.userData.winnerRank || 0);
   if (winnerRank === 1) {
     rig.leftArm.rotation.z += 0.88;
     rig.rightArm.rotation.z -= 0.88;
@@ -2569,36 +2574,63 @@ function animate() {
   }
   const now = performance.now();
   updateLobbySocial();
+  let localWinnerWalking = false;
   if (playerMesh?.userData.winnerTarget) {
     const target = playerMesh.userData.winnerTarget;
-    const winnerBlend = 1 - Math.exp(-2.2 * dt);
+    const remaining = Math.hypot(
+      target.x - playerMesh.position.x,
+      target.y - playerMesh.position.y,
+      target.z - playerMesh.position.z
+    );
+    localWinnerWalking = remaining > 0.12;
+    playerMesh.userData.winnerMoving = localWinnerWalking;
+    const winnerBlend = 1 - Math.exp(-2.6 * dt);
     playerMesh.position.x += (target.x - playerMesh.position.x) * winnerBlend;
     playerMesh.position.y += (target.y - playerMesh.position.y) * winnerBlend;
     playerMesh.position.z += (target.z - playerMesh.position.z) * winnerBlend;
-    playerMesh.rotation.y += (target.yaw - playerMesh.rotation.y) * winnerBlend;
+    const desiredYaw = localWinnerWalking ? target.approachYaw : target.yaw;
+    const yawDelta = Math.atan2(
+      Math.sin(desiredYaw - playerMesh.rotation.y),
+      Math.cos(desiredYaw - playerMesh.rotation.y)
+    );
+    playerMesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
+    if (remaining < 0.006) {
+      playerMesh.position.set(target.x, target.y, target.z);
+      playerMesh.userData.winnerMoving = false;
+      localWinnerWalking = false;
+    }
   }
-  if (playerMesh) animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving));
+  if (playerMesh) {
+    animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving) || localWinnerWalking);
+  }
   const remoteBlend = 1 - Math.exp(-16 * dt);
   Object.values(remotePlayers).forEach((entry) => {
+    const targetY = Number(entry.targetY || 0);
     const dx = entry.targetX - entry.mesh.position.x;
+    const dy = targetY - entry.mesh.position.y;
     const dz = entry.targetZ - entry.mesh.position.z;
-    entry.mesh.position.x += dx * remoteBlend;
-    entry.mesh.position.y += (Number(entry.targetY || 0) - entry.mesh.position.y) * remoteBlend;
-    entry.mesh.position.z += dz * remoteBlend;
-    if (Math.abs(dx) + Math.abs(dz) < 0.006) {
-      entry.mesh.position.x = entry.targetX;
-      entry.mesh.position.z = entry.targetZ;
+    const remaining = Math.hypot(dx, dy, dz);
+    const winnerTarget = entry.mesh.userData.winnerTarget;
+    const winnerWalking = Boolean(winnerTarget && remaining > 0.12);
+    entry.mesh.userData.winnerMoving = winnerWalking;
+    const positionBlend = winnerTarget ? 1 - Math.exp(-2.6 * dt) : remoteBlend;
+    entry.mesh.position.x += dx * positionBlend;
+    entry.mesh.position.y += dy * positionBlend;
+    entry.mesh.position.z += dz * positionBlend;
+    if (remaining < 0.006) {
+      entry.mesh.position.set(entry.targetX, targetY, entry.targetZ);
+      entry.mesh.userData.winnerMoving = false;
     }
+    const desiredYaw = winnerTarget
+      ? (winnerWalking ? winnerTarget.approachYaw : winnerTarget.yaw)
+      : entry.targetYaw;
     const yawDelta = Math.atan2(
-      Math.sin(entry.targetYaw - entry.mesh.rotation.y),
-      Math.cos(entry.targetYaw - entry.mesh.rotation.y)
+      Math.sin(desiredYaw - entry.mesh.rotation.y),
+      Math.cos(desiredYaw - entry.mesh.rotation.y)
     );
     entry.mesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
-    const distanceToTarget = Math.hypot(
-      entry.targetX - entry.mesh.position.x,
-      entry.targetZ - entry.mesh.position.z
-    );
-    const moving = distanceToTarget > 0.025 && now - Number(entry.lastMoveAt || 0) < 600;
+    const distanceToTarget = Math.hypot(dx, dz);
+    const moving = winnerWalking || (distanceToTarget > 0.025 && now - Number(entry.lastMoveAt || 0) < 600);
     animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
