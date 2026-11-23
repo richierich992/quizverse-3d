@@ -23,6 +23,16 @@ assert.match(index, /id="roundLeaderboard"/, "Host sees a live standings panel d
 assert.match(player, /id="roundLeaderboard"/, "Players see a live standings panel during answer reveal");
 assert.match(main, /function renderRoundLeaderboard\(\)/, "Reveal leaderboard is rendered from current room scores");
 assert.match(main, /function updateHostSpectatorCamera\(dt\)/, "Host has a dedicated in-arena spectator camera");
+assert.match(main, /function triggerQuestionStart\(\)/, "Question start triggers a one-shot arena entrance effect");
+assert.match(main, /function triggerAnswerReveal\(state\)/, "Answer reveal triggers a one-shot correct-answer celebration");
+assert.match(main, /visualPhaseChanged\) triggerAnswerReveal\(activeState\)/, "Repeated Firebase updates do not replay the reveal celebration");
+assert.match(main, /left > 0 && left <= 5/, "Last-five-second urgency uses the synchronized room deadline");
+assert.match(main, /function updateMatchVisualEffects\(now, dt\)/, "Match feedback effects update from the render loop");
+assert.match(main, /const matchEventRings = Array\.from\(\{ length: 3 \}/, "Question and reveal effects reuse a small ring pool");
+assert.match(main, /const celebrationParticles = Array\.from\(\{ length: 24 \}/, "Correct-answer celebration uses a bounded particle pool");
+assert.match(css, /#app\.timer-critical \.timer i/, "HUD shows a visible last-five-second warning");
+assert.match(css, /#app\.answer-revealed \.answer-legend span\.is-correct-answer/, "Correct answer receives a celebratory highlight");
+assert.match(css, /prefers-reduced-motion:reduce/, "Match effects respect reduced-motion preferences");
 assert.match(main, /camera\.position\.set\(0, 13, 20\)/, "Players retain the original third-person camera height");
 assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.x \* 0\.28, -18\.5, 18\.5\)/, "Host spectator camera stays between the side walls");
 assert.match(main, /THREE\.MathUtils\.clamp\(spectatorFocus\.z \+ distance, -19\.5, 19\.5\)/, "Host spectator camera stays inside the front and back walls");
