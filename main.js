@@ -2807,7 +2807,7 @@ function movePlayer(dt) {
     ownPosition.x - lastSyncedPosition.x,
     ownPosition.z - lastSyncedPosition.z
   );
-  const syncInterval = inLobby ? 420 : 200;
+  const syncInterval = inLobby ? 320 : 200;
   const shouldSyncPosition = inQuestion || movedSinceSync >= 0.12;
   if (db && roomPin && shouldSyncPosition && now - lastPositionWrite > syncInterval) {
     lastPositionWrite = now;
@@ -2998,8 +2998,8 @@ function animate() {
       Math.cos(desiredYaw - entry.mesh.rotation.y)
     );
     entry.mesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
-    const distanceToTarget = Math.hypot(dx, dz);
-    const moving = winnerWalking || (distanceToTarget > 0.025 && now - Number(entry.lastMoveAt || 0) < 600);
+    const networkMoving = Number(entry.lastMoveAt || 0) > 0 && now - Number(entry.lastMoveAt || 0) < 390;
+    const moving = winnerWalking || networkMoving;
     animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
