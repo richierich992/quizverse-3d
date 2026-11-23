@@ -513,6 +513,72 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   65%{transform:scale(1.055);filter:brightness(1.45)}
   100%{transform:scale(1);filter:brightness(1)}
 }
+.answer-reveal-toast{
+  position:absolute;
+  z-index:4;
+  left:50%;
+  bottom:clamp(112px,16vh,152px);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:min(480px,calc(100vw - 32px));
+  min-height:62px;
+  padding:10px 15px;
+  border:1px solid var(--reveal-color,#8ff4c5);
+  border-radius:15px;
+  background:linear-gradient(110deg,rgba(5,20,34,.95),rgba(10,39,48,.94));
+  box-shadow:0 14px 42px #0008,0 0 24px color-mix(in srgb,var(--reveal-color,#8ff4c5) 24%,transparent),inset 0 1px #ffffff20;
+  backdrop-filter:blur(12px);
+  opacity:0;
+  transform:translate(-50%,14px) scale(.96);
+  pointer-events:none;
+}
+#app.answer-revealed .answer-reveal-toast{
+  animation:answerRevealToast 1.55s cubic-bezier(.2,.75,.25,1) both;
+}
+.answer-reveal-kicker{
+  color:#9fc4d9;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:1.5px;
+  white-space:nowrap;
+}
+.answer-reveal-toast strong{
+  display:grid;
+  flex:0 0 35px;
+  width:35px;
+  height:35px;
+  place-items:center;
+  border-radius:10px;
+  background:var(--reveal-color,#8ff4c5);
+  color:#071522;
+  font:800 17px 'Space Grotesk',sans-serif;
+  box-shadow:0 0 18px color-mix(in srgb,var(--reveal-color,#8ff4c5) 34%,transparent);
+}
+.answer-reveal-toast>span:last-child{
+  min-width:0;
+  color:#f2fbff;
+  font:700 13px/1.25 'Space Grotesk',sans-serif;
+  overflow-wrap:anywhere;
+}
+@keyframes answerRevealToast{
+  0%{opacity:0;transform:translate(-50%,18px) scale(.94);filter:blur(4px)}
+  14%,78%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}
+  100%{opacity:0;transform:translate(-50%,-5px) scale(1.015);filter:blur(0)}
+}
+@media(max-width:650px){
+  .answer-reveal-toast{bottom:104px;gap:8px;min-height:54px;padding:8px 10px;border-radius:12px}
+  .answer-reveal-kicker{font-size:7px;letter-spacing:1px}
+  .answer-reveal-toast strong{flex-basis:31px;width:31px;height:31px;font-size:15px}
+  .answer-reveal-toast>span:last-child{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  #app.answer-revealed .answer-reveal-toast{
+    animation:none!important;
+    opacity:1;
+    transform:translate(-50%,0);
+  }
+}
 @media(prefers-reduced-motion:reduce){
   #app.question-enter .question-card,
   #app.question-enter .round-intro,
