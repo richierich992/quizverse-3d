@@ -102,7 +102,7 @@
           "parties": {
             "$partyCode": {
               ".write": "auth != null && root.child('rooms').child($roomPin).child('players').child(auth.uid).exists() && ((!data.exists() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active' && newData.child('leaderUid').val() === auth.uid && newData.child('members').child(auth.uid).exists()) || (data.exists() && auth.uid === data.child('leaderUid').val() && !newData.exists() && data.child('members').numChildren() === 1))",
-              ".validate": "newData.hasChildren(['leaderUid','teamId','createdAt','members']) && newData.child('leaderUid').isString() && newData.child('teamId').val() in ['red','blue'] && newData.child('createdAt').isNumber() && newData.child('members').numChildren() >= 1 && newData.child('members').numChildren() <= 4",
+              ".validate": "newData.hasChildren(['leaderUid','teamId','createdAt','members']) && newData.child('leaderUid').isString() && (newData.child('teamId').val() === 'red' || newData.child('teamId').val() === 'blue') && newData.child('createdAt').isNumber() && newData.child('members').numChildren() >= 1 && newData.child('members').numChildren() <= 4",
               "leaderUid": {
                 ".write": "auth != null && auth.uid === data.val() && data.parent().child('members').child(newData.val()).exists() && root.child('rooms').child($roomPin).child('miniGames').child('teamColorBattle').child('session').child('status').val() !== 'active'"
               },
