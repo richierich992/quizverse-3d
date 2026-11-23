@@ -264,7 +264,7 @@ assert.match(main, /rig\.leftArm\.rotation\.z \+= 1\.92 \* socialHighFive/, "Lef
 assert.match(main, /entry\.mesh\.userData\.moving = moving/, "Remote movement suppresses social handshakes while walking");
 assert.match(main, /const socialNod = socialHighFive < 0\.25 && socialGroupCount < 3/, "Solo listening nods yield to group choreography");
 assert.match(main, /const socialChat = socialHighFive < 0\.25 && socialGroupCount < 3/, "Solo conversation gestures yield to group choreography");
-assert.match(main, /const socialWave = socialHighFive < 0\.25 && socialConversation > 0\.42/, "Greeting waves yield priority to the paired high-five");
+assert.match(main, /const socialWave = socialHighFive < 0\.25 && socialGroupCount < 3 &&\s*socialConversation > 0\.42 && socialCycle < 920/, "Greeting waves yield priority to high-fives and rotating group choreography");
 assert.match(main, /socialPull\.x \* 0\.42/, "Autonomous lobby wandering gently joins nearby social clusters");
 assert.match(main, /const avoidanceWeight = manual \? 0\.90 : 2\.60/, "Lobby separation actively steers idle and manually moving avatars apart");
 assert.match(main, /function triggerLobbyArrival\(mesh, kind = "arrive", delay = 0\)/, "Lobby arrivals and welcomes use short-lived local avatar states");
