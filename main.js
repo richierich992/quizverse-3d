@@ -267,6 +267,7 @@ function labelSprite(text, color) {
 }
 
 const arenaAudience = [];
+const audienceReaction = { kind: "", startedAt: 0, duration: 0 };
 
 const arenaMaterial = {
   wall: new THREE.MeshStandardMaterial({ color: "#1b2b39", roughness: 0.78, metalness: 0.22 }),
@@ -723,15 +724,15 @@ function triggerAvatarReaction(mesh, kind, duration = 1.7) {
   };
 }
 
-function triggerAudienceReaction() {
-  // Audience reaction shares the local match event clock; it never writes to Firebase.
-  arenaAudience.forEach((spectator) => {
-    spectator.group.userData.cheerStartedAt = performance.now();
-  });
+function triggerAudienceReaction(kind, duration) {
+  // Audience reaction is local visual state; it never writes to Firebase.
+  audienceReaction.kind = kind;
+  audienceReaction.startedAt = performance.now();
+  audienceReaction.duration = Math.max(0.35, Number(duration) || 1.5);
 }
 
 function triggerAnswerReveal(state) {
-  triggerAudienceReaction();
+  triggerAudienceReaction("reveal", 1.65);
   const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
   const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
   // Remote avatars only show a shared reveal reaction; their private answer stays private.
@@ -799,7 +800,7 @@ function applyWinnerPlacements(podium = []) {
 }
 
 function triggerGameFinish(podium = []) {
-  triggerAudienceReaction();
+  triggerAudienceReaction("victory", 2.25);
   if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
   Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
   applyWinnerPlacements(podium);
@@ -828,18 +829,21 @@ function triggerGameFinish(podium = []) {
 
 function animateAudience(now) {
   if (!arenaAudience.length) return;
-  const event = matchVisualEvent;
-  const eventElapsed = event.kind ? (now - event.startedAt) / 1000 : Infinity;
-  const eventActive = eventElapsed >= 0 && eventElapsed < event.duration &&
-    (event.kind === "reveal" || event.kind === "victory");
+  const elapsed = audienceReaction.kind
+    ? (now - audienceReaction.startedAt) / 1000
+    : Infinity;
+  const eventActive = elapsed >= 0 && elapsed < audienceReaction.duration;
+  const eventKind = audienceReaction.kind;
   const intensity = eventActive
-    ? (event.kind === "victory" ? 1 : 0.68) * Math.sin(Math.PI * THREE.MathUtils.clamp(eventElapsed / event.duration, 0, 1))
+    ? (eventKind === "victory" ? 1 : 0.68) *
+      Math.sin(Math.PI * THREE.MathUtils.clamp(elapsed / audienceReaction.duration, 0, 1))
     : 0;
   const time = now * 0.001;
   arenaAudience.forEach((spectator) => {
     const localTime = time + spectator.phase;
-    const delayedCheer = eventActive
-      ? Math.max(0, Math.sin(Math.max(0, eventElapsed - spectator.cheerDelay) * 8.5))
+    const cheerElapsed = elapsed - spectator.cheerDelay;
+    const delayedCheer = eventActive && cheerElapsed >= 0
+      ? Math.max(0, Math.sin(cheerElapsed * 8.5))
       : 0;
     const bounce = 0.018 + intensity * (0.045 + delayedCheer * 0.075);
     spectator.group.position.y = spectator.baseY + Math.abs(Math.sin(localTime * 2.1)) * 0.012 +
