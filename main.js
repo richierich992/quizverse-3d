@@ -150,6 +150,9 @@ let quickColorRoundUnsubscribe = null, quickColorWinnerUnsubscribe = null;
 let quickColorRound = null, quickColorWinner = null;
 let quickColorTicker = null, quickColorStarting = false, quickColorSubmitting = false;
 let quickColorWrongUntil = 0;
+let teamBattleUnsubscribe = null;
+let teamBattleData = null, teamBattleBusy = false, teamBattleSubmitting = false;
+let teamBattleWrongUntil = 0;
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -213,7 +216,10 @@ function stopQuickColorTicker() {
 }
 function startQuickColorTicker() {
   if (quickColorTicker) return;
-  quickColorTicker = setInterval(renderQuickColorMatch, 200);
+  quickColorTicker = setInterval(() => {
+    renderQuickColorMatch();
+    renderTeamColorBattle();
+  }, 200);
 }
 function stopQuickColorMatchListeners() {
   if (quickColorRoundUnsubscribe) quickColorRoundUnsubscribe();
@@ -347,6 +353,253 @@ async function submitQuickColorAnswer(colorIndex) {
   } finally {
     quickColorSubmitting = false;
     renderQuickColorMatch();
+  }
+}
+function stopTeamColorBattleListener() {
+  if (teamBattleUnsubscribe) teamBattleUnsubscribe();
+  teamBattleUnsubscribe = null;
+  teamBattleData = null;
+  teamBattleBusy = false;
+  teamBattleSubmitting = false;
+  teamBattleWrongUntil = 0;
+}
+function subscribeTeamColorBattle() {
+  stopTeamColorBattleListener();
+  const base = `rooms/${roomPin}/miniGames/teamColorBattle`;
+  teamBattleUnsubscribe = onValue(dbPath(base), (snap) => {
+    teamBattleData = snap.val() || null;
+    renderTeamColorBattle();
+  }, (error) => {
+    $("teamBattleStatus").textContent = "Team Battle tidak dapat dimuat: " + error.message;
+  });
+}
+function renderTeamColorBattle() {
+  const data = teamBattleData || {};
+  const session = data.session || null;
+  const sessionId = Number(session?.sessionId || 0);
+  const round = data.round?.sessionId === sessionId ? data.round : null;
+  const teamMap = data.teams?.sessionId === sessionId ? (data.teams.members || {}) : {};
+  const myTeam = uid ? teamMap[uid] : null;
+  const winners = data.winners?.[String(sessionId)] || {};
+  const redWins = Object.values(winners).filter((item) => item?.teamId === "red").length;
+  const blueWins = Object.values(winners).filter((item) => item?.teamId === "blue").length;
+  const redMembers = Object.values(teamMap).filter((team) => team === "red").length;
+  const blueMembers = Object.values(teamMap).filter((team) => team === "blue").length;
+  const roundId = Number(round?.roundId || 0);
+  const winner = roundId ? winners[String(roundId)] || null : null;
+  const now = serverNow();
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const preparing = round?.phase === "preparing";
+  const active = round?.phase === "active";
+  const countdown = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const canPlay = !isHost && Boolean(myTeam) && activeState?.phase === "lobby" &&
+    session?.status === "active" && active && now >= startsAt && now <= endsAt &&
+    !winner && !teamBattleSubmitting && performance.now() >= teamBattleWrongUntil;
+  const finished = session?.status === "finished";
+  const roundResolved = Boolean(winner) || (active && now > endsAt);
+  const totalRounds = Number(session?.totalRounds || 5);
+  $("teamRedScore").textContent = String(redWins);
+  $("teamBlueScore").textContent = String(blueWins);
+  $("teamRedMembers").textContent = redMembers + " pemain";
+  $("teamBlueMembers").textContent = blueMembers + " pemain";
+  $("teamBattleRound").textContent = session
+    ? (finished ? "SELESAI" : "RONDE " + Number(session.roundId || 0) + "/" + totalRounds)
+    : "BELUM MULAI";
+  $("teamBattleMyTeam").textContent = isHost
+    ? "HOST SPECTATOR · PEMANTAU BATTLE"
+    : myTeam === "red" ? "KAMU DI TEAM MERAH" :
+      myTeam === "blue" ? "KAMU DI TEAM BIRU" :
+        session?.status === "active" ? "Kamu belum mendapat tim untuk sesi ini" : "Kamu belum masuk tim";
+  $("teamBattleMyTeam").dataset.team = myTeam || "none";
+  $("teamBattleTargetLabel").textContent = hasTarget ? "TEMUKAN WARNA TARGET" : "TARGET WARNA";
+  $("teamBattleTarget").textContent = hasTarget ? COLOR_NAMES[targetIndex] : "SIAP?";
+  $("teamBattleTarget").style.color = hasTarget ? COLORS[targetIndex] : "#eaf6ff";
+  $("teamBattleCountdown").textContent = finished ? "BATTLE SELESAI" :
+    preparing || (active && now < startsAt) ? "MULAI " + countdown + "s" :
+      active ? secondsLeft + "s TERSISA" : "MENUNGGU HOST";
+  $("teamBattleChoices").querySelectorAll("[data-team-color-index]").forEach((button) => {
+    const colorIndex = Number(button.dataset.teamColorIndex);
+    button.disabled = !canPlay;
+    button.classList.toggle("is-target", hasTarget && colorIndex === targetIndex &&
+      now >= startsAt && !winner && !button.disabled);
+  });
+  let message = "Host dapat memulai Team Battle setelah minimal dua pemain bergabung.";
+  if (session?.status === "active" && !myTeam && !isHost) {
+    message = "Sesi ini sudah berjalan dan tim dikunci. Ikut battle berikutnya di room baru.";
+  } else if (finished) {
+    message = redWins === blueWins ? "Hasil akhir imbang! Kedua tim sama kuat." :
+      "🏆 TEAM " + (redWins > blueWins ? "MERAH" : "BIRU") + " MENANG! Skor " + redWins + "–" + blueWins + ".";
+  } else if (preparing || (active && now < startsAt)) {
+    message = "Bersiap! Target sudah terlihat. Ronde dimulai dalam " + countdown + "...";
+  } else if (active && winner) {
+    message = "Poin untuk Team " + (winner.teamId === "red" ? "Merah" : "Biru") +
+      "! " + winner.name + " menemukan warna lebih dulu.";
+  } else if (active && now <= endsAt && performance.now() < teamBattleWrongUntil) {
+    message = "Belum tepat! Coba lagi.";
+  } else if (active && now <= endsAt) {
+    message = "GO! Cari warna yang benar untuk memenangkan poin timmu!";
+  } else if (active && now > endsAt) {
+    message = "Waktu habis. Tidak ada poin untuk ronde ini.";
+  } else if (session?.status === "active") {
+    message = "Ronde selesai. Host dapat melanjutkan ronde berikutnya.";
+  }
+  $("teamBattleStatus").textContent = message;
+  const hostAction = $("teamBattleHostAction");
+  hostAction.classList.toggle("hidden", !isHost);
+  if (!session || finished) {
+    hostAction.textContent = finished ? "Mulai Team Battle Baru" : "Mulai Team Battle";
+    hostAction.disabled = teamBattleBusy;
+  } else if (Number(session.roundId || 0) >= totalRounds) {
+    hostAction.textContent = "Selesaikan Battle";
+    hostAction.disabled = teamBattleBusy || !roundResolved;
+  } else if (Number(session.roundId || 0) === 0 || roundResolved) {
+    hostAction.textContent = Number(session.roundId || 0) === 0 ? "Mulai Ronde 1" : "Mulai Ronde Berikutnya";
+    hostAction.disabled = teamBattleBusy;
+  } else {
+    hostAction.textContent = "Ronde Sedang Berjalan";
+    hostAction.disabled = true;
+  }
+}
+async function startTeamColorBattle() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  if (session?.status === "active") {
+    if (Number(session.roundId || 0) >= Number(session.totalRounds || 5)) {
+      await finishTeamColorBattle();
+    } else {
+      await startNextTeamColorRound();
+    }
+    return;
+  }
+  teamBattleBusy = true;
+  renderTeamColorBattle();
+  try {
+    const playersSnap = await get(dbPath(`rooms/${roomPin}/players`));
+    const players = Object.entries(playersSnap.val() || {})
+      .filter(([, person]) => person && person.connected !== false)
+      .sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")) ||
+        a[0].localeCompare(b[0]));
+    if (players.length < 2) throw new Error("Minimal dua pemain harus bergabung sebelum Team Battle dimulai.");
+    const members = {};
+    players.forEach(([playerId], index) => {
+      members[playerId] = index % 2 === 0 ? "red" : "blue";
+    });
+    const nextSessionId = Number(session?.sessionId || 0) + 1;
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
+      sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0,
+      startedAt: Math.round(serverNow())
+    });
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/teams`), {
+      sessionId: nextSessionId, members
+    });
+    teamBattleData = {
+      ...(teamBattleData || {}),
+      session: { sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0 },
+      teams: { sessionId: nextSessionId, members }
+    };
+    await startNextTeamColorRound();
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Tidak dapat memulai Team Battle: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+  }
+}
+async function startNextTeamColorRound() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  if (!session || session.status !== "active") return;
+  const previousRound = teamBattleData?.round;
+  const winners = teamBattleData?.winners?.[String(session.sessionId)] || {};
+  const previousWinner = previousRound
+    ? winners[String(previousRound.roundId)] : null;
+  if (previousRound?.sessionId === session.sessionId &&
+      previousRound.phase === "active" && !previousWinner && serverNow() <= Number(previousRound.endsAt)) {
+    $("teamBattleStatus").textContent = "Ronde masih berlangsung. Tunggu pemenang atau waktu habis.";
+    return;
+  }
+  const nextRoundId = Number(session.roundId || 0) + 1;
+  if (nextRoundId > Number(session.totalRounds || 5)) return;
+  teamBattleBusy = true;
+  renderTeamColorBattle();
+  try {
+    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
+      roundId: nextRoundId
+    });
+    const startsAt = Math.round(serverNow() + 2800);
+    const round = {
+      sessionId: Number(session.sessionId), roundId: nextRoundId,
+      phase: "preparing", targetIndex: Math.floor(Math.random() * COLOR_NAMES.length),
+      startsAt, endsAt: startsAt + 8000
+    };
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/round`), round);
+    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/round`), { phase: "active" });
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Gagal memulai ronde: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+  }
+}
+async function finishTeamColorBattle() {
+  if (!isHost || !roomPin || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  const round = teamBattleData?.round;
+  const winners = teamBattleData?.winners?.[String(session?.sessionId || 0)] || {};
+  const winner = winners[String(round?.roundId || 0)];
+  const resolved = Boolean(winner) || (round?.phase === "active" && serverNow() > Number(round.endsAt));
+  if (!session || session.status !== "active" ||
+      Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved) return;
+  teamBattleBusy = true;
+  try {
+    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
+      status: "finished", finishedAt: Math.round(serverNow())
+    });
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Gagal menyelesaikan battle: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+  }
+}
+async function submitTeamColorAnswer(colorIndex) {
+  const data = teamBattleData || {};
+  const session = data.session || {};
+  const round = data.round || {};
+  const teams = data.teams?.sessionId === session.sessionId ? data.teams.members || {} : {};
+  const myTeam = teams[uid];
+  const winners = data.winners?.[String(session.sessionId || 0)] || {};
+  const now = serverNow();
+  if (isHost || !myTeam || session.status !== "active" || activeState?.phase !== "lobby" ||
+      round.sessionId !== session.sessionId || round.phase !== "active" ||
+      now < Number(round.startsAt) || now > Number(round.endsAt) ||
+      winners[String(round.roundId)] || teamBattleSubmitting) return;
+  if (Number(colorIndex) !== Number(round.targetIndex)) {
+    teamBattleWrongUntil = performance.now() + 420;
+    $("teamBattleStatus").textContent = "Warna belum tepat. Coba lagi untuk timmu!";
+    renderTeamColorBattle();
+    return;
+  }
+  teamBattleSubmitting = true;
+  renderTeamColorBattle();
+  try {
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners/${session.sessionId}/${round.roundId}`), {
+      sessionId: Number(session.sessionId), roundId: Number(round.roundId),
+      uid, name: String($("name").value.trim() || "Pemain").slice(0, 18),
+      teamId: myTeam, answerIndex: Number(colorIndex)
+    });
+  } catch (error) {
+    const winnerSnap = await get(dbPath(
+      `rooms/${roomPin}/miniGames/teamColorBattle/winners/${session.sessionId}/${round.roundId}`
+    )).catch(() => null);
+    if (!winnerSnap?.exists()) $("teamBattleStatus").textContent = "Jawaban belum diterima: " + explainError(error);
+  } finally {
+    teamBattleSubmitting = false;
+    renderTeamColorBattle();
   }
 }
 function startReactionRushRound() {
@@ -2255,6 +2508,7 @@ async function ensureFirebase() {
 }
 function stopListeners() {
   stopQuickColorMatchListeners();
+  stopTeamColorBattleListener();
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
@@ -2406,6 +2660,7 @@ function playerInviteUrl() {
 function subscribeRoom() {
   stopListeners();
   subscribeQuickColorMatch();
+  subscribeTeamColorBattle();
   // A new room subscription must render its first live question, even after switching rooms.
   lastQuestionIndex = -1;
   lastVisualStateKey = "";
@@ -3235,6 +3490,11 @@ $("startGame").addEventListener("click", startGame);
 $("reactionRushOpen").addEventListener("click", openReactionRush);
 $("reactionRushAction").addEventListener("click", handleReactionRushAction);
 $("startQuickColorMatch").addEventListener("click", startQuickColorMatch);
+$("teamBattleHostAction").addEventListener("click", startTeamColorBattle);
+$("teamBattleChoices").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-team-color-index]");
+  if (button && !button.disabled) submitTeamColorAnswer(Number(button.dataset.teamColorIndex));
+});
 $("quickColorChoices").addEventListener("click", (event) => {
   const button = event.target.closest("[data-color-index]");
   if (button && !button.disabled) submitQuickColorAnswer(Number(button.dataset.colorIndex));
