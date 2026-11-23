@@ -118,7 +118,7 @@ try {
   }));
   await assertSucceeds(set(ref(p1, `${partyRef}`), {
     leaderUid: "player-1", teamId: "red", createdAt: Date.now(),
-    members: { "player-1": { name: "Player 1", joinedAt: Date.now() } }
+    members: { slot1: { uid: "player-1", name: "Player 1", joinedAt: Date.now() } }
   }));
   await assertSucceeds(set(ref(p1, pointer1), partyCode));
   await assertSucceeds(update(ref(p2, socialBase), {
