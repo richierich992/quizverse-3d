@@ -55,6 +55,11 @@ const WARDROBE_CATEGORIES=[
 const PAD_POINTS = [
   { x: -7, z: -6 }, { x: 7, z: -6 }, { x: -7, z: 6 }, { x: 7, z: 6 }
 ];
+const LOBBY_ACTIVITY_ZONES = [
+  { id: "cheer", label: "CHEER", x: -4.25, z: 14.45, radius: 1.65, color: "#ffb95e" },
+  { id: "dance", label: "DANCE", x: 0, z: 14.45, radius: 1.65, color: "#b79cff" },
+  { id: "team", label: "TEAM UP", x: 4.25, z: 14.45, radius: 1.65, color: "#61d9c2" }
+];
 
 const ANSWER_BAY_SURFACE_Y = 0.753;
 function answerBaySurfaceAt(x, z) {
@@ -618,6 +623,85 @@ function buildArenaArchitecture() {
   }
 }
 buildArenaArchitecture();
+
+function buildLobbyActivityPlaza() {
+  const group = new THREE.Group();
+  const outerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(7.1, 0.075, 10, 128),
+    new THREE.MeshStandardMaterial({
+      color: "#4a718b", emissive: "#1f6c91", emissiveIntensity: 0.26,
+      roughness: 0.48, metalness: 0.5, transparent: true, opacity: 0.72
+    })
+  );
+  outerRing.rotation.x = Math.PI / 2;
+  outerRing.position.set(0, 0.055, 14.45);
+  group.add(outerRing);
+
+  const innerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(6.5, 0.025, 8, 128),
+    new THREE.MeshBasicMaterial({ color: "#77dfff", transparent: true, opacity: 0.36 })
+  );
+  innerRing.rotation.x = Math.PI / 2;
+  innerRing.position.set(0, 0.035, 14.45);
+  group.add(innerRing);
+
+  const title = labelSprite("LOBBY ACTIVITY HUB", "#69dfff");
+  title.scale.set(5.4, 1.05, 1);
+  title.position.set(0, 4.05, 14.45);
+  title.material.depthTest = false;
+  title.material.depthWrite = false;
+  title.renderOrder = 8;
+  group.add(title);
+
+  const beacons = [];
+  LOBBY_ACTIVITY_ZONES.forEach((zone, index) => {
+    const floorDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(zone.radius, 56),
+      new THREE.MeshBasicMaterial({
+        color: zone.color, transparent: true, opacity: 0.13,
+        depthWrite: false, side: THREE.DoubleSide
+      })
+    );
+    floorDisc.rotation.x = -Math.PI / 2;
+    floorDisc.position.set(zone.x, 0.026, zone.z);
+    group.add(floorDisc);
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(zone.radius - 0.08, 0.055, 8, 64),
+      new THREE.MeshBasicMaterial({ color: zone.color, transparent: true, opacity: 0.86 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(zone.x, 0.07, zone.z);
+    group.add(ring);
+
+    const marker = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.32, 0),
+      new THREE.MeshStandardMaterial({
+        color: zone.color, emissive: zone.color, emissiveIntensity: 0.48,
+        roughness: 0.32, metalness: 0.24
+      })
+    );
+    marker.position.set(zone.x, 1.18 + index * 0.06, zone.z);
+    marker.userData.activityIndex = index;
+    marker.userData.activityBaseY = marker.position.y;
+    marker.castShadow = false;
+    group.add(marker);
+    beacons.push(marker);
+
+    const sign = labelSprite(zone.label, zone.color);
+    sign.scale.set(zone.id === "team" ? 1.78 : 1.55, 0.40, 1);
+    sign.position.set(zone.x, 0.62, zone.z);
+    sign.material.depthTest = false;
+    sign.material.depthWrite = false;
+    sign.renderOrder = 9;
+    group.add(sign);
+  });
+
+  group.visible = false;
+  scene.add(group);
+  return { group, beacons };
+}
+const lobbyActivityPlaza = buildLobbyActivityPlaza();
 
 const winnerPodiumGroup = new THREE.Group();
 winnerPodiumGroup.visible = false;
@@ -1415,6 +1499,13 @@ function updateLobbySocial() {
     mesh.userData.socialPartnerId = conversationTarget
       ? String(nearest.mesh.userData.socialId || "")
       : "";
+    const activityZone = LOBBY_ACTIVITY_ZONES
+      .map((zone) => ({ zone, distance: Math.hypot(
+        mesh.position.x - zone.x, mesh.position.z - zone.z
+      ) }))
+      .filter((entry) => entry.distance <= entry.zone.radius)
+      .sort((a, b) => a.distance - b.distance)[0];
+    mesh.userData.socialActivity = activityZone?.zone.id || "";
   });
 }
 
@@ -1507,6 +1598,10 @@ function animateAvatar(mesh, time, moving = false) {
     ? Math.sin(((socialCycle - 2650) / 1550) * Math.PI) * socialConversation
     : 0;
   const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
+  const socialActivity = socialEnabled ? String(mesh.userData.socialActivity || "") : "";
+  const activityPhase = (time + socialOffset) % 4200;
+  const activityBeat = Math.sin((activityPhase / 4200) * Math.PI * 2);
+  const activityPulse = Math.max(0, Math.sin((activityPhase / 4200) * Math.PI * 2));
   rig.head.rotation.y = socialLook * (0.48 + socialConversation * 0.18) + Math.sin(t * 0.72) * 0.035;
   rig.head.rotation.x += socialNod * 0.11;
   rig.head.rotation.z = idleSway * 0.025 + Math.sin(t * 0.55) * 0.012;
@@ -1540,6 +1635,27 @@ function animateAvatar(mesh, time, moving = false) {
     rig.torso.rotation.z -= 0.035 * arrivalWave;
   }
   if (arrivalBounce > 0) rig.torso.position.y += arrivalBounce;
+  if (socialActivity === "cheer") {
+    rig.leftArm.rotation.z += 0.72 + activityBeat * 0.09;
+    rig.rightArm.rotation.z -= 0.72 - activityBeat * 0.09;
+    rig.leftArm.rotation.x += activityBeat * 0.12;
+    rig.rightArm.rotation.x -= activityBeat * 0.12;
+    rig.torso.position.y += activityPulse * 0.065;
+    rig.head.rotation.z += activityBeat * 0.035;
+  } else if (socialActivity === "dance") {
+    rig.leftArm.rotation.z += 0.32 + activityBeat * 0.18;
+    rig.rightArm.rotation.z -= 0.32 - activityBeat * 0.18;
+    rig.leftArm.rotation.x += activityBeat * 0.16;
+    rig.rightArm.rotation.x -= activityBeat * 0.16;
+    rig.torso.rotation.z += activityBeat * 0.085;
+    rig.head.rotation.z -= activityBeat * 0.055;
+    rig.torso.position.y += activityPulse * 0.035;
+  } else if (socialActivity === "team") {
+    rig.rightArm.rotation.z -= 0.58 + activityPulse * 0.16;
+    rig.rightArm.rotation.x += activityBeat * 0.11;
+    rig.leftArm.rotation.z += 0.12;
+    rig.torso.rotation.z -= activityBeat * 0.025;
+  }
   if (socialChat > 0) {
     const chatBeat = Math.sin(t * 8.5 + Number(mesh.userData.socialOffset || 0) * 0.001);
     rig.leftArm.rotation.z += 0.13 * socialChat;
@@ -2790,11 +2906,18 @@ function chooseLobbyRoamTarget(now) {
   if (!lobbyRoamState) resetLobbyRoam();
   const roam = lobbyRoamState;
   roam.step += 1;
+  const visitActivity = lobbyRoamRandom(roam.step, 23) < 0.24;
+  const activityIndex = Math.floor(lobbyRoamRandom(roam.step, 29) * LOBBY_ACTIVITY_ZONES.length);
+  const activity = LOBBY_ACTIVITY_ZONES[activityIndex];
   for (let attempt = 0; attempt < 18; attempt++) {
     const angle = lobbyRoamRandom(roam.step, attempt) * Math.PI * 2;
-    const radius = 1.15 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 1.9;
-    const x = roam.anchorX + Math.cos(angle) * radius;
-    const z = roam.anchorZ + Math.sin(angle) * radius;
+    const radius = visitActivity
+      ? 0.55 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 0.88
+      : 1.15 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 1.9;
+    const originX = visitActivity ? activity.x : roam.anchorX;
+    const originZ = visitActivity ? activity.z : roam.anchorZ;
+    const x = originX + Math.cos(angle) * radius;
+    const z = originZ + Math.sin(angle) * radius;
     const clearPlatforms = PAD_POINTS.every((point) =>
       Math.hypot(point.x - x, point.z - z) > 4.15
     );
@@ -3149,6 +3272,15 @@ function animate() {
     animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
+  lobbyActivityPlaza.group.visible = activeState?.phase === "lobby";
+  if (lobbyActivityPlaza.group.visible) {
+    lobbyActivityPlaza.beacons.forEach((beacon, index) => {
+      beacon.rotation.y += dt * (0.72 + index * 0.14);
+      beacon.rotation.x = Math.sin(t * 1.2 + index) * 0.12;
+      beacon.position.y = beacon.userData.activityBaseY +
+        Math.sin(t * 2.0 + index * 1.8) * 0.11;
+    });
+  }
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
   sweepingBeams.forEach((beam, i) => {
     beam.rotation.z = Math.PI + Math.sin(t * 0.34 + beam.userData.sweepPhase) * 0.42;
