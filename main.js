@@ -844,19 +844,23 @@ async function leaveParty() {
     const members = Object.entries(party.members || {})
       .map(([slot, info]) => ({ slot, uid: String(info?.uid || ""), joinedAt: Number(info?.joinedAt || 0) }))
       .filter((member) => member.uid);
-    const changes = {
-      [`playerParties/${uid}`]: null,
-      [`parties/${party.code}/members/${party.mySlot}`]: null
-    };
-    if (party.leaderUid === uid && members.length > 1) {
-      const replacement = members
-        .filter((member) => member.uid !== uid)
-        .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid))[0].uid;
-      changes[`parties/${party.code}/leaderUid`] = replacement;
-    } else if (party.leaderUid === uid && members.length === 1) {
-      changes[`parties/${party.code}`] = null;
+    if (party.leaderUid === uid && members.length === 1) {
+      // Delete the whole party first; Firebase cannot merge a parent deletion with child paths.
+      await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${party.code}`), null);
+      await set(dbPath(`rooms/${roomPin}/socialCompetition/playerParties/${uid}`), null);
+    } else {
+      const changes = {
+        [`playerParties/${uid}`]: null,
+        [`parties/${party.code}/members/${party.mySlot}`]: null
+      };
+      if (party.leaderUid === uid) {
+        const replacement = members
+          .filter((member) => member.uid !== uid)
+          .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid))[0].uid;
+        changes[`parties/${party.code}/leaderUid`] = replacement;
+      }
+      await update(dbPath(`rooms/${roomPin}/socialCompetition`), changes);
     }
-    await update(dbPath(`rooms/${roomPin}/socialCompetition`), changes);
     $("partyStatus").textContent = "Kamu sudah keluar dari party.";
   } catch (error) {
     $("partyStatus").textContent = "Gagal keluar dari party: " + explainError(error);
