@@ -973,3 +973,124 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   .tournament-round{flex-basis:160px}
 }
 @media(prefers-reduced-motion:reduce){.tournament-bracket{scroll-behavior:auto}}
+
+
+/* Tournament showcase, party entrance and persistent Hall of Fame */
+.tournament-hall{margin-top:12px;padding-top:3px}
+.tournament-hall-list{display:grid;gap:7px}
+.tournament-hall-entry{
+  display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:9px;
+  padding:9px 10px;border:1px solid #856d54;border-radius:10px;
+  background:linear-gradient(120deg,#392f25,#201f31);
+}
+.tournament-hall-crown{
+  display:grid;place-items:center;width:34px;height:34px;border:1px solid #d4b16c;
+  border-radius:10px;background:#534321;color:#ffe4a0;font-size:18px;
+}
+.tournament-hall-copy{min-width:0}
+.tournament-hall-copy strong,.tournament-hall-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tournament-hall-copy strong{color:#ffe6b0;font:700 10px 'Space Grotesk',sans-serif}
+.tournament-hall-copy span{margin-top:3px;color:#c6b89e;font-size:8px}
+.tournament-hall-date{color:#a89b82;font-size:7px;font-weight:800;text-align:right;white-space:nowrap}
+
+.tournament-showcase-overlay{
+  position:fixed;inset:0;z-index:10000;display:grid;place-items:center;
+  padding:18px;overflow:hidden;isolation:isolate;
+}
+.tournament-showcase-overlay.hidden{display:none}
+.tournament-showcase-backdrop{
+  position:absolute;inset:0;z-index:-2;
+  background:radial-gradient(ellipse at 50% 35%,rgba(54,46,101,.76),rgba(3,8,21,.94) 68%);
+  backdrop-filter:blur(9px);animation:tournament-backdrop-in .35s ease both;
+}
+.tournament-showcase-dialog{
+  position:relative;isolation:isolate;display:grid;justify-items:center;gap:12px;
+  width:min(560px,100%);max-height:min(88vh,780px);overflow:auto;
+  padding:clamp(20px,5vw,34px);border:1px solid #b49ae4aa;border-radius:24px;
+  background:
+    radial-gradient(ellipse at 50% -10%,rgba(159,118,226,.25),transparent 55%),
+    linear-gradient(145deg,rgba(26,34,68,.98),rgba(8,17,37,.99));
+  box-shadow:0 28px 100px #000a,inset 0 1px #fff2;
+  text-align:center;animation:tournament-dialog-in .58s cubic-bezier(.18,.82,.24,1.08) both;
+}
+.tournament-showcase-eyebrow{
+  color:#ddc1ff;font-size:9px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase
+}
+.tournament-showcase-medal{
+  display:grid;place-items:center;width:76px;height:76px;border:1px solid #f0cf85;
+  border-radius:25px;background:linear-gradient(145deg,#735d32,#352b4e);
+  box-shadow:0 0 36px #d9b36b55,inset 0 1px #fff6;font-size:38px;
+  animation:tournament-medal-float 2.8s ease-in-out infinite;
+}
+.tournament-showcase-dialog h2{
+  margin:0;color:#fff;font:800 clamp(23px,5vw,34px)/1.05 'Space Grotesk',sans-serif;
+  letter-spacing:1px;text-shadow:0 5px 24px #bd98ff55
+}
+.tournament-showcase-subtitle{
+  max-width:430px;margin:0;color:#c4cbe3;font-size:12px;line-height:1.55
+}
+.tournament-showcase-versus{
+  display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;gap:10px;width:100%;margin-top:4px
+}
+.tournament-showcase-side{
+  display:grid;gap:7px;min-width:0;padding:13px 9px;border:1px solid #ffffff24;
+  border-radius:13px;background:#101c35
+}
+.tournament-showcase-side small{font-size:8px;font-weight:900;letter-spacing:1px}
+.tournament-showcase-side strong{
+  display:block;overflow-wrap:anywhere;color:#f5f7ff;
+  font:800 clamp(11px,2.5vw,15px)/1.2 'Space Grotesk',sans-serif
+}
+.tournament-showcase-side.is-red{border-color:#ef718b77;background:linear-gradient(145deg,#51263c,#281d35)}
+.tournament-showcase-side.is-red small{color:#ff9cad}
+.tournament-showcase-side.is-blue{border-color:#69b7ff77;background:linear-gradient(145deg,#183c68,#182540)}
+.tournament-showcase-side.is-blue small{color:#9bcfff}
+.tournament-showcase-vs{
+  color:#e1d2ff;font:900 11px 'Space Grotesk',sans-serif;text-shadow:0 0 16px #b18ce8
+}
+.tournament-showcase-champion{
+  display:grid;justify-items:center;gap:6px;width:100%;padding:14px;
+  border:1px solid #d7b76e;border-radius:14px;
+  background:linear-gradient(120deg,#584522,#302747);
+  animation:tournament-champion-glow 2.2s ease-in-out infinite alternate
+}
+.tournament-showcase-champion.hidden{display:none}
+.tournament-showcase-champion small{color:#f0d18b;font-size:8px;font-weight:900;letter-spacing:1.7px}
+.tournament-showcase-champion strong{color:#fff1c6;font:800 clamp(17px,4vw,24px) 'Space Grotesk',sans-serif}
+.tournament-showcase-champion span{color:#d6c7a9;font-size:10px}
+.tournament-showcase-note{margin:0;color:#aab7d1;font-size:10px;line-height:1.5}
+.tournament-showcase-dialog>button{width:100%;max-width:260px;margin-top:3px}
+.tournament-showcase-orbit{
+  position:absolute;z-index:-1;top:42%;left:50%;width:390px;height:390px;
+  border:1px solid #b89bdf1b;border-radius:50%;pointer-events:none;
+  transform:translate(-50%,-50%)
+}
+.tournament-showcase-orbit-a{animation:tournament-orbit 22s linear infinite}
+.tournament-showcase-orbit-b{width:500px;height:500px;border-style:dashed;animation:tournament-orbit 34s linear infinite reverse}
+.tournament-showcase-overlay.is-intro .tournament-showcase-medal{border-color:#9edbff;background:linear-gradient(145deg,#315b83,#30254e)}
+.tournament-showcase-overlay.is-result .tournament-showcase-medal{border-color:#9ae8c4;background:linear-gradient(145deg,#24614e,#292b52)}
+.tournament-showcase-overlay.is-champion .tournament-showcase-dialog{border-color:#e4c37b;box-shadow:0 28px 100px #000a,0 0 70px #d8b15a33,inset 0 1px #fff4}
+.tournament-showcase-overlay.is-champion .tournament-showcase-medal{width:94px;height:94px;border-radius:30px;font-size:48px}
+.tournament-showcase-overlay.is-champion .tournament-showcase-medal::after{
+  content:"";position:absolute;inset:-13px;border:1px dashed #e3c27a66;border-radius:36px;
+  animation:tournament-orbit 9s linear infinite
+}
+@keyframes tournament-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes tournament-dialog-in{from{opacity:0;transform:translateY(26px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes tournament-medal-float{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-7px) rotate(3deg)}}
+@keyframes tournament-orbit{from{transform:translate(-50%,-50%) rotate(0)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes tournament-champion-glow{from{box-shadow:0 0 12px #d8b15a18}to{box-shadow:0 0 30px #d8b15a55}}
+@media(max-width:560px){
+  .tournament-showcase-overlay{padding:12px}
+  .tournament-showcase-dialog{gap:10px;border-radius:18px;padding:21px 16px}
+  .tournament-showcase-medal{width:62px;height:62px;border-radius:20px;font-size:31px}
+  .tournament-showcase-versus{gap:6px}
+  .tournament-showcase-side{padding:10px 6px}
+  .tournament-hall-entry{grid-template-columns:32px minmax(0,1fr) auto;gap:7px;padding:8px}
+  .tournament-hall-crown{width:30px;height:30px}
+}
+@media(prefers-reduced-motion:reduce){
+  .tournament-showcase-backdrop,.tournament-showcase-dialog,.tournament-showcase-medal,
+  .tournament-showcase-orbit,.tournament-showcase-champion{animation:none!important}
+}
