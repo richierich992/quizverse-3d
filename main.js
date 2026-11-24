@@ -5061,13 +5061,19 @@ function updateTournamentDirectorCamera(dt) {
   // The schedule is based on the synchronized room clock, so every Host reload
   // gets the same cut sequence without adding a camera-control field to Firebase.
   if (!matchMotionPreference.matches) {
-    if (isFinished && roundWinner) {
+    if (isFinished) {
+      const finalRoundResults = Object.values(winners)
+        .filter((item) => Number(item?.sessionId) === sessionId);
+      const redScore = finalRoundResults.filter((item) => item?.teamId === "red").length;
+      const blueScore = finalRoundResults.filter((item) => item?.teamId === "blue").length;
+      const matchWinningTeam = redScore === blueScore ? "" : redScore > blueScore ? "red" : "blue";
       const finishedAt = Number(session.finishedAt || round?.endsAt || now);
-      if (now - finishedAt < 3200) {
-        winnerEntry = roundWinner.uid ? remotePlayers[roundWinner.uid] : null;
-        if (winnerEntry?.mesh?.position) shot = "winner";
+      if (matchWinningTeam && now - finishedAt < 3200) {
+        subjectTeam = matchWinningTeam;
+        subject = centerOf(matchWinningTeam === "red" ? redEntries : blueEntries) || wideFocus;
+        shot = "winner";
       }
-    } else if (roundWinner && !isFinished) {
+    } else if (roundWinner) {
       winnerEntry = roundWinner.uid ? remotePlayers[roundWinner.uid] : null;
       if (winnerEntry?.mesh?.position) shot = "winner";
     } else if (round?.phase === "active" && now >= startsAt && now <= endsAt) {
