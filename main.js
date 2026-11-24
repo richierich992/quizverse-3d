@@ -1810,6 +1810,7 @@ const winnerCameraLookTarget = new THREE.Vector3();
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
 const spectatorCameraLookTarget = new THREE.Vector3(0, 0.85, 0);
+const spectatorDesiredLookTarget = new THREE.Vector3(0, 0.85, 0);
 const winnerCameraFocus = new THREE.Vector3(0, 1.62, -17.15);
 const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
@@ -5096,8 +5097,8 @@ function updateTournamentDirectorCamera(dt) {
   let cameraX = 0;
   let cameraY = 9.2 + Math.min(1.8, wideFocus.spread * 0.07);
   let cameraZ = 18.5;
-  let lookX = wideFocus.x;
-  let lookZ = wideFocus.z;
+  let lookX = subject.x;
+  let lookZ = subject.z;
 
   if (shot === "wide") {
     const distance = THREE.MathUtils.clamp(18.5 + wideFocus.spread * 0.22, 18.5, 23.5);
@@ -5119,7 +5120,7 @@ function updateTournamentDirectorCamera(dt) {
   spectatorFocus.x += (lookX - spectatorFocus.x) * (1 - Math.exp(-2.4 * dt));
   spectatorFocus.z += (lookZ - spectatorFocus.z) * (1 - Math.exp(-2.4 * dt));
   const desiredCamera = spectatorCameraPosition.set(cameraX, cameraY, cameraZ);
-  const desiredLook = spectatorCameraLookTarget.set(spectatorFocus.x, targetY, spectatorFocus.z);
+  const desiredLook = spectatorDesiredLookTarget.set(spectatorFocus.x, targetY, spectatorFocus.z);
   const cameraBlend = 1 - Math.exp(-(matchMotionPreference.matches ? 4.6 : 2.45) * dt);
   camera.position.lerp(desiredCamera, cameraBlend);
   spectatorCameraLookTarget.lerp(desiredLook, 1 - Math.exp(-3.2 * dt));
