@@ -1310,7 +1310,7 @@ function renderTournamentSpectator() {
   const partyA = sessionMatchesTournament ? session.partyA : match?.partyA;
   const partyB = sessionMatchesTournament ? session.partyB : match?.partyB;
   const partyName = (code, fallback) =>
-    code ? (entrantByCode.get(code)?.name || snapshot.tournament.parties?.[code]?.name || fallback || ("Party " + code)) : "Menunggu";
+    code ? (entrantByCode.get(code)?.name || socialCompetitionData?.parties?.[code]?.name || fallback || ("Party " + code)) : "Menunggu";
   const roundMeta = bracket
     ? Object.values(bracket.rounds).find((round) =>
       Object.values(round.matches).some((item) => item.id === matchId))
@@ -1330,9 +1330,12 @@ function renderTournamentSpectator() {
     : 0;
 
   const currentSessionId = Number(session?.sessionId || 0);
-  const round = teamBattleData?.round?.sessionId === currentSessionId ? teamBattleData.round : null;
-  const winners = Object.values(teamBattleData?.winners || {})
-    .filter((item) => Number(item?.sessionId) === currentSessionId);
+  const round = sessionMatchesTournament &&
+    teamBattleData?.round?.sessionId === currentSessionId ? teamBattleData.round : null;
+  const winners = sessionMatchesTournament
+    ? Object.values(teamBattleData?.winners || {})
+      .filter((item) => Number(item?.sessionId) === currentSessionId)
+    : [];
   const redScore = winners.filter((item) => item?.teamId === "red").length;
   const blueScore = winners.filter((item) => item?.teamId === "blue").length;
   const totalRounds = Math.max(1, Math.min(5, Number(session?.totalRounds || 5)));
