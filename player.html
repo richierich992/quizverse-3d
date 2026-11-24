@@ -94,7 +94,164 @@
     <h3>Pemain bergabung <span id="playerCount">0</span></h3><div id="roster" class="roster"></div>
     <button id="startGame" class="primary full hidden">Mulai permainan</button>
     <p id="hostNote" class="hint">Menunggu host memulai permainan...</p>
+    <div class="reaction-rush-card">
+      <div class="reaction-rush-heading">
+        <span class="eyebrow">MINI GAME LOBBY</span>
+        <span class="reaction-rush-best">REKOR <b id="reactionRushBest">—</b></span>
+      </div>
+      <strong>Reaction Rush ⚡</strong>
+      <p>Uji refleks sambil menunggu. Tekan tombol tepat saat lampu berubah hijau. Rekor tersimpan di perangkat ini.</p>
+      <button id="reactionRushOpen" type="button" class="secondary full">Main Reaction Rush</button>
+    </div>
+    <section id="quickColorCard" class="quick-color-card" aria-labelledby="quickColorTitle">
+      <div class="quick-color-head">
+        <div>
+          <span class="eyebrow">MINI GAME MULTIPLAYER</span>
+          <strong id="quickColorTitle">Quick Color Match 🎨</strong>
+          <p>Cari warna target dan tekan secepat mungkin. Pemain pertama yang benar memenangkan ronde.</p>
+        </div>
+        <div class="quick-color-clock"><small>WAKTU</small><b id="quickColorTimer">—</b></div>
+      </div>
+      <div class="quick-color-target">
+        <span id="quickColorTargetLabel">MENUNGGU RONDE</span>
+        <strong id="quickColorTarget">SIAP?</strong>
+      </div>
+      <div id="quickColorChoices" class="quick-color-choices" aria-label="Pilihan warna">
+        <button type="button" class="quick-color-option" data-color-index="0" disabled>MERAH</button>
+        <button type="button" class="quick-color-option" data-color-index="1" disabled>BIRU</button>
+        <button type="button" class="quick-color-option" data-color-index="2" disabled>KUNING</button>
+        <button type="button" class="quick-color-option" data-color-index="3" disabled>HIJAU</button>
+      </div>
+      <p id="quickColorStatus" class="quick-color-status" aria-live="polite">Host dapat memulai ronde. Semua pemain di room bisa ikut berlomba.</p>
+      <button id="startQuickColorMatch" type="button" class="primary full hidden">Mulai Ronde</button>
+      <span class="quick-color-footnote">Tidak mengubah skor kuis utama.</span>
+    </section>
+    <section id="teamColorBattleCard" class="team-battle-card" aria-labelledby="teamBattleTitle">
+      <div class="team-battle-heading">
+        <div>
+          <span class="eyebrow">TEAM MINI GAME · 5 RONDE</span>
+          <strong id="teamBattleTitle">Team Color Battle 🏆</strong>
+          <p>Merah vs Biru. Kerja sama tim dan refleks menentukan pemenang setiap ronde.</p>
+        </div>
+        <span id="teamBattleRound" class="team-battle-round">BELUM MULAI</span>
+      </div>
+      <div class="team-battle-scoreboard">
+        <div class="team-score team-score-red">
+          <span>TEAM MERAH</span><strong id="teamRedScore">0</strong>
+          <small id="teamRedMembers">0 pemain</small>
+        </div>
+        <div class="team-score team-score-blue">
+          <span>TEAM BIRU</span><strong id="teamBlueScore">0</strong>
+          <small id="teamBlueMembers">0 pemain</small>
+        </div>
+      </div>
+      <div id="teamBattleMyTeam" class="team-battle-my-team">Kamu belum masuk tim</div>
+      <div class="team-battle-target">
+        <small id="teamBattleTargetLabel">TARGET WARNA</small>
+        <strong id="teamBattleTarget">SIAP?</strong>
+        <span id="teamBattleCountdown">MENUNGGU HOST</span>
+      </div>
+      <div id="teamBattleChoices" class="team-battle-choices" aria-label="Pilihan warna Team Battle">
+        <button type="button" class="team-battle-option" data-team-color-index="0" disabled>MERAH</button>
+        <button type="button" class="team-battle-option" data-team-color-index="1" disabled>BIRU</button>
+        <button type="button" class="team-battle-option" data-team-color-index="2" disabled>KUNING</button>
+        <button type="button" class="team-battle-option" data-team-color-index="3" disabled>HIJAU</button>
+      </div>
+      <p id="teamBattleStatus" class="team-battle-status" aria-live="polite">Host dapat memulai Team Battle setelah minimal dua pemain bergabung.</p>
+      <button id="teamBattleHostAction" type="button" class="primary full hidden">Mulai Team Battle</button>
+      <span class="team-battle-footnote">5 ronde · 1 poin untuk tim pemenang setiap ronde · skor kuis utama tetap terpisah.</span>
+    </section>
+    <section id="socialPartyCard" class="social-party-card" aria-labelledby="socialPartyTitle">
+      <div class="social-party-header">
+        <div>
+          <span class="eyebrow">SOCIAL COMPETITION</span>
+          <strong id="socialPartyTitle">Party Center 🤝</strong>
+          <p>Bentuk party hingga 4 pemain, pilih tim bersama, dan kumpulkan riwayat kemenangan.</p>
+        </div>
+        <div class="social-party-stats">
+          <small>REKOR KAMU</small>
+          <b><span id="partyWins">0</span>W · <span id="partyLosses">0</span>L</b>
+        </div>
+      </div>
+      <div id="partyHostNote" class="party-host-note hidden">HOST SPECTATOR · Pemain membentuk party dari halaman Player.</div>
+      <div id="partyCreateJoin" class="party-create-join">
+        <button id="createParty" type="button" class="primary">Buat Party</button>
+        <div class="party-join-row">
+          <input id="partyJoinCode" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="KODE PARTY" aria-label="Kode party"/>
+          <button id="joinParty" type="button" class="secondary">Gabung</button>
+        </div>
+      </div>
+      <div id="partyCurrent" class="party-current hidden">
+        <div class="party-code-line">
+          <div><small>KODE UNDANGAN PARTY</small><strong id="partyCodeValue">------</strong></div>
+          <button id="copyPartyCode" type="button" class="secondary">Salin</button>
+        </div>
+        <div id="partyLeaderNote" class="party-leader-note">Bagikan kode ini ke temanmu.</div>
+        <div class="party-member-heading"><span>ANGGOTA PARTY</span><b id="partyMemberCount">0/4</b></div>
+        <div id="partyMembers" class="party-members"></div>
+        <div id="partyTeamPicker" class="party-team-picker hidden">
+          <span>PILIH TIM BERSAMA</span>
+          <div>
+            <button id="partyTeamRed" type="button" class="party-team-button party-red">TEAM MERAH</button>
+            <button id="partyTeamBlue" type="button" class="party-team-button party-blue">TEAM BIRU</button>
+          </div>
+        </div>
+        <button id="registerPartyTournament" type="button" class="primary full hidden">Daftarkan Party ke Turnamen</button>
+        <button id="leaveParty" type="button" class="secondary full">Keluar dari Party</button>
+      </div>
+      <p id="partyStatus" class="social-party-status" aria-live="polite">Belum tergabung dalam party. Buat party atau masukkan kode teman.</p>
+      <span class="social-party-footnote">Party dapat berisi 2–4 pemain. Statistik disimpan di room ini dan tidak mengubah skor kuis.</span>
+    </section>
+    <section id="tournamentCenterCard" class="tournament-center-card" aria-labelledby="tournamentCenterTitle">
+      <div class="tournament-center-header">
+        <div>
+          <span class="eyebrow">QUIZVERSE COMPETITIVE SERIES</span>
+          <strong id="tournamentCenterTitle">Tournament Center 🏆</strong>
+          <p id="tournamentTitle">QuizVerse Cup</p>
+        </div>
+        <div class="tournament-meta">
+          <b id="tournamentPhase">BELUM DIBUKA</b>
+          <span id="tournamentCount">MAKSIMAL 16 PARTY</span>
+        </div>
+      </div>
+      <div id="tournamentHostControls" class="tournament-host-controls hidden">
+        <input id="tournamentTitleInput" type="text" maxlength="36" value="QuizVerse Cup" aria-label="Nama turnamen"/>
+        <button id="createTournament" type="button" class="primary full">Buka Pendaftaran Turnamen</button>
+        <button id="startTournament" type="button" class="secondary full" disabled>Kunci Peserta &amp; Susun Bracket</button>
+      </div>
+      <div class="tournament-section-label">PARTY TERDAFTAR</div>
+      <div id="tournamentRegistrationList" class="tournament-registration-list">
+        <p class="tournament-empty">Belum ada pendaftaran.</p>
+      </div>
+      <div id="tournamentBracket" class="tournament-bracket"></div>
+      <div class="tournament-hall">
+        <div class="tournament-section-label">HALL OF FAME 🏆</div>
+        <div id="tournamentHallOfFame" class="tournament-hall-list">
+          <p class="tournament-empty">Belum ada juara turnamen di room ini.</p>
+        </div>
+      </div>
+      <p id="tournamentStatus" class="tournament-status" aria-live="polite">Host dapat membuka pendaftaran. Peserta berupa party, bukan pemain satuan.</p>
+      <span class="tournament-footnote">Single elimination · 2–16 party · Host sebagai spectator · hasil match menentukan party yang maju.</span>
+    </section>
   </section>
+
+  <div id="reactionRushOverlay" class="reaction-rush-overlay hidden" aria-hidden="true">
+    <section class="reaction-rush-dialog" role="dialog" aria-modal="true" aria-labelledby="reactionRushTitle">
+      <button id="reactionRushClose" class="reaction-rush-close" type="button" aria-label="Tutup Reaction Rush">×</button>
+      <span class="eyebrow">QUIZVERSE MINI GAME</span>
+      <h2 id="reactionRushTitle">Reaction Rush</h2>
+      <div id="reactionRushSignal" class="reaction-rush-signal" data-phase="ready">
+        <span id="reactionRushSignalText">SIAP?</span>
+      </div>
+      <strong id="reactionRushResult" class="reaction-rush-result">Siap menguji refleks?</strong>
+      <p id="reactionRushPrompt">Tekan mulai, tunggu sampai lampu hijau, lalu tekan secepat mungkin.</p>
+      <button id="reactionRushAction" type="button" class="primary full">Mulai tantangan</button>
+      <div class="reaction-rush-dialog-footer">
+        <span>Rekor pribadi <b id="reactionRushDialogBest">—</b></span>
+        <button id="reactionRushCloseFooter" type="button" class="secondary">Tutup</button>
+      </div>
+    </section>
+  </div>
 
   <section id="hud" class="hud hidden">
     <div class="hud-top"><span id="roomLabel">ROOM 000000</span><span id="roundLabel">SOAL 1/10</span><span>SKOR <b id="score">0</b></span></div>
@@ -109,6 +266,27 @@
     <div class="hud-bottom"><span>STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span>WASD / Joystick</span></div>
   </section>
 
+  <div id="championBanner" class="champion-banner" aria-live="polite" aria-atomic="true">
+    <span class="champion-banner-kicker">QUIZVERSE CHAMPIONS</span>
+    <strong>🏆 JUARA PERTANDINGAN</strong>
+    <span id="championName">Pemenang</span>
+  </div>
+
+  <div id="answerRevealToast" class="answer-reveal-toast" aria-live="polite" aria-atomic="true">
+    <span class="answer-reveal-kicker">JAWABAN BENAR</span>
+    <strong id="answerRevealLetter">A</strong>
+    <span id="answerRevealText">Pilihan jawaban</span>
+  </div>
+
+  <div id="roundIntro" class="round-intro" aria-hidden="true">
+    <div class="round-intro-card">
+      <span class="round-intro-kicker">QUIZVERSE ARENA</span>
+      <strong id="roundIntroTitle">PERTANDINGAN DIMULAI</strong>
+      <span id="roundIntroMeta">SOAL 01 / 10</span>
+      <i class="round-intro-scan" aria-hidden="true"></i>
+    </div>
+  </div>
+
   <div id="touchControls" class="touch-controls hidden"><div id="stick" class="stick">●</div><button id="jump" class="jump-btn">JUMP</button></div>
 
   <section id="endScreen" class="panel end-panel hidden">
@@ -117,6 +295,35 @@
   </section>
   <div class="version">QUIZVERSE 3D · REALTIME LEARNING</div>
 </main>
+<div id="tournamentShowcaseOverlay" class="tournament-showcase-overlay hidden" aria-hidden="true">
+  <div class="tournament-showcase-backdrop"></div>
+  <section class="tournament-showcase-dialog" role="dialog" aria-modal="true" aria-labelledby="tournamentShowcaseTitle">
+    <div class="tournament-showcase-orbit tournament-showcase-orbit-a"></div>
+    <div class="tournament-showcase-orbit tournament-showcase-orbit-b"></div>
+    <span id="tournamentShowcaseEyebrow" class="tournament-showcase-eyebrow">QUIZVERSE CUP</span>
+    <div id="tournamentShowcaseMedal" class="tournament-showcase-medal">🏆</div>
+    <h2 id="tournamentShowcaseTitle">MATCH DAY</h2>
+    <p id="tournamentShowcaseSubtitle" class="tournament-showcase-subtitle">Dua party bersiap memasuki arena.</p>
+    <div id="tournamentShowcaseVersus" class="tournament-showcase-versus">
+      <div class="tournament-showcase-side is-red">
+        <small id="tournamentShowcaseSideALabel">TEAM MERAH</small>
+        <strong id="tournamentShowcaseSideA">PARTY A</strong>
+      </div>
+      <span id="tournamentShowcaseVs" class="tournament-showcase-vs">VS</span>
+      <div class="tournament-showcase-side is-blue">
+        <small id="tournamentShowcaseSideBLabel">TEAM BIRU</small>
+        <strong id="tournamentShowcaseSideB">PARTY B</strong>
+      </div>
+    </div>
+    <div id="tournamentShowcaseChampion" class="tournament-showcase-champion hidden">
+      <small>JUARA TURNAMEN</small>
+      <strong id="tournamentShowcaseChampionName">—</strong>
+      <span id="tournamentShowcaseRunnerUp">Runner-up · —</span>
+    </div>
+    <p id="tournamentShowcaseNote" class="tournament-showcase-note">Host menjadi spectator. Pemain bertanding untuk party masing-masing.</p>
+    <button id="tournamentShowcaseClose" type="button" class="primary full">LANJUTKAN</button>
+  </section>
+</div>
 <script>
 (() => {
   function reportBootError(message, details = "") {

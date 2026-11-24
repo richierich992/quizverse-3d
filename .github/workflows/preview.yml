@@ -1,0 +1,40 @@
+name: Publish QuizVerse Browser Preview
+
+on:
+  push:
+    branches:
+      - feature/realistic-arena-environment
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    if: github.repository == 'richierich992/quizverse-3d' && github.ref == 'refs/heads/feature/realistic-arena-environment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/realistic-arena-environment
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Synchronize isolated preview branch
+        shell: bash
+        run: |
+          git push origin HEAD:refs/heads/preview --force
+
+      - name: Package browser preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: quizverse-browser-preview
+          path: |
+            index.html
+            player.html
+            main.js
+            style.css
+            firebase-config.js
+          if-no-files-found: error
+          retention-days: 7

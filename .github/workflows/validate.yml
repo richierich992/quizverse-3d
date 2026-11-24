@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/server-authoritative-quiz
+      - feature/realistic-arena-environment
   pull_request:
     branches:
       - main
@@ -25,6 +26,8 @@ jobs:
         run: npm run check
       - name: Test Host/Player UI contract
         run: npm run test:ui
+      - name: Test tournament bracket progression
+        run: npm run test:tournament
       - name: Validate Firebase JSON
         run: |
           node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8'))"

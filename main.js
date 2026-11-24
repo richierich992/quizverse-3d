@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { buildSingleEliminationBracket } from "./tournament.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
@@ -55,16 +56,114 @@ const WARDROBE_CATEGORIES=[
 const PAD_POINTS = [
   { x: -7, z: -6 }, { x: 7, z: -6 }, { x: -7, z: 6 }, { x: 7, z: 6 }
 ];
+const LOBBY_ACTIVITY_ZONES = [
+  { id: "cheer", label: "CHEER", x: -4.25, z: 14.45, radius: 1.65, color: "#ffb95e" },
+  { id: "dance", label: "DANCE", x: 0, z: 14.45, radius: 1.65, color: "#b79cff" },
+  { id: "team", label: "TEAM UP", x: 4.25, z: 14.45, radius: 1.65, color: "#61d9c2" }
+];
+
+const ANSWER_BAY_SURFACE_Y = 0.753;
+function answerBaySurfaceAt(x, z) {
+  const inside = PAD_POINTS.some((point) =>
+    Math.abs(x - point.x) <= 3.15 && Math.abs(z - point.z) <= 3.15
+  );
+  return inside ? ANSWER_BAY_SURFACE_Y : 0;
+}
+
+const AVATAR_COLLISION_RADIUS = 0.56;
+const PLAYER_COLLISION_DISTANCE = AVATAR_COLLISION_RADIUS * 2 + 0.10;
+const ARENA_WALK_RADIUS = 23.15;
+
+// Ground-level arena objects that should stop a walking avatar.
+// Raised answer bays remain walkable and the winners' podium is only used after the match.
+const ARENA_STATIC_RECT_COLLIDERS = [
+  { minX: 13.64, maxX: 17.35, minZ: -6.82, maxZ: 6.82 },
+  { minX: -17.35, maxX: -13.64, minZ: -6.82, maxZ: 6.82 },
+  { minX: 18.02, maxX: 18.98, minZ: -7.34, maxZ: -7.06 },
+  { minX: 18.02, maxX: 18.98, minZ: 7.06, maxZ: 7.34 },
+  { minX: -18.98, maxX: -18.02, minZ: -7.34, maxZ: -7.06 },
+  { minX: -18.98, maxX: -18.02, minZ: 7.06, maxZ: 7.34 }
+];
+const ARENA_STATIC_CIRCLE_COLLIDERS = [
+  { x: -21.7, z: -18, radius: 0.42 },
+  { x: -21.7, z: 0, radius: 0.42 },
+  { x: -21.7, z: 18, radius: 0.42 },
+  { x: 21.7, z: -18, radius: 0.42 },
+  { x: 21.7, z: 0, radius: 0.42 },
+  { x: 21.7, z: 18, radius: 0.42 }
+];
+
+function isArenaStaticBlocked(x, z) {
+  // Keep the whole avatar inside the circular floor and away from the illuminated rim.
+  if (Math.hypot(x, z) > ARENA_WALK_RADIUS - AVATAR_COLLISION_RADIUS) return true;
+
+  for (const obstacle of ARENA_STATIC_RECT_COLLIDERS) {
+    const nearestX = THREE.MathUtils.clamp(x, obstacle.minX, obstacle.maxX);
+    const nearestZ = THREE.MathUtils.clamp(z, obstacle.minZ, obstacle.maxZ);
+    if (Math.hypot(x - nearestX, z - nearestZ) < AVATAR_COLLISION_RADIUS) return true;
+  }
+
+  for (const obstacle of ARENA_STATIC_CIRCLE_COLLIDERS) {
+    if (Math.hypot(x - obstacle.x, z - obstacle.z) <
+      AVATAR_COLLISION_RADIUS + obstacle.radius) return true;
+  }
+  return false;
+}
+
+function isPlayerMovementBlocked(x, z, fromX, fromZ) {
+  if (isArenaStaticBlocked(x, z)) return true;
+
+  // Use the visible interpolated position so collision matches what the player sees.
+  // When already overlapping because of a stale reconnect, allow movement that separates avatars.
+  for (const [playerId, entry] of Object.entries(remotePlayers)) {
+    if (playerId === uid || !entry?.mesh?.position) continue;
+    const otherX = entry.mesh.position.x;
+    const otherZ = entry.mesh.position.z;
+    const nextDistance = Math.hypot(x - otherX, z - otherZ);
+    if (nextDistance >= PLAYER_COLLISION_DISTANCE) continue;
+    const previousDistance = Math.hypot(fromX - otherX, fromZ - otherZ);
+    if (nextDistance <= previousDistance + 0.001) return true;
+  }
+  return false;
+}
 
 let app = null, auth = null, db = null, uid = "";
 let roomPin = "", isHost = false, questionBank = null;
 let activeState = null, playerData = {}, remotePlayers = {}, ownAvatar = null;
 let ownPosition = { x: 0, z: 0 }, moveKeys = {}, joystick = { x: 0, y: 0 };
+let lobbyRoamState = null;
 let jumpVelocity = 0, grounded = true, serverOffset = 0;
 let stateUnsubscribe = null, playersUnsubscribe = null;
+let playersSnapshotReady = false, seenPlayerIds = new Set(), lobbyArrivalRoom = "";
 let lastQuestionIndex = -1;
-let localAnswerRound = -1, answerBusy = false, scoreBusyRound = -1;
+let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyRound = -1;
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
+let lastSyncedPosition = { x: 0, z: 0 };
+let lastVisualStateKey = "";
+let lastSpectatorHudTick = 0;
+const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
+const matchMotionPreference = matchMedia("(prefers-reduced-motion: reduce)");
+const REACTION_RUSH_BEST_KEY = "quizverse-reaction-rush-best-v1";
+let reactionRushTimeout = null;
+let reactionRushPhase = "closed";
+let reactionRushStartedAt = 0;
+let reactionRushBest = readReactionRushBest();
+let quickColorRoundUnsubscribe = null, quickColorWinnerUnsubscribe = null;
+let quickColorRound = null, quickColorWinner = null;
+let quickColorTicker = null, quickColorStarting = false, quickColorSubmitting = false;
+let quickColorWrongUntil = 0;
+let teamBattleUnsubscribe = null;
+let teamBattleData = null, teamBattleBusy = false, teamBattleSubmitting = false;
+let teamBattleWrongUntil = 0;
+let socialCompetitionUnsubscribe = null;
+let socialCompetitionData = null;
+let partyBusy = false;
+let tournamentBusy = false;
+let tournamentShowcaseTimeout = null;
+let tournamentIntroKey = "";
+let tournamentHistoryInitialized = false;
+const seenTournamentResults = new Set();
+const seenTournamentChampions = new Set();
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -76,7 +175,1608 @@ function connection(message, good = false) {
   $("connection").textContent = "● " + message;
   $("connection").style.color = good ? "#68e7ba" : "#f4c982";
 }
+function readReactionRushBest() {
+  try {
+    const stored = Number(localStorage.getItem(REACTION_RUSH_BEST_KEY) || 0);
+    return Number.isFinite(stored) && stored > 0 ? stored : 0;
+  } catch {
+    return 0;
+  }
+}
+function renderReactionRushBest() {
+  const label = reactionRushBest ? reactionRushBest + " ms" : "—";
+  $("reactionRushBest").textContent = label;
+  $("reactionRushDialogBest").textContent = label;
+}
+function setReactionRushView(phase, signal, result, prompt, action) {
+  reactionRushPhase = phase;
+  $("reactionRushSignal").dataset.phase = phase;
+  $("reactionRushSignalText").textContent = signal;
+  $("reactionRushResult").textContent = result;
+  $("reactionRushPrompt").textContent = prompt;
+  $("reactionRushAction").textContent = action;
+}
+function openReactionRush() {
+  if (activeState?.phase !== "lobby") return;
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  setReactionRushView(
+    "ready", "SIAP?", "Siap menguji refleks?",
+    "Tekan mulai, tunggu sampai lampu hijau, lalu tekan secepat mungkin.",
+    "Mulai tantangan"
+  );
+  renderReactionRushBest();
+  $("reactionRushOverlay").classList.remove("hidden");
+  $("reactionRushOverlay").setAttribute("aria-hidden", "false");
+  $("reactionRushAction").focus();
+}
+function closeReactionRush(returnFocus = false) {
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  reactionRushPhase = "closed";
+  const overlay = $("reactionRushOverlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  if (returnFocus) $("reactionRushOpen").focus();
+}
+function stopQuickColorTicker() {
+  if (quickColorTicker) clearInterval(quickColorTicker);
+  quickColorTicker = null;
+}
+function startQuickColorTicker() {
+  if (quickColorTicker) return;
+  quickColorTicker = setInterval(() => {
+    renderQuickColorMatch();
+    renderTeamColorBattle();
+  }, 200);
+}
+function stopQuickColorMatchListeners() {
+  if (quickColorRoundUnsubscribe) quickColorRoundUnsubscribe();
+  if (quickColorWinnerUnsubscribe) quickColorWinnerUnsubscribe();
+  quickColorRoundUnsubscribe = quickColorWinnerUnsubscribe = null;
+  stopQuickColorTicker();
+  quickColorRound = null;
+  quickColorWinner = null;
+  quickColorStarting = false;
+  quickColorSubmitting = false;
+  quickColorWrongUntil = 0;
+}
+function subscribeQuickColorMatch() {
+  stopQuickColorMatchListeners();
+  const base = `rooms/${roomPin}/miniGames/quickColorMatch`;
+  quickColorRoundUnsubscribe = onValue(dbPath(`${base}/round`), (snap) => {
+    const next = snap.val();
+    if (Number(next?.roundId || 0) !== Number(quickColorRound?.roundId || 0)) {
+      quickColorWrongUntil = 0;
+      quickColorSubmitting = false;
+    }
+    quickColorRound = next;
+    renderQuickColorMatch();
+  }, (error) => {
+    $("quickColorStatus").textContent = "Mini-game tidak dapat dimuat: " + error.message;
+  });
+  quickColorWinnerUnsubscribe = onValue(dbPath(`${base}/winner`), (snap) => {
+    quickColorWinner = snap.val();
+    renderQuickColorMatch();
+  }, (error) => {
+    $("quickColorStatus").textContent = "Hasil mini-game tidak dapat dimuat: " + error.message;
+  });
+}
+function renderQuickColorMatch() {
+  const buttons = $("quickColorChoices").querySelectorAll("[data-color-index]");
+  const startButton = $("startQuickColorMatch");
+  const round = quickColorRound;
+  const now = serverNow();
+  const roundId = Number(round?.roundId || 0);
+  const winner = quickColorWinner && Number(quickColorWinner.roundId) === roundId
+    ? quickColorWinner : null;
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const startedAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const isPreparing = round?.phase === "preparing";
+  const isActive = round?.phase === "active";
+  const countdown = Math.max(0, Math.ceil((startedAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const canPlay = !isHost && activeState?.phase === "lobby" && isActive && now >= startedAt &&
+    now <= endsAt && !winner && !quickColorSubmitting && performance.now() >= quickColorWrongUntil;
+  $("quickColorTargetLabel").textContent = hasTarget ? "TEKAN WARNA INI" : "MENUNGGU RONDE";
+  $("quickColorTarget").textContent = hasTarget ? COLOR_NAMES[targetIndex] : "SIAP?";
+  $("quickColorTarget").style.color = hasTarget ? COLORS[targetIndex] : "#eaf6ff";
+  $("quickColorTimer").textContent = !round ? "—" :
+    isPreparing ? "..." : now < startedAt ? countdown + "s" : secondsLeft + "s";
+  buttons.forEach((button) => {
+    const colorIndex = Number(button.dataset.colorIndex);
+    button.disabled = !canPlay;
+    button.classList.toggle("is-target", hasTarget && colorIndex === targetIndex && now >= startedAt && !winner);
+  });
+  let message = "Host dapat memulai ronde. Semua pemain di room bisa ikut berlomba.";
+  if (isPreparing) message = "Host sedang menyiapkan ronde...";
+  else if (isActive && now < startedAt) message = "Bersiap! Target warna sudah terlihat. Mulai dalam " + countdown + "...";
+  else if (isActive && winner) {
+    message = winner.uid === uid ? "Kamu menang! 🎉" : winner.name + " paling cepat menemukan warna yang benar! 🎉";
+  } else if (isActive && now <= endsAt && performance.now() < quickColorWrongUntil) message = "Belum tepat! Coba warna yang lain.";
+  else if (isActive && now <= endsAt) message = "GO! Tekan tombol warna yang sesuai sekarang!";
+  else if (isActive && !winner && now > endsAt) message = "Waktu habis. Belum ada pemenang ronde ini.";
+  $("quickColorStatus").textContent = message;
+  startButton.classList.toggle("hidden", !isHost);
+  startButton.disabled = quickColorStarting || (isActive && now <= endsAt && !winner);
+  startButton.textContent = round ? "Mulai Ronde Berikutnya" : "Mulai Ronde";
+}
+async function startQuickColorMatch() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || quickColorStarting) return;
+  quickColorStarting = true;
+  renderQuickColorMatch();
+  try {
+    const roundRef = dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/round`);
+    const winnerRef = dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`);
+    const previousSnap = await get(roundRef);
+    const nextRoundId = Number(previousSnap.val()?.roundId || 0) + 1;
+    const startsAt = Math.round(serverNow() + 3200);
+    const nextRound = {
+      roundId: nextRoundId,
+      phase: "preparing",
+      targetIndex: Math.floor(Math.random() * COLOR_NAMES.length),
+      startsAt,
+      endsAt: startsAt + 9000
+    };
+    // Close the prior round before clearing its winner, so no late tap can claim the old race.
+    await set(roundRef, nextRound);
+    await set(winnerRef, null);
+    await update(roundRef, { phase: "active" });
+  } catch (error) {
+    $("quickColorStatus").textContent = "Gagal memulai ronde: " + explainError(error);
+  } finally {
+    quickColorStarting = false;
+    renderQuickColorMatch();
+  }
+}
+async function submitQuickColorAnswer(colorIndex) {
+  const round = quickColorRound;
+  const now = serverNow();
+  if (!round || round.phase !== "active" || activeState?.phase !== "lobby" ||
+    now < Number(round.startsAt) || now > Number(round.endsAt) ||
+    (quickColorWinner && Number(quickColorWinner.roundId) === Number(round.roundId)) ||
+    quickColorSubmitting) return;
+  if (Number(colorIndex) !== Number(round.targetIndex)) {
+    quickColorWrongUntil = performance.now() + 420;
+    $("quickColorStatus").textContent = "Belum tepat! Coba warna yang lain.";
+    renderQuickColorMatch();
+    return;
+  }
+  quickColorSubmitting = true;
+  renderQuickColorMatch();
+  try {
+    await set(dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`), {
+      uid,
+      name: String($("name").value.trim() || "Pemain").slice(0, 18),
+      roundId: Number(round.roundId),
+      answerIndex: Number(colorIndex)
+    });
+  } catch (error) {
+    // Another player may have won a few milliseconds earlier; read the committed result.
+    const winnerSnap = await get(dbPath(`rooms/${roomPin}/miniGames/quickColorMatch/winner`))
+      .catch(() => null);
+    if (winnerSnap?.exists()) quickColorWinner = winnerSnap.val();
+    else $("quickColorStatus").textContent = "Jawaban belum terkirim: " + explainError(error);
+  } finally {
+    quickColorSubmitting = false;
+    renderQuickColorMatch();
+  }
+}
+function stopTeamColorBattleListener() {
+  if (teamBattleUnsubscribe) teamBattleUnsubscribe();
+  teamBattleUnsubscribe = null;
+  teamBattleData = null;
+  teamBattleBusy = false;
+  teamBattleSubmitting = false;
+  teamBattleWrongUntil = 0;
+}
+function subscribeTeamColorBattle() {
+  stopTeamColorBattleListener();
+  const base = `rooms/${roomPin}/miniGames/teamColorBattle`;
+  teamBattleUnsubscribe = onValue(dbPath(base), (snap) => {
+    const next = snap.val() || null;
+    const oldSessionId = Number(teamBattleData?.session?.sessionId || 0);
+    teamBattleData = next;
+    const nextSession = next?.session;
+    if (nextSession?.status === "active" && nextSession.tournamentId &&
+        Number(nextSession.sessionId) !== oldSessionId) {
+      announceTournamentMatchIntro(nextSession);
+    }
+    renderTeamColorBattle();
+    renderPartyCenter();
+    renderTournamentCenter();
+  }, (error) => {
+    $("teamBattleStatus").textContent = "Team Battle tidak dapat dimuat: " + error.message;
+  });
+}
+function renderTeamColorBattle() {
+  const data = teamBattleData || {};
+  const session = data.session || null;
+  const sessionId = Number(session?.sessionId || 0);
+  const round = data.round?.sessionId === sessionId ? data.round : null;
+  const teamMap = data.teams?.sessionId === sessionId ? (data.teams.members || {}) : {};
+  const myTeam = uid ? teamMap[uid] : null;
+  const winners = Object.fromEntries(Object.entries(data.winners || {})
+    .filter(([key, item]) => /^round[1-5]$/.test(key) && Number(item?.sessionId) === sessionId));
+  const redWins = Object.values(winners).filter((item) => item?.teamId === "red").length;
+  const blueWins = Object.values(winners).filter((item) => item?.teamId === "blue").length;
+  const redMembers = Object.values(teamMap).filter((team) => team === "red").length;
+  const blueMembers = Object.values(teamMap).filter((team) => team === "blue").length;
+  const roundId = Number(round?.roundId || 0);
+  const winner = roundId ? winners["round" + roundId] || null : null;
+  const now = serverNow();
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const preparing = round?.phase === "preparing";
+  const active = round?.phase === "active";
+  const countdown = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const canPlay = !isHost && Boolean(myTeam) && activeState?.phase === "lobby" &&
+    session?.status === "active" && active && now >= startsAt && now <= endsAt &&
+    !winner && !teamBattleSubmitting && performance.now() >= teamBattleWrongUntil;
+  const finished = session?.status === "finished";
+  const roundResolved = Boolean(winner) || (active && now > endsAt);
+  const totalRounds = Number(session?.totalRounds || 5);
+  $("teamRedScore").textContent = String(redWins);
+  $("teamBlueScore").textContent = String(blueWins);
+  $("teamRedMembers").textContent = redMembers + " pemain";
+  $("teamBlueMembers").textContent = blueMembers + " pemain";
+  $("teamBattleRound").textContent = session
+    ? (finished ? "SELESAI" : "RONDE " + Number(session.roundId || 0) + "/" + totalRounds)
+    : "BELUM MULAI";
+  $("teamBattleMyTeam").textContent = isHost
+    ? "HOST SPECTATOR · PEMANTAU BATTLE"
+    : myTeam === "red" ? "KAMU DI TEAM MERAH" :
+      myTeam === "blue" ? "KAMU DI TEAM BIRU" :
+        session?.status === "active" ? "Kamu belum mendapat tim untuk sesi ini" : "Kamu belum masuk tim";
+  $("teamBattleMyTeam").dataset.team = myTeam || "none";
+  $("teamBattleTargetLabel").textContent = hasTarget ? "TEMUKAN WARNA TARGET" : "TARGET WARNA";
+  $("teamBattleTarget").textContent = hasTarget ? COLOR_NAMES[targetIndex] : "SIAP?";
+  $("teamBattleTarget").style.color = hasTarget ? COLORS[targetIndex] : "#eaf6ff";
+  $("teamBattleCountdown").textContent = finished ? "BATTLE SELESAI" :
+    preparing || (active && now < startsAt) ? "MULAI " + countdown + "s" :
+      active ? secondsLeft + "s TERSISA" : "MENUNGGU HOST";
+  $("teamBattleChoices").querySelectorAll("[data-team-color-index]").forEach((button) => {
+    const colorIndex = Number(button.dataset.teamColorIndex);
+    button.disabled = !canPlay;
+    button.classList.toggle("is-target", hasTarget && colorIndex === targetIndex &&
+      now >= startsAt && !winner && !button.disabled);
+  });
+  let message = "Host dapat memulai Team Battle setelah minimal dua pemain bergabung.";
+  if (session?.status === "active" && !myTeam && !isHost) {
+    message = "Sesi ini sudah berjalan dan tim dikunci. Ikut battle berikutnya di room baru.";
+  } else if (finished) {
+    message = redWins === blueWins ? "Hasil akhir imbang! Kedua tim sama kuat." :
+      "🏆 TEAM " + (redWins > blueWins ? "MERAH" : "BIRU") + " MENANG! Skor " + redWins + "–" + blueWins + ".";
+  } else if (preparing || (active && now < startsAt)) {
+    message = "Bersiap! Target sudah terlihat. Ronde dimulai dalam " + countdown + "...";
+  } else if (active && winner) {
+    message = "Poin untuk Team " + (winner.teamId === "red" ? "Merah" : "Biru") +
+      "! " + winner.name + " menemukan warna lebih dulu.";
+  } else if (active && now <= endsAt && performance.now() < teamBattleWrongUntil) {
+    message = "Belum tepat! Coba lagi.";
+  } else if (active && now <= endsAt) {
+    message = "GO! Cari warna yang benar untuk memenangkan poin timmu!";
+  } else if (active && now > endsAt) {
+    message = "Waktu habis. Tidak ada poin untuk ronde ini.";
+  } else if (session?.status === "active") {
+    message = "Ronde selesai. Host dapat melanjutkan ronde berikutnya.";
+  }
+  $("teamBattleStatus").textContent = message;
+  renderPartyCenter();
+  renderTournamentCenter();
+  const hostAction = $("teamBattleHostAction");
+  hostAction.classList.toggle("hidden", !isHost);
+  if (!session || finished) {
+    const tournamentActive = socialCompetitionData?.tournament?.meta?.phase === "active";
+    hostAction.textContent = tournamentActive
+      ? (finished ? "Mulai Match Turnamen Berikutnya / Rematch" : "Mulai Match Turnamen")
+      : finished ? "Mulai Team Battle Baru" : "Mulai Team Battle";
+    hostAction.disabled = teamBattleBusy;
+  } else if (Number(session.roundId || 0) >= totalRounds) {
+    hostAction.textContent = "Selesaikan Battle";
+    hostAction.disabled = teamBattleBusy || !roundResolved;
+  } else if (Number(session.roundId || 0) === 0 || roundResolved) {
+    hostAction.textContent = Number(session.roundId || 0) === 0 ? "Mulai Ronde 1" : "Mulai Ronde Berikutnya";
+    hostAction.disabled = teamBattleBusy;
+  } else {
+    hostAction.textContent = "Ronde Sedang Berjalan";
+    hostAction.disabled = true;
+  }
+}
+async function startTeamColorBattle() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  if (session?.status === "active") {
+    if (Number(session.roundId || 0) >= Number(session.totalRounds || 5)) await finishTeamColorBattle();
+    else await startNextTeamColorRound();
+    return;
+  }
+  teamBattleBusy = true;
+  renderTeamColorBattle();
+  try {
+    const playersSnap = await get(dbPath("rooms/" + roomPin + "/players"));
+    const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    const players = Object.entries(playersSnap.val() || {})
+      .filter(([, person]) => person && person.connected !== false)
+      .sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")) ||
+        a[0].localeCompare(b[0]));
+    const social = socialSnap.val() || {};
+    const members = {};
+    const counts = { red: 0, blue: 0 };
+    let tournamentMatch = null;
+    const tournamentMeta = social.tournament?.meta;
+    if (tournamentMeta?.phase === "active") {
+      const tournamentId = String(tournamentMeta.tournamentId);
+      const registrations = social.tournament?.registrations?.[tournamentId] || {};
+      const entrants = tournamentEntrantList(registrations);
+      const resultRows = social.tournament?.results?.[tournamentId] || {};
+      const resultMap = Object.fromEntries(Object.entries(resultRows)
+        .filter(([, item]) => item?.winnerPartyCode).map(([id, item]) => [id, item.winnerPartyCode]));
+      const bracket = buildSingleEliminationBracket(entrants, resultMap);
+      if (bracket.championPartyCode) {
+        await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+          phase: "completed", completedAt: Math.round(serverNow()),
+          championPartyCode: bracket.championPartyCode
+        });
+        throw new Error("Turnamen sudah selesai. Juara telah ditentukan.");
+      }
+      const currentMatch = Object.values(bracket.rounds).flatMap((round) =>
+        Object.values(round.matches)).find((item) => item.id === bracket.currentMatchId);
+      if (!currentMatch || currentMatch.status !== "ready") {
+        throw new Error("Tidak ada pertandingan turnamen yang siap dimainkan.");
+      }
+      const partyACode = currentMatch.partyA;
+      const partyBCode = currentMatch.partyB;
+      const partyA = social.parties?.[partyACode];
+      const partyB = social.parties?.[partyBCode];
+      if (!partyA || !partyB) throw new Error("Data salah satu party peserta tidak ditemukan.");
+      const activePlayers = new Map(players);
+      const assignParty = (party, partyCode, teamId) => {
+        Object.values(party.members || {}).forEach((member) => {
+          const playerId = String(member?.uid || "");
+          if (!playerId || social.playerParties?.[playerId] !== partyCode || !activePlayers.has(playerId)) return;
+          members[playerId] = teamId;
+          counts[teamId] += 1;
+        });
+      };
+      assignParty(partyA, partyACode, "red");
+      assignParty(partyB, partyBCode, "blue");
+      if (!counts.red || !counts.blue) {
+        throw new Error("Kedua party harus memiliki minimal satu pemain online sebelum match dimulai.");
+      }
+      tournamentMatch = {
+        tournamentId, tournamentMatchId: currentMatch.id,
+        partyA: partyACode, partyB: partyBCode
+      };
+    } else {
+      if (players.length < 2) throw new Error("Minimal dua pemain harus bergabung sebelum Team Battle dimulai.");
+      const solos = [];
+      players.forEach(([playerId]) => {
+        const code = social.playerParties?.[playerId];
+        const party = code ? social.parties?.[code] : null;
+        const isPartyMember = Object.values(party?.members || {}).some((member) => member?.uid === playerId);
+        const selectedTeam = isPartyMember && ["red", "blue"].includes(party.teamId) ? party.teamId : null;
+        if (selectedTeam) {
+          members[playerId] = selectedTeam;
+          counts[selectedTeam] += 1;
+        } else solos.push(playerId);
+      });
+      solos.forEach((playerId) => {
+        const teamId = counts.red <= counts.blue ? "red" : "blue";
+        members[playerId] = teamId;
+        counts[teamId] += 1;
+      });
+      if (Math.abs(counts.red - counts.blue) > 2) {
+        throw new Error("Tim belum seimbang. Minta leader party mengatur ulang pilihan Merah/Biru.");
+      }
+    }
+
+    const nextSessionId = Number(session?.sessionId || 0) + 1;
+    if (session?.status === "finished") {
+      await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/winners"), null);
+    }
+    const nextSession = {
+      sessionId: nextSessionId, status: "active", totalRounds: 5, roundId: 0,
+      startedAt: Math.round(serverNow()), ...(tournamentMatch || {})
+    };
+    await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/session"), nextSession);
+    await set(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/teams"), {
+      sessionId: nextSessionId, members
+    });
+    teamBattleData = {
+      ...(teamBattleData || {}), session: nextSession,
+      teams: { sessionId: nextSessionId, members }
+    };
+    if (tournamentMatch) announceTournamentMatchIntro(nextSession);
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+    await startNextTeamColorRound();
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Tidak dapat memulai Team Battle: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+  }
+}
+async function startNextTeamColorRound() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  if (!session || session.status !== "active") return;
+  const previousRound = teamBattleData?.round;
+  const winners = teamBattleData?.winners || {};
+  const previousWinner = previousRound
+    ? winners["round" + previousRound.roundId] : null;
+  if (previousRound?.sessionId === session.sessionId &&
+      previousRound.phase === "active" && !previousWinner && serverNow() <= Number(previousRound.endsAt)) {
+    $("teamBattleStatus").textContent = "Ronde masih berlangsung. Tunggu pemenang atau waktu habis.";
+    return;
+  }
+  const nextRoundId = Number(session.roundId || 0) + 1;
+  if (nextRoundId > Number(session.totalRounds || 5)) return;
+  teamBattleBusy = true;
+  renderTeamColorBattle();
+  try {
+    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/session`), {
+      roundId: nextRoundId
+    });
+    const startsAt = Math.round(serverNow() + 2800);
+    const round = {
+      sessionId: Number(session.sessionId), roundId: nextRoundId,
+      phase: "preparing", targetIndex: Math.floor(Math.random() * COLOR_NAMES.length),
+      startsAt, endsAt: startsAt + 8000
+    };
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/round`), round);
+    await update(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/round`), { phase: "active" });
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Gagal memulai ronde: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    renderTeamColorBattle();
+  }
+}
+async function finishTeamColorBattle() {
+  if (!isHost || !roomPin || teamBattleBusy) return;
+  const session = teamBattleData?.session;
+  const round = teamBattleData?.round;
+  const winners = teamBattleData?.winners || {};
+  const winner = winners["round" + Number(round?.roundId || 0)];
+  const resolved = Boolean(winner) || (round?.phase === "active" && serverNow() > Number(round.endsAt));
+  if (!session || !["active", "finished"].includes(session.status) ||
+      (session.status === "active" &&
+        (Number(session.roundId || 0) < Number(session.totalRounds || 5) || !resolved))) return;
+  teamBattleBusy = true;
+  try {
+    const wasActive = session.status === "active";
+    const sessionId = Number(session.sessionId);
+    const teams = teamBattleData?.teams?.sessionId === sessionId ? teamBattleData.teams.members || {} : {};
+    const roundResults = Object.values(teamBattleData?.winners || {})
+      .filter((item) => Number(item?.sessionId) === sessionId);
+    const redScore = roundResults.filter((item) => item.teamId === "red").length;
+    const blueScore = roundResults.filter((item) => item.teamId === "blue").length;
+    const winningTeam = redScore === blueScore ? null : redScore > blueScore ? "red" : "blue";
+    const finishedAt = Math.round(serverNow());
+    if (wasActive) {
+      await update(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle/session"), {
+        status: "finished", finishedAt
+      });
+      await Promise.all(Object.entries(teams).map(([playerId, teamId]) =>
+        set(dbPath("rooms/" + roomPin + "/socialCompetition/stats/" + playerId +
+          "/matches/session-" + sessionId), {
+          sessionId, teamId,
+          result: !winningTeam ? "draw" : teamId === winningTeam ? "win" : "loss",
+          finishedAt
+        })
+      ));
+    }
+    if (session.tournamentId && session.tournamentMatchId) {
+      const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+      const social = socialSnap.val() || {};
+      const meta = social.tournament?.meta;
+      if (meta?.phase === "active" && meta.tournamentId === session.tournamentId) {
+        if (!winningTeam) {
+          $("teamBattleStatus").textContent =
+            "Skor turnamen seri. Match ini belum menghasilkan pemenang. Host dapat mengulang pertandingan.";
+        } else {
+          const winnerPartyCode = winningTeam === "red" ? session.partyA : session.partyB;
+          const resultRoot = "rooms/" + roomPin + "/socialCompetition/tournament/results/" +
+            session.tournamentId + "/" + session.tournamentMatchId;
+          const existingResult = await get(dbPath(resultRoot));
+          if (!existingResult.exists()) {
+            await set(dbPath(resultRoot), {
+              matchId: session.tournamentMatchId, partyA: session.partyA, partyB: session.partyB,
+              winnerPartyCode, winningTeam, teamSessionId: sessionId, finishedAt
+            });
+          }
+          const registrations = social.tournament?.registrations?.[session.tournamentId] || {};
+          const entrants = tournamentEntrantList(registrations);
+          const previousResults = social.tournament?.results?.[session.tournamentId] || {};
+          const nextResults = {
+            ...previousResults,
+            [session.tournamentMatchId]: { winnerPartyCode, matchId: session.tournamentMatchId }
+          };
+          const bracket = buildSingleEliminationBracket(entrants,
+            Object.fromEntries(Object.entries(nextResults)
+              .filter(([, item]) => item?.winnerPartyCode)
+              .map(([id, item]) => [id, item.winnerPartyCode])));
+          if (bracket.championPartyCode) {
+            await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+              phase: "completed", completedAt: finishedAt,
+              championPartyCode: bracket.championPartyCode
+            });
+            const entrantByCode = new Map(entrants.map((entry) => [entry.partyCode, entry]));
+            const finalResult = nextResults["r" + bracket.roundCount + "m1"];
+            const runnerUpCode = finalResult?.partyA === bracket.championPartyCode
+              ? finalResult?.partyB : finalResult?.partyA;
+            const championEntry = entrantByCode.get(bracket.championPartyCode);
+            const runnerUpEntry = entrantByCode.get(runnerUpCode);
+            const hallRef = "rooms/" + roomPin + "/socialCompetition/tournament/hallOfFame/" + session.tournamentId;
+            const hallSnap = await get(dbPath(hallRef));
+            if (!hallSnap.exists()) {
+              await set(dbPath(hallRef), {
+                tournamentId: session.tournamentId,
+                title: String(meta.title || "QuizVerse Cup"),
+                championPartyCode: bracket.championPartyCode,
+                championPartyName: String(championEntry?.name || bracket.championPartyCode),
+                runnerUpPartyCode: String(runnerUpCode || "------"),
+                runnerUpPartyName: String(runnerUpEntry?.name || runnerUpCode || "Belum tersedia"),
+                participantCount: entrants.length,
+                completedAt: finishedAt
+              });
+            }
+            $("teamBattleStatus").textContent =
+              "🏆 Turnamen selesai! Juara: " + (entrants.find((entry) =>
+                entry.partyCode === bracket.championPartyCode)?.name || bracket.championPartyCode);
+          } else {
+            $("teamBattleStatus").textContent =
+              "Pemenang match " + session.tournamentMatchId.toUpperCase() +
+              " maju ke babak berikutnya. Host dapat memulai match selanjutnya.";
+          }
+        }
+      }
+    }
+  } catch (error) {
+    $("teamBattleStatus").textContent = "Gagal menyelesaikan battle: " + explainError(error);
+  } finally {
+    teamBattleBusy = false;
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition")).catch(() => null);
+    if (fresh?.exists()) socialCompetitionData = fresh.val() || {};
+    const teamFresh = await get(dbPath("rooms/" + roomPin + "/miniGames/teamColorBattle")).catch(() => null);
+    if (teamFresh?.exists()) teamBattleData = teamFresh.val() || {};
+    renderPartyCenter();
+    renderTeamColorBattle();
+    renderTournamentCenter();
+  }
+}
+async function submitTeamColorAnswer(colorIndex) {
+  const data = teamBattleData || {};
+  const session = data.session || {};
+  const round = data.round || {};
+  const teams = data.teams?.sessionId === session.sessionId ? data.teams.members || {} : {};
+  const myTeam = teams[uid];
+  const winners = data.winners || {};
+  const now = serverNow();
+  if (isHost || !myTeam || session.status !== "active" || activeState?.phase !== "lobby" ||
+      round.sessionId !== session.sessionId || round.phase !== "active" ||
+      now < Number(round.startsAt) || now > Number(round.endsAt) ||
+      (winners["round" + round.roundId] && Number(winners["round" + round.roundId].sessionId) === Number(session.sessionId)) ||
+      teamBattleSubmitting) return;
+  if (Number(colorIndex) !== Number(round.targetIndex)) {
+    teamBattleWrongUntil = performance.now() + 420;
+    $("teamBattleStatus").textContent = "Warna belum tepat. Coba lagi untuk timmu!";
+    renderTeamColorBattle();
+    return;
+  }
+  teamBattleSubmitting = true;
+  renderTeamColorBattle();
+  try {
+    await set(dbPath(`rooms/${roomPin}/miniGames/teamColorBattle/winners/round${round.roundId}`), {
+      sessionId: Number(session.sessionId), roundId: Number(round.roundId),
+      uid, name: String($("name").value.trim() || "Pemain").slice(0, 18),
+      teamId: myTeam, answerIndex: Number(colorIndex)
+    });
+  } catch (error) {
+    const winnerSnap = await get(dbPath(
+      `rooms/${roomPin}/miniGames/teamColorBattle/winners/round${round.roundId}`
+    )).catch(() => null);
+    if (!winnerSnap?.exists()) $("teamBattleStatus").textContent = "Jawaban belum diterima: " + explainError(error);
+  } finally {
+    teamBattleSubmitting = false;
+    renderTeamColorBattle();
+  }
+}
+function stopSocialCompetitionListener() {
+  if (socialCompetitionUnsubscribe) socialCompetitionUnsubscribe();
+  socialCompetitionUnsubscribe = null;
+  socialCompetitionData = null;
+  partyBusy = false;
+  tournamentHistoryInitialized = false;
+  seenTournamentResults.clear();
+  seenTournamentChampions.clear();
+  tournamentIntroKey = "";
+  closeTournamentShowcase();
+}
+function subscribeSocialCompetition() {
+  stopSocialCompetitionListener();
+  socialCompetitionUnsubscribe = onValue(
+    dbPath(`rooms/${roomPin}/socialCompetition`),
+    (snap) => {
+      const previous = socialCompetitionData;
+      socialCompetitionData = snap.val() || {};
+      handleTournamentSocialUpdate(previous, socialCompetitionData);
+      if (teamBattleData?.session?.status === "active" && teamBattleData.session.tournamentId) {
+        announceTournamentMatchIntro(teamBattleData.session);
+      }
+      renderPartyCenter();
+      renderTournamentCenter();
+    },
+    (error) => {
+      $("partyStatus").textContent = "Party Center tidak dapat dimuat: " + error.message;
+    }
+  );
+}
+function getMyParty() {
+  const data = socialCompetitionData || {};
+  const code = data.playerParties?.[uid];
+  const party = code ? data.parties?.[code] : null;
+  const mySlot = Object.entries(party?.members || {})
+    .find(([, member]) => member?.uid === uid)?.[0] || "";
+  if (!code || !party || !mySlot) return null;
+  return { code, mySlot, ...party };
+}
+function renderPartyCenter() {
+  const data = socialCompetitionData || {};
+  const party = getMyParty();
+  const hostNote = $("partyHostNote");
+  const createJoin = $("partyCreateJoin");
+  const current = $("partyCurrent");
+  const create = $("createParty");
+  const join = $("joinParty");
+  const leave = $("leaveParty");
+  const codeInput = $("partyJoinCode");
+  const teamPicker = $("partyTeamPicker");
+  const tournamentRegistrationButton = $("registerPartyTournament");
+  const tournamentSnapshot = getTournamentSnapshot();
+  const partyRegistration = Object.entries(tournamentSnapshot.registrations)
+    .find(([, item]) => item?.partyCode === party?.code);
+  const partyStatus = $("partyStatus");
+  const myMatches = data.stats?.[uid]?.matches || {};
+  const matchRows = Object.values(myMatches);
+  const wins = matchRows.filter((item) => item?.result === "win").length;
+  const losses = matchRows.filter((item) => item?.result === "loss").length;
+  $("partyWins").textContent = String(wins);
+  $("partyLosses").textContent = String(losses);
+  hostNote.classList.toggle("hidden", !isHost);
+  createJoin.classList.toggle("hidden", isHost || Boolean(party));
+  current.classList.toggle("hidden", isHost || !party);
+  tournamentRegistrationButton.classList.toggle("hidden", isHost || !party ||
+    party.leaderUid !== uid || tournamentSnapshot.meta?.phase !== "registration");
+  tournamentRegistrationButton.disabled = partyBusy || tournamentBusy;
+  tournamentRegistrationButton.textContent = partyRegistration
+    ? "Batalkan Pendaftaran Turnamen" : "Daftarkan Party ke Turnamen";
+  if (isHost) {
+    partyStatus.textContent = "Host mengawasi kompetisi. Pemain dapat membuat party dari halaman Player.";
+    return;
+  }
+  if (!party) {
+    const tournamentLocked = tournamentSnapshot.meta?.phase === "active";
+    create.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    join.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    codeInput.disabled = partyBusy || activeState?.phase !== "lobby" || tournamentLocked;
+    partyStatus.textContent = tournamentLocked
+      ? "Turnamen sedang berjalan. Party baru tidak dapat dibuat atau diubah."
+      : activeState?.phase === "lobby"
+        ? "Belum tergabung dalam party. Buat party atau masukkan kode teman."
+        : "Party hanya dapat diubah saat lobby."
+    return;
+  }
+  const members = Object.entries(party.members || {})
+    .map(([slot, info]) => ({
+      slot, uid: String(info?.uid || ""),
+      name: String(info?.name || playerData[info?.uid]?.name || "Pemain"),
+      joinedAt: Number(info?.joinedAt || 0)
+    }))
+    .filter((member) => member.uid)
+    .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid));
+  const isLeader = party.leaderUid === uid;
+  $("partyCodeValue").textContent = party.code;
+  $("partyMemberCount").textContent = members.length + "/4";
+  $("partyLeaderNote").textContent = isLeader
+    ? "Kamu leader party. Bagikan kode ini dan tentukan tim bersama."
+    : "Leader: " + (playerData[party.leaderUid]?.name || members.find((m) => m.uid === party.leaderUid)?.name || "Pemain");
+  const memberRoot = $("partyMembers");
+  memberRoot.replaceChildren();
+  members.forEach((member) => {
+    const chip = document.createElement("span");
+    chip.className = "party-member-chip" + (member.uid === party.leaderUid ? " is-leader" : "");
+    chip.textContent = member.name + (member.uid === uid ? " (Kamu)" : "") +
+      (member.uid === party.leaderUid ? " ★" : "");
+    memberRoot.appendChild(chip);
+  });
+  teamPicker.classList.toggle("hidden", !isLeader || activeState?.phase !== "lobby" ||
+    tournamentSnapshot.meta?.phase === "active" || teamBattleData?.session?.status === "active");
+  $("partyTeamRed").classList.toggle("is-selected", party.teamId === "red");
+  $("partyTeamBlue").classList.toggle("is-selected", party.teamId === "blue");
+  $("partyTeamRed").disabled = partyBusy;
+  $("partyTeamBlue").disabled = partyBusy;
+  leave.disabled = partyBusy || activeState?.phase !== "lobby" ||
+    tournamentSnapshot.meta?.phase === "active";
+  if (activeState?.phase !== "lobby") {
+    partyStatus.textContent = "Party terkunci selama kuis berjalan.";
+  } else if (tournamentSnapshot.meta?.phase === "active") {
+    partyStatus.textContent = "Party terkunci selama Tournament Mode berlangsung.";
+  } else if (teamBattleData?.session?.status === "active") {
+    partyStatus.textContent = "Pilihan party terkunci selama Team Battle berlangsung.";
+  } else {
+    partyStatus.textContent = "Party siap! Pilih tim bersama lalu ajak teman bergabung.";
+  }
+}
+
+
+function closeTournamentShowcase() {
+  if (tournamentShowcaseTimeout) clearTimeout(tournamentShowcaseTimeout);
+  tournamentShowcaseTimeout = null;
+  const overlay = $("tournamentShowcaseOverlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.classList.remove("is-intro", "is-result", "is-champion");
+  overlay.setAttribute("aria-hidden", "true");
+}
+function showTournamentShowcase(mode, details = {}) {
+  const overlay = $("tournamentShowcaseOverlay");
+  if (!overlay) return;
+  if (tournamentShowcaseTimeout) clearTimeout(tournamentShowcaseTimeout);
+  tournamentShowcaseTimeout = null;
+
+  overlay.classList.remove("hidden", "is-intro", "is-result", "is-champion");
+  overlay.classList.add("is-" + mode);
+  overlay.setAttribute("aria-hidden", "false");
+  $("tournamentShowcaseEyebrow").textContent = details.eyebrow || "QUIZVERSE CUP";
+  $("tournamentShowcaseTitle").textContent = details.title || "MATCH DAY";
+  $("tournamentShowcaseSubtitle").textContent = details.subtitle || "";
+  $("tournamentShowcaseMedal").textContent = details.medal || "🏆";
+  $("tournamentShowcaseSideALabel").textContent = details.sideALabel || "TEAM MERAH";
+  $("tournamentShowcaseSideBLabel").textContent = details.sideBLabel || "TEAM BIRU";
+  $("tournamentShowcaseSideA").textContent = details.partyA || "PARTY A";
+  $("tournamentShowcaseSideB").textContent = details.partyB || "PARTY B";
+  $("tournamentShowcaseVs").textContent = details.versus || "VS";
+  $("tournamentShowcaseVersus").classList.toggle("hidden", mode === "champion");
+  $("tournamentShowcaseChampion").classList.toggle("hidden", mode !== "champion");
+  $("tournamentShowcaseChampionName").textContent = details.champion || "—";
+  $("tournamentShowcaseRunnerUp").textContent = details.runnerUp
+    ? "Runner-up · " + details.runnerUp : "Runner-up belum tersedia";
+  $("tournamentShowcaseNote").textContent = details.note ||
+    "Host menjadi spectator. Pemain bertanding untuk party masing-masing.";
+  $("tournamentShowcaseClose").textContent = details.buttonLabel || "LANJUTKAN";
+
+  const winnerCode = details.winnerCode || "";
+  $("tournamentShowcaseSideA").classList.toggle("is-match-winner", Boolean(winnerCode) && winnerCode === details.partyACode);
+  $("tournamentShowcaseSideB").classList.toggle("is-match-winner", Boolean(winnerCode) && winnerCode === details.partyBCode);
+  const duration = Number(details.duration || (mode === "intro" ? 2450 : mode === "champion" ? 8500 : 5800));
+  tournamentShowcaseTimeout = setTimeout(closeTournamentShowcase, duration);
+}
+function tournamentNameForCode(code, registrations) {
+  const entry = Object.values(registrations || {}).find((item) => item?.partyCode === code);
+  return String(entry?.partyName || (code ? "Party " + code : "Belum ditentukan"));
+}
+function announceTournamentMatchIntro(session) {
+  if (!session?.tournamentId || !session?.tournamentMatchId) return;
+  const snapshot = getTournamentSnapshot();
+  if (snapshot.tournamentId !== session.tournamentId) return;
+  const key = String(session.tournamentId) + ":" + String(session.tournamentMatchId) +
+    ":" + String(session.sessionId);
+  if (key === tournamentIntroKey) return;
+  tournamentIntroKey = key;
+  const partyA = tournamentNameForCode(session.partyA, snapshot.registrations);
+  const partyB = tournamentNameForCode(session.partyB, snapshot.registrations);
+  showTournamentShowcase("intro", {
+    eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+    title: "MATCH DAY",
+    subtitle: "Dua party memasuki arena. Lima ronde akan menentukan siapa yang melaju.",
+    partyA, partyB,
+    sideALabel: "TEAM MERAH",
+    sideBLabel: "TEAM BIRU",
+    medal: "⚔️",
+    note: "Bersiaplah! Pertandingan akan segera dimulai.",
+    duration: 1900
+  });
+}
+function showTournamentMatchResult(tournamentId, matchId, result) {
+  const snapshot = getTournamentSnapshot();
+  if (!result?.winnerPartyCode || snapshot.tournamentId !== tournamentId) return;
+  const entrants = tournamentEntrantList(snapshot.registrations);
+  const resultsByMatch = Object.fromEntries(Object.entries(snapshot.results)
+    .filter(([, item]) => item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); } catch {}
+  const champion = String(snapshot.meta?.championPartyCode || bracket?.championPartyCode || "");
+  const entrantByCode = new Map(entrants.map((entry) => [entry.partyCode, entry]));
+  const winnerName = entrantByCode.get(result.winnerPartyCode)?.name || result.winnerPartyCode;
+  if (champion && champion === result.winnerPartyCode) {
+    const finalMatchId = bracket ? "r" + bracket.roundCount + "m1" : matchId;
+    const finalResult = snapshot.results[finalMatchId] || result;
+    const runnerUpCode = finalResult.partyA === champion
+      ? finalResult.partyB : finalResult.partyA;
+    const runnerUpName = entrantByCode.get(runnerUpCode)?.name || runnerUpCode || "";
+    showTournamentShowcase("champion", {
+      eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+      title: "CHAMPION!",
+      subtitle: "Perjalanan turnamen selesai. Semua pertandingan telah dituntaskan.",
+      champion: winnerName,
+      runnerUp: runnerUpName,
+      medal: "🏆",
+      note: "Selamat kepada seluruh anggota party juara. Nama tim akan dikenang di Hall of Fame.",
+      duration: 8500
+    });
+    seenTournamentChampions.add(tournamentId);
+    return;
+  }
+  const resultLabel = matchId.toUpperCase();
+  showTournamentShowcase("result", {
+    eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+    title: "PARTY MELAJU!",
+    subtitle: winnerName + " memenangkan " + resultLabel + " dan lanjut ke babak berikutnya.",
+    partyA: entrantByCode.get(result.partyA)?.name || result.partyA,
+    partyB: entrantByCode.get(result.partyB)?.name || result.partyB,
+    sideALabel: "TEAM MERAH",
+    sideBLabel: "TEAM BIRU",
+    winnerCode: result.winnerPartyCode,
+    partyACode: result.partyA,
+    partyBCode: result.partyB,
+    medal: "🎉",
+    note: "Lihat bracket untuk mengetahui lawan berikutnya.",
+    duration: 5800
+  });
+}
+function handleTournamentSocialUpdate(previous, next) {
+  const tournament = next?.tournament || {};
+  const previousMeta = previous?.tournament?.meta || null;
+  const meta = tournament.meta || null;
+  if (!tournamentHistoryInitialized) {
+    Object.entries(tournament.results?.[meta?.tournamentId] || {}).forEach(([matchId]) => {
+      seenTournamentResults.add(String(meta.tournamentId) + ":" + matchId);
+    });
+    if (meta?.phase === "completed") seenTournamentChampions.add(String(meta.tournamentId));
+    tournamentHistoryInitialized = true;
+    return;
+  }
+
+  const tournamentId = String(meta?.tournamentId || "");
+  const resultRows = tournamentId ? tournament.results?.[tournamentId] || {} : {};
+  const newlyCompleted = [];
+  Object.entries(resultRows).forEach(([matchId, result]) => {
+    const key = tournamentId + ":" + matchId;
+    if (seenTournamentResults.has(key)) return;
+    seenTournamentResults.add(key);
+    if (result?.winnerPartyCode) newlyCompleted.push({ matchId, result });
+  });
+  const allResults = Object.fromEntries(Object.entries(resultRows)
+    .filter(([, item]) => item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracketAfterUpdate = null;
+  try { bracketAfterUpdate = buildSingleEliminationBracket(
+    tournamentEntrantList(tournament.registrations?.[tournamentId] || {}), allResults
+  ); } catch {}
+  if (bracketAfterUpdate?.championPartyCode) seenTournamentChampions.add(tournamentId);
+
+  if (newlyCompleted.length) {
+    newlyCompleted.forEach(({ matchId, result }, index) => {
+      setTimeout(() => {
+        if (!roomPin) return;
+        showTournamentMatchResult(tournamentId, matchId, result);
+      }, 650 + index * 160);
+    });
+  } else if (meta?.phase === "completed" &&
+      previousMeta?.phase !== "completed" && !seenTournamentChampions.has(tournamentId)) {
+    seenTournamentChampions.add(tournamentId);
+    setTimeout(() => {
+      const latest = getTournamentSnapshot();
+      const resultRowsLatest = latest.results;
+      const bracketResults = Object.fromEntries(Object.entries(resultRowsLatest)
+        .filter(([, item]) => item?.winnerPartyCode)
+        .map(([id, item]) => [id, item.winnerPartyCode]));
+      let bracket = null;
+      try { bracket = buildSingleEliminationBracket(tournamentEntrantList(latest.registrations), bracketResults); } catch {}
+      const finalId = bracket ? "r" + bracket.roundCount + "m1" : "";
+      const finalResult = resultRowsLatest[finalId];
+      if (finalResult) showTournamentMatchResult(tournamentId, finalId, finalResult);
+    }, 650);
+  }
+}
+function renderTournamentHallOfFame(records) {
+  const root = $("tournamentHallOfFame");
+  root.replaceChildren();
+  const entries = Object.values(records || {})
+    .filter((entry) => entry?.championPartyName)
+    .sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "tournament-empty";
+    empty.textContent = "Belum ada juara turnamen di room ini.";
+    root.appendChild(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement("article");
+    row.className = "tournament-hall-entry";
+    const crown = document.createElement("span");
+    crown.className = "tournament-hall-crown";
+    crown.textContent = "🏆";
+    const copy = document.createElement("div");
+    copy.className = "tournament-hall-copy";
+    const title = document.createElement("strong");
+    title.textContent = String(entry.title || "QuizVerse Cup");
+    const names = document.createElement("span");
+    names.textContent = "Juara: " + entry.championPartyName +
+      (entry.runnerUpPartyName ? " · Runner-up: " + entry.runnerUpPartyName : "");
+    copy.append(title, names);
+    const date = document.createElement("time");
+    date.className = "tournament-hall-date";
+    const stamp = Number(entry.completedAt || 0);
+    date.dateTime = stamp ? new Date(stamp).toISOString() : "";
+    date.textContent = stamp
+      ? new Date(stamp).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+      : "—";
+    row.append(crown, copy, date);
+    root.appendChild(row);
+  });
+}
+
+function getTournamentSnapshot() {
+  const tournament = socialCompetitionData?.tournament || {};
+  const meta = tournament.meta || null;
+  const tournamentId = String(meta?.tournamentId || "");
+  return {
+    tournament, meta, tournamentId,
+    registrations: tournamentId ? tournament.registrations?.[tournamentId] || {} : {},
+    results: tournamentId ? tournament.results?.[tournamentId] || {} : {}
+  };
+}
+function tournamentEntrantList(registrations) {
+  return Object.values(registrations || {})
+    .filter((entry) => entry?.partyCode && entry?.leaderUid)
+    .sort((a, b) => Number(a.registeredAt || 0) - Number(b.registeredAt || 0) ||
+      String(a.partyCode).localeCompare(String(b.partyCode)))
+    .map((entry) => ({
+      partyCode: String(entry.partyCode),
+      leaderUid: String(entry.leaderUid),
+      name: String(entry.partyName || ("Party " + entry.partyCode))
+    }));
+}
+function tournamentMatchName(match, entrantByCode) {
+  const name = (code) => code
+    ? (entrantByCode.get(code)?.name || "Party " + code)
+    : "BYE / MENUNGGU";
+  return { a: name(match.partyA), b: name(match.partyB) };
+}
+function renderTournamentCenter() {
+  const snapshot = getTournamentSnapshot();
+  const meta = snapshot.meta;
+  const tournamentId = snapshot.tournamentId;
+  renderTournamentHallOfFame(snapshot.tournament.hallOfFame || {});
+  const registrations = snapshot.registrations;
+  const results = snapshot.results;
+  const entrants = tournamentEntrantList(registrations);
+  const resultsByMatch = Object.fromEntries(Object.entries(results)
+    .filter(([, item]) => item?.matchId && item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  if (meta?.phase === "active" || meta?.phase === "completed") {
+    try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); }
+    catch (error) { console.warn("Tournament bracket:", error); }
+  }
+
+  $("tournamentHostControls").classList.toggle("hidden", !isHost);
+  $("tournamentTitleInput").disabled = tournamentBusy || meta?.phase === "active";
+  $("createTournament").disabled = tournamentBusy || activeState?.phase !== "lobby" ||
+    teamBattleData?.session?.status === "active" || meta?.phase === "active" || meta?.phase === "registration";
+  $("createTournament").textContent = meta?.phase === "completed"
+    ? "Buat Turnamen Baru" : "Buka Pendaftaran Turnamen";
+  $("startTournament").disabled = tournamentBusy || meta?.phase !== "registration" ||
+    entrants.length < 2 || entrants.length > 16 || activeState?.phase !== "lobby" ||
+    teamBattleData?.session?.status === "active";
+  $("startTournament").textContent = "Kunci Peserta & Susun Bracket";
+
+  $("tournamentTitle").textContent = meta?.title || "QuizVerse Cup";
+  $("tournamentPhase").textContent = !meta ? "BELUM DIBUKA" :
+    meta.phase === "registration" ? "PENDAFTARAN DIBUKA" :
+      meta.phase === "active" ? "TURNAMEN BERJALAN" : "TURNAMEN SELESAI";
+  $("tournamentCount").textContent = meta ? entrants.length + "/16 PARTY" : "MAKSIMAL 16 PARTY";
+
+  const registrationList = $("tournamentRegistrationList");
+  registrationList.replaceChildren();
+  entrants.forEach((entrant, index) => {
+    const chip = document.createElement("span");
+    chip.className = "tournament-entrant-chip";
+    chip.textContent = (index + 1) + ". " + entrant.name + " · " + entrant.partyCode;
+    registrationList.appendChild(chip);
+  });
+  if (meta?.phase === "registration" && !entrants.length) {
+    const empty = document.createElement("p");
+    empty.className = "tournament-empty";
+    empty.textContent = "Belum ada party mendaftar. Leader party bisa mendaftarkan tim dari Party Center.";
+    registrationList.appendChild(empty);
+  }
+
+  const bracketRoot = $("tournamentBracket");
+  bracketRoot.replaceChildren();
+  if (bracket) {
+    const entrantByCode = new Map(entrants.map((entrant) => [entrant.partyCode, entrant]));
+    Object.values(bracket.rounds).forEach((round) => {
+      const roundColumn = document.createElement("section");
+      roundColumn.className = "tournament-round";
+      const roundTitle = document.createElement("h4");
+      roundTitle.textContent = round.label;
+      roundColumn.appendChild(roundTitle);
+      Object.values(round.matches).forEach((match) => {
+        const card = document.createElement("article");
+        card.className = "tournament-match tournament-match-" + match.status +
+          (match.id === bracket.currentMatchId ? " is-current" : "");
+        const matchTitle = document.createElement("small");
+        matchTitle.textContent = match.id.toUpperCase();
+        card.appendChild(matchTitle);
+        const names = tournamentMatchName(match, entrantByCode);
+        [["a", match.partyA], ["b", match.partyB]].forEach(([side, code]) => {
+          const line = document.createElement("div");
+          line.className = "tournament-match-party" +
+            (match.winnerPartyCode && match.winnerPartyCode === code ? " is-winner" : "");
+          line.textContent = code ? names[side] : "Menunggu peserta";
+          card.appendChild(line);
+        });
+        const status = document.createElement("span");
+        status.className = "tournament-match-status";
+        status.textContent = match.status === "ready" ? "SIAP DIMAINKAN" :
+          match.status === "finished" ? "PEMENANG LOLOS" :
+            match.status === "bye" ? "BYE · LANGSUNG MAJU" : "MENUNGGU";
+        card.appendChild(status);
+        roundColumn.appendChild(card);
+      });
+      bracketRoot.appendChild(roundColumn);
+    });
+    if (bracket.championPartyCode) {
+      const champion = document.createElement("div");
+      champion.className = "tournament-champion";
+      champion.textContent = "🏆 JUARA: " +
+        (entrantByCode.get(bracket.championPartyCode)?.name || bracket.championPartyCode);
+      bracketRoot.appendChild(champion);
+    }
+  }
+
+  let message = "Host dapat membuka pendaftaran. Peserta berupa party, bukan pemain satuan.";
+  if (meta?.phase === "registration") {
+    message = isHost
+      ? "Pendaftaran terbuka. Minimal 2 party untuk mulai, maksimal 16 party."
+      : "Pendaftaran sedang dibuka. Leader party dapat mendaftarkan party.";
+  } else if (meta?.phase === "active" && bracket?.currentMatchId) {
+    const match = Object.values(bracket.rounds).flatMap((round) =>
+      Object.values(round.matches)).find((item) => item.id === bracket.currentMatchId);
+    const names = match ? tournamentMatchName(match,
+      new Map(entrants.map((entrant) => [entrant.partyCode, entrant]))) : null;
+    const activeSession = teamBattleData?.session;
+    const matchRunning = activeSession?.status === "active" &&
+      activeSession.tournamentId === tournamentId &&
+      activeSession.tournamentMatchId === bracket.currentMatchId;
+    message = matchRunning
+      ? "Pertandingan berlangsung: " + names.a + " vs " + names.b + ". Host memantau dari Team Color Battle."
+      : "Match berikutnya: " + names.a + " vs " + names.b +
+        ". Host dapat memulai atau mengulang pertandingan melalui Team Color Battle.";
+  } else if (meta?.phase === "completed") {
+    message = "Turnamen selesai. Juara sudah ditentukan. Host dapat membuka turnamen baru.";
+  }
+  if (activeState?.phase !== "lobby" && meta?.phase === "active") {
+    message = "Turnamen sedang berjalan. Selesaikan bracket sebelum memulai kuis utama.";
+  }
+  $("tournamentStatus").textContent = message;
+  renderTournamentSpectator();
+}
+function renderTournamentSpectator() {
+  const panel = $("tournamentSpectatorPanel");
+  if (!panel) return;
+  const snapshot = getTournamentSnapshot();
+  const meta = snapshot.meta;
+  const session = teamBattleData?.session || null;
+  if (!isHost || meta?.phase !== "active") {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  const entrants = tournamentEntrantList(snapshot.registrations);
+  const entrantByCode = new Map(entrants.map((entrant) => [entrant.partyCode, entrant]));
+  const resultsByMatch = Object.fromEntries(Object.entries(snapshot.results)
+    .filter(([, item]) => item?.matchId && item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); } catch {}
+  const sessionMatchesTournament = session?.tournamentId === snapshot.tournamentId &&
+    Boolean(session?.tournamentMatchId);
+  const matchId = sessionMatchesTournament
+    ? String(session.tournamentMatchId)
+    : String(bracket?.currentMatchId || "");
+  const match = bracket
+    ? Object.values(bracket.rounds).flatMap((round) => Object.values(round.matches))
+      .find((item) => item.id === matchId)
+    : null;
+  if (!matchId && !match) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  const partyA = sessionMatchesTournament ? session.partyA : match?.partyA;
+  const partyB = sessionMatchesTournament ? session.partyB : match?.partyB;
+  const partyName = (code, fallback) =>
+    code ? (entrantByCode.get(code)?.name || socialCompetitionData?.parties?.[code]?.name || fallback || ("Party " + code)) : "Menunggu";
+  const roundMeta = bracket
+    ? Object.values(bracket.rounds).find((round) =>
+      Object.values(round.matches).some((item) => item.id === matchId))
+    : null;
+  const roundIndex = roundMeta
+    ? Object.keys(bracket.rounds).indexOf(roundMeta.id) + 1
+    : 0;
+  const matchIndex = roundMeta
+    ? Object.keys(roundMeta.matches).indexOf(matchId) + 1
+    : 0;
+  const totalMatches = bracket
+    ? Object.values(bracket.rounds).reduce((sum, round) => sum + Object.keys(round.matches).length, 0)
+    : 0;
+  const resolvedMatches = bracket
+    ? Object.values(bracket.rounds).reduce((sum, round) => sum +
+      Object.values(round.matches).filter((item) => ["finished", "bye"].includes(item.status)).length, 0)
+    : 0;
+
+  const currentSessionId = Number(session?.sessionId || 0);
+  const round = sessionMatchesTournament &&
+    teamBattleData?.round?.sessionId === currentSessionId ? teamBattleData.round : null;
+  const winners = sessionMatchesTournament
+    ? Object.values(teamBattleData?.winners || {})
+      .filter((item) => Number(item?.sessionId) === currentSessionId)
+    : [];
+  const redScore = winners.filter((item) => item?.teamId === "red").length;
+  const blueScore = winners.filter((item) => item?.teamId === "blue").length;
+  const totalRounds = Math.max(1, Math.min(5, Number(session?.totalRounds || 5)));
+  const roundId = Math.max(0, Math.min(totalRounds, Number(session?.roundId || round?.roundId || 0)));
+  const now = serverNow();
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const secondsToStart = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const roundWinner = roundId ? winners.find((item) => Number(item.roundId) === roundId) : null;
+  const isMatchingSession = sessionMatchesTournament && Number(session?.sessionId) === currentSessionId;
+  const isRunning = isMatchingSession && session?.status === "active";
+  const isFinished = isMatchingSession && session?.status === "finished";
+
+  $("tournamentSpectatorPhase").textContent = isRunning ? "MATCH LIVE" : isFinished ? "MATCH END" : "NEXT MATCH";
+  $("tournamentSpectatorStage").textContent = roundMeta?.label ||
+    (roundIndex ? "BABAK " + roundIndex + "/" + Number(bracket?.roundCount || roundIndex) : "TURNAMEN LIVE");
+  $("tournamentSpectatorMatch").textContent = matchId.toUpperCase() +
+    (matchIndex ? " · MATCH " + matchIndex : "");
+  $("tournamentSpectatorRedName").textContent = partyName(partyA, "PARTY MERAH");
+  $("tournamentSpectatorBlueName").textContent = partyName(partyB, "PARTY BIRU");
+  $("tournamentSpectatorRedScore").textContent = String(redScore);
+  $("tournamentSpectatorBlueScore").textContent = String(blueScore);
+
+  const roundsRoot = $("tournamentSpectatorRounds");
+  if (roundsRoot.childElementCount !== totalRounds) {
+    roundsRoot.replaceChildren();
+    for (let index = 1; index <= totalRounds; index++) {
+      const step = document.createElement("span");
+      step.className = "tournament-spectator-round";
+      step.dataset.round = String(index);
+      step.textContent = String(index);
+      roundsRoot.appendChild(step);
+    }
+  }
+  roundsRoot.querySelectorAll(".tournament-spectator-round").forEach((step) => {
+    const index = Number(step.dataset.round);
+    const winner = winners.find((item) => Number(item.roundId) === index);
+    step.classList.toggle("is-current", index === roundId && isRunning);
+    step.classList.toggle("is-red", Boolean(winner?.teamId === "red"));
+    step.classList.toggle("is-blue", Boolean(winner?.teamId === "blue"));
+    step.classList.toggle("is-unresolved", index < roundId && !winner);
+  });
+
+  const target = $("tournamentSpectatorTarget");
+  target.textContent = hasTarget ? COLOR_NAMES[targetIndex] : "—";
+  target.style.color = hasTarget ? COLORS[targetIndex] : "#b7c8d9";
+  let clockLabel = "MENUNGGU";
+  let statusLabel = "Menunggu host memulai pertandingan.";
+  let timeRatio = 0;
+  if (isRunning && (round?.phase === "preparing" || now < startsAt)) {
+    clockLabel = secondsToStart + "s";
+    statusLabel = "BERSIAP · RONDE " + Math.max(1, roundId) + " DIMULAI";
+  } else if (isRunning && round?.phase === "active" && now <= endsAt && !roundWinner) {
+    clockLabel = secondsLeft + "s";
+    statusLabel = "LIVE · RONDE " + roundId + "/" + totalRounds;
+    timeRatio = endsAt > startsAt ? Math.max(0, Math.min(1, (endsAt - now) / (endsAt - startsAt))) : 0;
+  } else if (isRunning && roundWinner) {
+    clockLabel = "POIN";
+    statusLabel = "POIN UNTUK TEAM " + (roundWinner.teamId === "red" ? "MERAH" : "BIRU");
+  } else if (isRunning && round?.phase === "active" && now > endsAt) {
+    clockLabel = "0s";
+    statusLabel = "WAKTU HABIS · TANPA POIN";
+  } else if (isFinished && redScore === blueScore) {
+    clockLabel = "SERI";
+    statusLabel = "SKOR SERI · MATCH PERLU DIULANG";
+  } else if (isFinished) {
+    clockLabel = "SELESAI";
+    statusLabel = "MATCH SELESAI · PEMENANG MELAJU";
+  }
+  $("tournamentSpectatorClock").textContent = clockLabel;
+  $("tournamentSpectatorStatus").textContent = statusLabel;
+  $("tournamentSpectatorProgress").style.transform = "scaleX(" + timeRatio + ")";
+  $("tournamentSpectatorBracket").textContent = resolvedMatches + "/" + totalMatches + " MATCH";
+  panel.classList.remove("hidden");
+}
+function tickTournamentSpectatorClock() {
+  const panel = $("tournamentSpectatorPanel");
+  if (!isHost || !panel || panel.classList.contains("hidden")) return;
+  const session = teamBattleData?.session;
+  if (!session?.tournamentId || !["active", "finished"].includes(session.status)) return;
+  const sessionId = Number(session.sessionId || 0);
+  const round = teamBattleData?.round?.sessionId === sessionId ? teamBattleData.round : null;
+  if (!round) return;
+  const roundId = Number(round.roundId || 0);
+  const winner = roundId ? teamBattleData?.winners?.["round" + roundId] : null;
+  const now = serverNow();
+  const startsAt = Number(round.startsAt || 0);
+  const endsAt = Number(round.endsAt || 0);
+  const leftToStart = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const leftToEnd = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  let clockLabel = "MENUNGGU";
+  let statusLabel = "Menunggu host memulai pertandingan.";
+  let progress = 0;
+  if (session.status === "finished") {
+    clockLabel = winner ? "SELESAI" : "SERI";
+    statusLabel = winner ? "MATCH SELESAI · PEMENANG MELAJU" : "SKOR SERI · MATCH PERLU DIULANG";
+  } else if (round.phase === "preparing" || now < startsAt) {
+    clockLabel = leftToStart + "s";
+    statusLabel = "BERSIAP · RONDE " + Math.max(1, roundId) + " DIMULAI";
+  } else if (round.phase === "active" && winner) {
+    clockLabel = "POIN";
+    statusLabel = "POIN UNTUK TEAM " + (winner.teamId === "red" ? "MERAH" : "BIRU");
+  } else if (round.phase === "active" && now <= endsAt) {
+    clockLabel = leftToEnd + "s";
+    statusLabel = "LIVE · RONDE " + roundId + "/" + Number(session.totalRounds || 5);
+    progress = endsAt > startsAt ? Math.max(0, Math.min(1, (endsAt - now) / (endsAt - startsAt))) : 0;
+  } else if (round.phase === "active") {
+    clockLabel = "0s";
+    statusLabel = "WAKTU HABIS · TANPA POIN";
+  }
+  $("tournamentSpectatorClock").textContent = clockLabel;
+  $("tournamentSpectatorStatus").textContent = statusLabel;
+  $("tournamentSpectatorProgress").style.transform = "scaleX(" + progress + ")";
+}
+async function createTournament() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
+      teamBattleData?.session?.status === "active") return;
+  const currentMeta = socialCompetitionData?.tournament?.meta;
+  if (currentMeta?.phase === "active" || currentMeta?.phase === "registration") return;
+  tournamentBusy = true;
+  renderTournamentCenter();
+  try {
+    const tournamentId = "cup-" + Math.round(serverNow());
+    const title = String($("tournamentTitleInput").value || "QuizVerse Cup")
+      .trim().slice(0, 36) || "QuizVerse Cup";
+    await set(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+      tournamentId, title, phase: "registration",
+      createdAt: Math.round(serverNow()), maxParties: 16
+    });
+    const snapshot = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    socialCompetitionData = snapshot.val() || {};
+    $("tournamentStatus").textContent = "Pendaftaran " + title + " dibuka. Bagikan info turnamen kepada para pemain.";
+  } catch (error) {
+    $("tournamentStatus").textContent = "Gagal membuka turnamen: " + explainError(error);
+  } finally {
+    tournamentBusy = false;
+    renderTournamentCenter();
+  }
+}
+async function registerPartyTournament() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || tournamentBusy) return;
+  const party = getMyParty();
+  const snapshot = getTournamentSnapshot();
+  if (!party || party.leaderUid !== uid || snapshot.meta?.phase !== "registration") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const existing = Object.entries(snapshot.registrations)
+      .find(([, item]) => item?.partyCode === party.code);
+    const registrationRoot = "rooms/" + roomPin + "/socialCompetition/tournament/registrations/" + snapshot.tournamentId;
+    if (existing) {
+      await set(dbPath(registrationRoot + "/" + existing[0]), null);
+      $("partyStatus").textContent = "Pendaftaran party " + party.code + " dibatalkan.";
+    } else {
+      const slots = Array.from({ length: 16 }, (_, index) =>
+        "slot" + String(index + 1).padStart(2, "0"));
+      const occupied = new Set(Object.keys(snapshot.registrations));
+      const freeSlot = slots.find((slot) => !occupied.has(slot));
+      if (!freeSlot) throw new Error("Turnamen sudah penuh. Maksimal 16 party.");
+      const leader = Object.values(party.members || {}).find((member) => member?.uid === uid);
+      const name = String(leader?.name || $("name").value.trim() || "Party " + party.code).slice(0, 28);
+      await set(dbPath(registrationRoot + "/" + freeSlot), {
+        partyCode: party.code, leaderUid: uid, partyName: name,
+        registeredAt: Math.round(serverNow())
+      });
+      $("partyStatus").textContent = "Party " + party.code + " resmi terdaftar di turnamen.";
+    }
+  } catch (error) {
+    $("partyStatus").textContent = "Pendaftaran belum berhasil: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition")).catch(() => null);
+    if (fresh?.exists()) socialCompetitionData = fresh.val() || {};
+    renderPartyCenter();
+    renderTournamentCenter();
+  }
+}
+async function startTournament() {
+  if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
+      teamBattleData?.session?.status === "active") return;
+  tournamentBusy = true;
+  renderTournamentCenter();
+  try {
+    const socialSnap = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    const playersSnap = await get(dbPath("rooms/" + roomPin + "/players"));
+    const social = socialSnap.val() || {};
+    const meta = social.tournament?.meta;
+    if (!meta || meta.phase !== "registration") throw new Error("Belum ada pendaftaran yang terbuka.");
+    const tournamentId = String(meta.tournamentId);
+    const registrations = social.tournament?.registrations?.[tournamentId] || {};
+    const players = playersSnap.val() || {};
+    const entrants = [];
+    for (const [slot, entry] of Object.entries(registrations)) {
+      const party = social.parties?.[entry?.partyCode];
+      const leaderStillOwnsParty = party?.leaderUid === entry?.leaderUid &&
+        social.playerParties?.[entry?.leaderUid] === entry?.partyCode;
+      if (!leaderStillOwnsParty) {
+        await set(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/registrations/" +
+          tournamentId + "/" + slot), null);
+        continue;
+      }
+      const hasOnlineMember = Object.values(party.members || {}).some((member) =>
+        member?.uid && social.playerParties?.[member.uid] === entry.partyCode &&
+        players[member.uid] && players[member.uid].connected !== false
+      );
+      if (!hasOnlineMember) {
+        throw new Error("Party " + entry.partyCode + " belum memiliki anggota online. Minta anggota masuk kembali.");
+      }
+      entrants.push({
+        partyCode: entry.partyCode, leaderUid: entry.leaderUid,
+        name: entry.partyName || "Party " + entry.partyCode
+      });
+    }
+    if (entrants.length < 2) throw new Error("Minimal 2 party valid harus terdaftar.");
+    if (entrants.length > 16) throw new Error("Maksimal 16 party.");
+    buildSingleEliminationBracket(entrants);
+    await update(dbPath("rooms/" + roomPin + "/socialCompetition/tournament/meta"), {
+      phase: "active", startedAt: Math.round(serverNow())
+    });
+    const fresh = await get(dbPath("rooms/" + roomPin + "/socialCompetition"));
+    socialCompetitionData = fresh.val() || {};
+    $("tournamentStatus").textContent = "Bracket terkunci. Pertandingan pertama siap dimulai dari Team Color Battle.";
+  } catch (error) {
+    $("tournamentStatus").textContent = "Turnamen belum dapat dimulai: " + explainError(error);
+  } finally {
+    tournamentBusy = false;
+    renderTournamentCenter();
+  }
+}
+
+function makePartyCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return code;
+}
+async function createParty() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || getMyParty()) return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const players = await get(dbPath(`rooms/${roomPin}/players`));
+    if (!players.child(uid).exists()) throw new Error("Profil pemain belum siap.");
+    const socialSnap = await get(dbPath(`rooms/${roomPin}/socialCompetition`));
+    const social = socialSnap.val() || {};
+    const counts = { red: 0, blue: 0 };
+    Object.entries(social.parties || {}).forEach(([code, item]) => {
+      const teamId = item?.teamId;
+      if (teamId === "red" || teamId === "blue") {
+        const memberCount = Object.values(item?.members || {}).filter((member) =>
+          member?.uid && social.playerParties?.[member.uid] === code
+        ).length;
+        counts[teamId] += memberCount;
+      }
+    });
+    const preferredTeam = counts.red <= counts.blue ? "red" : "blue";
+    let code = "";
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = makePartyCode();
+      const existing = await get(dbPath(`rooms/${roomPin}/socialCompetition/parties/${candidate}`));
+      if (!existing.exists()) { code = candidate; break; }
+    }
+    if (!code) throw new Error("Kode party belum tersedia. Coba lagi.");
+    const name = String($("name").value.trim() || "Pemain").slice(0, 18);
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${code}`), {
+      leaderUid: uid,
+      teamId: preferredTeam,
+      createdAt: Math.round(serverNow()),
+      members: { slot1: { uid, name, joinedAt: Math.round(serverNow()) } }
+    });
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/playerParties/${uid}`), code);
+    $("partyStatus").textContent = "Party berhasil dibuat. Bagikan kode " + code + " kepada teman.";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal membuat party: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function joinParty() {
+  if (isHost || !roomPin || activeState?.phase !== "lobby" || partyBusy || getMyParty()) return;
+  const code = String($("partyJoinCode").value || "").trim().toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) {
+    $("partyStatus").textContent = "Masukkan kode party 6 karakter.";
+    return;
+  }
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const partySnap = await get(dbPath(`rooms/${roomPin}/socialCompetition/parties/${code}`));
+    const party = partySnap.val();
+    if (!party) throw new Error("Party tidak ditemukan. Periksa kode undangannya.");
+    if (Object.values(party.members || {}).some((member) => member?.uid === uid)) {
+      throw new Error("Kamu sudah menjadi anggota party ini.");
+    }
+    const freeSlot = ["slot1", "slot2", "slot3", "slot4"].find((slot) => !party.members?.[slot]);
+    if (!freeSlot) throw new Error("Party sudah penuh. Maksimal 4 pemain.");
+    if (teamBattleData?.session?.status === "active") throw new Error("Tunggu Team Battle selesai sebelum bergabung.");
+    const name = String($("name").value.trim() || "Pemain").slice(0, 18);
+    const joinedAt = Math.round(serverNow());
+    await update(dbPath(`rooms/${roomPin}/socialCompetition`), {
+      [`parties/${code}/members/${freeSlot}`]: { uid, name, joinedAt },
+      [`playerParties/${uid}`]: code
+    });
+    $("partyJoinCode").value = "";
+    $("partyStatus").textContent = "Berhasil bergabung dengan party " + code + ".";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal bergabung: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function leaveParty() {
+  const party = getMyParty();
+  if (isHost || !party || partyBusy || activeState?.phase !== "lobby" ||
+      teamBattleData?.session?.status === "active") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    const members = Object.entries(party.members || {})
+      .map(([slot, info]) => ({ slot, uid: String(info?.uid || ""), joinedAt: Number(info?.joinedAt || 0) }))
+      .filter((member) => member.uid);
+    if (party.leaderUid === uid && members.length === 1) {
+      // Delete the whole party first; Firebase cannot merge a parent deletion with child paths.
+      await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${party.code}`), null);
+      await set(dbPath(`rooms/${roomPin}/socialCompetition/playerParties/${uid}`), null);
+    } else {
+      const changes = {
+        [`playerParties/${uid}`]: null,
+        [`parties/${party.code}/members/${party.mySlot}`]: null
+      };
+      if (party.leaderUid === uid) {
+        const replacement = members
+          .filter((member) => member.uid !== uid)
+          .sort((a, b) => a.joinedAt - b.joinedAt || a.uid.localeCompare(b.uid))[0].uid;
+        changes[`parties/${party.code}/leaderUid`] = replacement;
+      }
+      await update(dbPath(`rooms/${roomPin}/socialCompetition`), changes);
+    }
+    $("partyStatus").textContent = "Kamu sudah keluar dari party.";
+  } catch (error) {
+    $("partyStatus").textContent = "Gagal keluar dari party: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+async function setPartyTeam(teamId) {
+  const party = getMyParty();
+  if (!party || party.leaderUid !== uid || !["red", "blue"].includes(teamId) ||
+      activeState?.phase !== "lobby" || partyBusy || teamBattleData?.session?.status === "active") return;
+  partyBusy = true;
+  renderPartyCenter();
+  try {
+    await set(dbPath(`rooms/${roomPin}/socialCompetition/parties/${party.code}/teamId`), teamId);
+    $("partyStatus").textContent = "Party memilih Team " + (teamId === "red" ? "Merah." : "Biru.");
+  } catch (error) {
+    $("partyStatus").textContent = "Tim belum dapat diubah: " + explainError(error);
+  } finally {
+    partyBusy = false;
+    renderPartyCenter();
+  }
+}
+function renderPersonalCompetitionStats() {
+  renderPartyCenter();
+}
+function startReactionRushRound() {
+  if (activeState?.phase !== "lobby") {
+    closeReactionRush();
+    return;
+  }
+  clearTimeout(reactionRushTimeout);
+  reactionRushTimeout = null;
+  reactionRushStartedAt = 0;
+  setReactionRushView(
+    "waiting", "TUNGGU", "Jangan terburu-buru!",
+    "Tunggu sinyal hijau. Menekan terlalu cepat akan dianggap false start.",
+    "Jangan tekan dulu"
+  );
+  const randomDelay = 1400 + Math.random() * 3200;
+  reactionRushTimeout = setTimeout(() => {
+    if (reactionRushPhase !== "waiting") return;
+    reactionRushStartedAt = performance.now();
+    setReactionRushView(
+      "go", "GO!", "SEKARANG!",
+      "Lampu hijau! Tekan tombol secepat mungkin.",
+      "TEKAN SEKARANG!"
+    );
+  }, randomDelay);
+}
+function handleReactionRushAction() {
+  if (reactionRushPhase === "ready" || reactionRushPhase === "false-start" ||
+    reactionRushPhase === "result") {
+    startReactionRushRound();
+    return;
+  }
+  if (reactionRushPhase === "waiting") {
+    clearTimeout(reactionRushTimeout);
+    reactionRushTimeout = null;
+    setReactionRushView(
+      "false-start", "TERLALU CEPAT", "False start!",
+      "Kamu menekan sebelum lampu hijau. Coba tunggu sinyal berikutnya.",
+      "Coba lagi"
+    );
+    return;
+  }
+  if (reactionRushPhase === "go") {
+    const elapsed = Math.max(1, Math.round(performance.now() - reactionRushStartedAt));
+    const isRecord = !reactionRushBest || elapsed < reactionRushBest;
+    if (isRecord) {
+      reactionRushBest = elapsed;
+      try {
+        localStorage.setItem(REACTION_RUSH_BEST_KEY, String(elapsed));
+      } catch {
+        // The challenge still works when browser storage is unavailable.
+      }
+    }
+    renderReactionRushBest();
+    setReactionRushView(
+      "result",
+      elapsed < 220 ? "KILAT!" : elapsed < 320 ? "HEBAT!" : "SELESAI",
+      elapsed + " ms",
+      isRecord ? "Rekor baru! Catatan terbaikmu berhasil diperbarui." :
+        "Bagus! Rekor terbaikmu saat ini " + reactionRushBest + " ms.",
+      "Main lagi"
+    );
+  }
+}
 function showScreen(id) {
+  if (id !== "lobbyScreen") {
+    closeReactionRush();
+    stopQuickColorTicker();
+  } else {
+    startQuickColorTicker();
+  }
+  if (id !== "endScreen") $("app").classList.remove("champions-reveal");
   ["roleScreen", "setupScreen", "lobbyScreen", "hud", "endScreen"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== id);
   });
@@ -98,36 +1798,106 @@ function explainError(error) {
 // -------------------- Three.js arena --------------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#07111f");
-scene.fog = new THREE.Fog("#07111f", 30, 78);
+scene.fog = new THREE.Fog("#0a1724", 38, 86);
 const camera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.1, 120);
-camera.position.set(0, 9.2, 18.5);
+camera.position.set(0, 13, 20);
 camera.lookAt(0, 0.85, 0);
+const winnerCameraTransition = { startedAt: 0 };
+const winnerCameraStartPosition = new THREE.Vector3();
+const winnerCameraStartTarget = new THREE.Vector3();
+const winnerCameraDirection = new THREE.Vector3();
+const winnerCameraLookTarget = new THREE.Vector3();
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
+const spectatorCameraLookTarget = new THREE.Vector3(0, 0.85, 0);
+const spectatorDesiredLookTarget = new THREE.Vector3(0, 0.85, 0);
+const winnerCameraFocus = new THREE.Vector3(0, 1.62, -17.15);
 const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-scene.add(new THREE.HemisphereLight("#bfeaff", "#19283d", 1.9));
-const sun = new THREE.DirectionalLight("#ffffff", 2.4);
-sun.position.set(-10, 20, 12);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+scene.add(new THREE.HemisphereLight("#d8eaff", "#172432", 1.45));
+const sun = new THREE.DirectionalLight("#fff4df", 2.8);
+sun.position.set(-12, 22, 13);
 sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -28;
+sun.shadow.camera.right = 28;
+sun.shadow.camera.top = 26;
+sun.shadow.camera.bottom = -26;
+sun.shadow.bias = -0.00018;
 scene.add(sun);
-const fill = new THREE.PointLight("#3dbcf5", 75, 35);
-fill.position.set(10, 8, -10);
+const fill = new THREE.PointLight("#67c9ff", 58, 42, 2);
+fill.position.set(12, 9, -11);
 scene.add(fill);
+const warmFill = new THREE.PointLight("#ffbd82", 26, 30, 2);
+warmFill.position.set(-14, 7, 8);
+scene.add(warmFill);
 
+function createArenaFloorTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#263745";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Large, subtle composite-floor panels instead of a bright editor-style grid.
+  for (let y = 0; y < 512; y += 128) {
+    for (let x = 0; x < 512; x += 128) {
+      ctx.fillStyle = ((x + y) / 128) % 2 ? "#2c3e4c" : "#293b49";
+      ctx.fillRect(x + 1, y + 1, 126, 126);
+      ctx.strokeStyle = "rgba(190,218,235,0.075)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, 124, 124);
+    }
+  }
+
+  // Fine, deterministic surface grain keeps the floor from reading as a flat color.
+  let seed = 92821;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let i = 0; i < 15000; i++) {
+    const x = random() * 512;
+    const y = random() * 512;
+    const light = random() > 0.52;
+    ctx.fillStyle = light ? "rgba(220,235,245,0.055)" : "rgba(3,10,18,0.08)";
+    ctx.fillRect(x, y, 1 + random() * 2, 1);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  return texture;
+}
+const arenaFloorTexture = createArenaFloorTexture();
 const floor = new THREE.Mesh(
-  new THREE.CylinderGeometry(25, 25, 0.55, 64),
-  new THREE.MeshStandardMaterial({ color: "#14283b", roughness: 0.82 })
+  new THREE.CylinderGeometry(25, 25, 0.72, 96),
+  new THREE.MeshStandardMaterial({
+    color: "#bdc8d1", map: arenaFloorTexture, roughness: 0.84, metalness: 0.12
+  })
 );
-floor.position.y = -0.34;
+floor.position.y = -0.36;
 floor.receiveShadow = true;
 scene.add(floor);
-const grid = new THREE.GridHelper(50, 50, "#315c79", "#1c3953");
-grid.position.y = -0.055;
-scene.add(grid);
+
+// Layered steel plinth makes the arena feel like a physical venue, not a floating disk.
+const arenaPlinth = new THREE.Mesh(
+  new THREE.CylinderGeometry(25.25, 25.25, 0.48, 96),
+  new THREE.MeshStandardMaterial({ color: "#111e2b", roughness: 0.46, metalness: 0.72 })
+);
+arenaPlinth.position.y = -0.82;
+arenaPlinth.receiveShadow = true;
+scene.add(arenaPlinth);
 
 const sharedMaterials = new Map();
 function mat(color, roughness = 0.72) {
@@ -192,20 +1962,470 @@ function labelSprite(text, color) {
   sprite.scale.set(4.8, 1.2, 1);
   return sprite;
 }
-const pads = PAD_POINTS.map((p, index) => {
+
+const arenaAudience = [];
+const audienceReaction = { kind: "", startedAt: 0, duration: 0 };
+
+const arenaMaterial = {
+  wall: new THREE.MeshStandardMaterial({ color: "#1b2b39", roughness: 0.78, metalness: 0.22 }),
+  wallLight: new THREE.MeshStandardMaterial({ color: "#314657", roughness: 0.58, metalness: 0.42 }),
+  steel: new THREE.MeshStandardMaterial({ color: "#25394a", roughness: 0.34, metalness: 0.82 }),
+  steelDark: new THREE.MeshStandardMaterial({ color: "#101f2c", roughness: 0.48, metalness: 0.72 }),
+  seat: new THREE.MeshStandardMaterial({ color: "#263f52", roughness: 0.56, metalness: 0.28 }),
+  seatAccent: new THREE.MeshStandardMaterial({ color: "#34566b", roughness: 0.46, metalness: 0.22 }),
+  lightCyan: new THREE.MeshStandardMaterial({ color: "#8beaff", emissive: "#29b9e8", emissiveIntensity: 1.6, roughness: 0.28 }),
+  lightWarm: new THREE.MeshStandardMaterial({ color: "#ffe1ae", emissive: "#de8b3f", emissiveIntensity: 1.1, roughness: 0.3 })
+};
+
+function arenaBox(width, height, depth, material, x, y, z, options = {}) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = options.castShadow !== false;
+  mesh.receiveShadow = options.receiveShadow !== false;
+  scene.add(mesh);
+  return mesh;
+}
+function arenaBeam(start, end, radius, material) {
+  const a = new THREE.Vector3(...start);
+  const b = new THREE.Vector3(...end);
+  const direction = new THREE.Vector3().subVectors(b, a);
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, direction.length(), 10),
+    material
+  );
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+function arenaRing(radius, tubeRadius, material, y) {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, tubeRadius, 10, 120),
+    material
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = y;
+  ring.receiveShadow = true;
+  scene.add(ring);
+  return ring;
+}
+function createArenaScreenTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 320;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, 1024, 320);
+  gradient.addColorStop(0, "#0c263b");
+  gradient.addColorStop(0.55, "#163d56");
+  gradient.addColorStop(1, "#101f39");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 1024, 320);
+  ctx.strokeStyle = "rgba(123,225,255,.30)";
+  ctx.lineWidth = 5;
+  ctx.strokeRect(12, 12, 1000, 296);
+  ctx.strokeStyle = "rgba(123,225,255,.12)";
+  ctx.lineWidth = 2;
+  for (let x = 30; x < 1024; x += 64) {
+    ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 300); ctx.stroke();
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "#53cfff";
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = "#effaff";
+  ctx.font = "800 78px Arial";
+  ctx.fillText("QUIZVERSE", 512, 125);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#86dfff";
+  ctx.font = "700 24px Arial";
+  ctx.letterSpacing = "9px";
+  ctx.fillText("LEARNING COMPETITION ARENA", 512, 214);
+  ctx.fillStyle = "rgba(218,242,255,.58)";
+  ctx.font = "600 15px Arial";
+  ctx.fillText("THINK  ·  MOVE  ·  ANSWER", 512, 266);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function buildArenaArchitecture() {
+  // Enclosing walls and a framed end-stage provide real spatial scale.
+  arenaBox(50, 11.5, 1.0, arenaMaterial.wall, 0, 5.25, -24.55);
+  arenaBox(1.0, 10.5, 48, arenaMaterial.wall, -24.55, 4.9, 0);
+  arenaBox(1.0, 10.5, 48, arenaMaterial.wall, 24.55, 4.9, 0);
+  arenaBox(50, 0.42, 0.72, arenaMaterial.steel, 0, 10.85, -23.92);
+  arenaBox(0.72, 10.2, 0.8, arenaMaterial.steel, -22.8, 5, -23.8);
+  arenaBox(0.72, 10.2, 0.8, arenaMaterial.steel, 22.8, 5, -23.8);
+
+  // Repeated wall ribs, acoustic panels and vertical light strips.
+  for (let x = -21; x <= 21; x += 3.5) {
+    arenaBox(0.16, 9.4, 0.18, arenaMaterial.wallLight, x, 5, -23.92, { castShadow: false });
+  }
+  for (const x of [-19, -12, 12, 19]) {
+    arenaBox(0.10, 8.5, 0.10, arenaMaterial.lightCyan, x, 5.25, -23.78, { castShadow: false, receiveShadow: false });
+  }
+
+  // Central illuminated scoreboard / identity screen.
+  arenaBox(13.0, 4.0, 0.55, arenaMaterial.steelDark, 0, 6.2, -23.72);
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(12.1, 3.22),
+    new THREE.MeshBasicMaterial({ map: createArenaScreenTexture(), toneMapped: false })
+  );
+  screen.position.set(0, 6.2, -23.425);
+  scene.add(screen);
+  arenaBox(13.5, 0.16, 0.12, arenaMaterial.lightCyan, 0, 8.28, -23.36, { castShadow: false, receiveShadow: false });
+  arenaBox(13.5, 0.16, 0.12, arenaMaterial.steel, 0, 4.12, -23.36);
+
+  // Heavy corner pylons and roof trusses establish an indoor venue silhouette.
+  for (const side of [-1, 1]) {
+    for (const z of [-18, 0, 18]) {
+      const x = side * 21.7;
+      const column = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.36, 10.2, 14),
+        arenaMaterial.steel
+      );
+      column.position.set(x, 5.05, z);
+      column.castShadow = true;
+      column.receiveShadow = true;
+      scene.add(column);
+      arenaBox(0.8, 0.32, 0.8, arenaMaterial.steelDark, x, 0.35, z);
+      arenaBox(0.34, 7.8, 0.12, arenaMaterial.lightCyan, x, 5.0, z, { castShadow: false, receiveShadow: false });
+    }
+  }
+  for (const z of [-20, -10, 0, 10, 20]) {
+    arenaBeam([-21.7, 10.35, z], [21.7, 10.35, z], 0.13, arenaMaterial.steel);
+  }
+  for (const side of [-1, 1]) {
+    arenaBeam([side * 21.7, 10.35, -20], [side * 21.7, 10.35, 20], 0.13, arenaMaterial.steel);
+    arenaBeam([side * 21.7, 9.65, -20], [side * 21.7, 9.65, 20], 0.055, arenaMaterial.wallLight);
+  }
+  arenaRing(19.8, 0.10, arenaMaterial.steel, 10.18);
+  arenaRing(18.8, 0.035, arenaMaterial.lightCyan, 10.18);
+
+  // A small, stepped grandstand on each side, facing the answer field.
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 3; row++) {
+      const x = side * (14.2 + row * 1.28);
+      const y = 0.56 + row * 0.42;
+      arenaBox(0.94, 0.24, 13.6, arenaMaterial.seat, x, y, 0);
+      arenaBox(0.18, 0.62, 13.6, arenaMaterial.seatAccent, x + side * 0.38, y + 0.31, 0);
+      arenaBox(0.16, 0.10, 12.8, arenaMaterial.lightCyan, x - side * 0.38, y - 0.04, 0, { castShadow: false, receiveShadow: false });
+    }
+    for (const z of [-7.2, 7.2]) {
+      arenaBox(0.95, 0.85, 0.26, arenaMaterial.steel, side * 18.5, 1.75, z);
+    }
+  }
+
+  // Curved floor markings and safety lines replace the bright editor grid.
+  arenaRing(10.9, 0.028, arenaMaterial.wallLight, 0.012);
+  arenaRing(20.8, 0.045, arenaMaterial.steel, 0.014);
+  arenaRing(23.65, 0.075, arenaMaterial.lightCyan, 0.018);
+  for (const x of [-11.0, 11.0]) {
+    arenaBox(0.045, 0.012, 12.5, arenaMaterial.wallLight, x, 0.013, 0, { castShadow: false, receiveShadow: false });
+  }
+
+  // Overhead fixtures and soft colored pools of light on the four answer bays.
+  const bayLights = ["#f45c78", "#4e9dff", "#f6d16a", "#40d5a0"];
+  PAD_POINTS.forEach((point, index) => {
+    const housing = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.38, 0.52, 0.42, 16),
+      arenaMaterial.steelDark
+    );
+    housing.position.set(point.x, 9.65, point.z);
+    housing.castShadow = true;
+    scene.add(housing);
+    const lens = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.34, 0.08, 16),
+      new THREE.MeshBasicMaterial({ color: bayLights[index] })
+    );
+    lens.position.set(point.x, 9.40, point.z);
+    scene.add(lens);
+    const pool = new THREE.PointLight(bayLights[index], 22, 19, 2);
+    pool.position.set(point.x, 8.9, point.z);
+    scene.add(pool);
+  });
+
+
+  // Decorative hanging banners and compact, stylized crowd silhouettes.
+  const bannerColors = ["#49c8ff", "#ffb95e", "#a78bfa", "#42d6a0"];
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const z = -15 + k * 15;
+      arenaBox(1.05, 3.6, 0.22, arenaMaterial.steelDark, side * 20.25, 7.1, z);
+      arenaBox(0.88, 2.95, 0.055, new THREE.MeshStandardMaterial({
+        color: bannerColors[(k + (side > 0 ? 1 : 0)) % bannerColors.length],
+        roughness: 0.65, metalness: 0.1
+      }), side * 20.25, 7.1, z - side * 0.14, { castShadow: false });
+      arenaBox(0.88, 0.07, 0.07, arenaMaterial.lightCyan, side * 20.25, 8.66, z, { castShadow: false, receiveShadow: false });
+    }
+  }
+  // Low-poly audience figures: lightweight, decorative silhouettes, not game avatars.
+  // Each spectator is a two-mesh group so the whole crowd can react without extra draw calls.
+  const crowdPalette = ["#5a7991", "#6d8da5", "#9c7c9f", "#d18a63", "#5eaa9d", "#8798b4"];
+  const crowdSeed = (n) => ((n * 37 + 11) % 17) / 17;
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 3; row++) {
+      const x = side * (14.2 + row * 1.28);
+      const y = 0.74 + row * 0.42;
+      for (let n = 0; n < 14; n++) {
+        const z = -6.1 + n * 0.94;
+        const color = crowdPalette[(n + row * 3 + (side > 0 ? 2 : 0)) % crowdPalette.length];
+        const spectator = new THREE.Group();
+        spectator.position.set(x, y, z);
+        spectator.rotation.y = side < 0 ? -0.10 : 0.10;
+        const torso = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.16, 0.24 + crowdSeed(n + row) * 0.08, 3, 6),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.88 })
+        );
+        torso.position.set(0, 0.48, 0);
+        torso.castShadow = false;
+        torso.receiveShadow = false;
+        spectator.add(torso);
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.16, 8, 6),
+          new THREE.MeshStandardMaterial({ color: "#d7ad91", roughness: 0.9 })
+        );
+        head.position.set(0, 0.82, 0);
+        head.castShadow = false;
+        head.receiveShadow = false;
+        spectator.add(head);
+        scene.add(spectator);
+        arenaAudience.push({
+          group: spectator,
+          torso,
+          head,
+          baseY: y,
+          side,
+          phase: (side + 1) * 1.3 + row * 0.81 + n * 0.47,
+          // The central seats react first, then the cheer travels outward through the stands.
+          cheerDelay: Math.abs(n - 6.5) * 0.058 + row * 0.11 + (side > 0 ? 0.10 : 0)
+        });
+      }
+    }
+  }
+
+  // Four sweeping light beams are translucent and rotate slowly overhead.
+  const beamMaterials = ["#f45c78", "#4e9dff", "#f6d16a", "#40d5a0"].map(color =>
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.055, depthWrite: false, side: THREE.DoubleSide })
+  );
+  const sweepingBeams = [];
+  for (let i = 0; i < 4; i++) {
+    const beam = new THREE.Mesh(
+      new THREE.ConeGeometry(4.2, 11.8, 18, 1, true),
+      beamMaterials[i]
+    );
+    beam.position.set((i - 1.5) * 6.5, 6.0, -3.0);
+    beam.rotation.z = Math.PI;
+    beam.rotation.x = 0.18;
+    beam.userData.sweepPhase = i * Math.PI * 0.5;
+    scene.add(beam);
+    sweepingBeams.push(beam);
+  }
+
+  // Perimeter LED segments animate as a subtle venue heartbeat.
+  const perimeterLEDs = [];
+  for (let i = 0; i < 48; i++) {
+    const a = i / 48 * Math.PI * 2;
+    const led = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.07, 0.14),
+      new THREE.MeshBasicMaterial({ color: "#57d8ff" })
+    );
+    led.position.set(Math.cos(a) * 23.45, 0.06, Math.sin(a) * 23.45);
+    led.rotation.y = -a;
+    led.userData.ledIndex = i;
+    scene.add(led);
+    perimeterLEDs.push(led);
+  }
+    // Soft architectural wash lights along the side walls.
+  for (const side of [-1, 1]) {
+    for (const z of [-12, 12]) {
+      const wallLight = new THREE.PointLight("#78d9ff", 18, 14, 2);
+      wallLight.position.set(side * 21.5, 7.3, z);
+      scene.add(wallLight);
+    }
+  }
+}
+buildArenaArchitecture();
+
+function buildLobbyActivityPlaza() {
   const group = new THREE.Group();
-  const platform = new THREE.Mesh(
-    new THREE.BoxGeometry(7.1, 0.42, 7.1),
+  const outerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(7.1, 0.075, 10, 128),
     new THREE.MeshStandardMaterial({
-      color: COLORS[index], roughness: 0.42, metalness: 0.08,
-      emissive: COLORS[index], emissiveIntensity: 0.18
+      color: "#4a718b", emissive: "#1f6c91", emissiveIntensity: 0.26,
+      roughness: 0.48, metalness: 0.5, transparent: true, opacity: 0.72
     })
   );
-  platform.position.y = 0.18;
-  platform.castShadow = true; platform.receiveShadow = true;
+  outerRing.rotation.x = Math.PI / 2;
+  outerRing.position.set(0, 0.055, 14.45);
+  group.add(outerRing);
+
+  const innerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(6.5, 0.025, 8, 128),
+    new THREE.MeshBasicMaterial({ color: "#77dfff", transparent: true, opacity: 0.36 })
+  );
+  innerRing.rotation.x = Math.PI / 2;
+  innerRing.position.set(0, 0.035, 14.45);
+  group.add(innerRing);
+
+  const title = labelSprite("LOBBY ACTIVITY HUB", "#69dfff");
+  title.scale.set(5.4, 1.05, 1);
+  title.position.set(0, 4.05, 14.45);
+  title.material.depthTest = false;
+  title.material.depthWrite = false;
+  title.renderOrder = 8;
+  group.add(title);
+
+  const beacons = [];
+  LOBBY_ACTIVITY_ZONES.forEach((zone, index) => {
+    const floorDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(zone.radius, 56),
+      new THREE.MeshBasicMaterial({
+        color: zone.color, transparent: true, opacity: 0.13,
+        depthWrite: false, side: THREE.DoubleSide
+      })
+    );
+    floorDisc.rotation.x = -Math.PI / 2;
+    floorDisc.position.set(zone.x, 0.026, zone.z);
+    group.add(floorDisc);
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(zone.radius - 0.08, 0.055, 8, 64),
+      new THREE.MeshBasicMaterial({ color: zone.color, transparent: true, opacity: 0.86 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(zone.x, 0.07, zone.z);
+    group.add(ring);
+
+    const marker = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.32, 0),
+      new THREE.MeshStandardMaterial({
+        color: zone.color, emissive: zone.color, emissiveIntensity: 0.48,
+        roughness: 0.32, metalness: 0.24
+      })
+    );
+    marker.position.set(zone.x, 1.18 + index * 0.06, zone.z);
+    marker.userData.activityIndex = index;
+    marker.userData.activityBaseY = marker.position.y;
+    marker.castShadow = false;
+    group.add(marker);
+    beacons.push(marker);
+
+    const sign = labelSprite(zone.label, zone.color);
+    sign.scale.set(zone.id === "team" ? 1.78 : 1.55, 0.40, 1);
+    sign.position.set(zone.x, 0.62, zone.z);
+    sign.material.depthTest = false;
+    sign.material.depthWrite = false;
+    sign.renderOrder = 9;
+    group.add(sign);
+  });
+
+  group.visible = false;
+  scene.add(group);
+  return { group, beacons };
+}
+const lobbyActivityPlaza = buildLobbyActivityPlaza();
+
+const winnerPodiumGroup = new THREE.Group();
+winnerPodiumGroup.visible = false;
+scene.add(winnerPodiumGroup);
+const winnerPodiumSlots = [
+  { x: 0, z: -17.15, y: 1.62, color: "#e6b84e", label: "1ST" },
+  { x: -3.45, z: -17.15, y: 1.12, color: "#c5d4e2", label: "2ND" },
+  { x: 3.45, z: -17.15, y: 0.92, color: "#c58b65", label: "3RD" }
+];
+winnerPodiumSlots.forEach((slot) => {
+  const metal = new THREE.MeshStandardMaterial({
+    color: slot.color, roughness: 0.34, metalness: 0.72,
+    emissive: slot.color, emissiveIntensity: 0.10
+  });
+  const pedestal = new THREE.Mesh(
+    roundedBoxGeometry(2.85, slot.y, 2.55, 0.22), metal
+  );
+  pedestal.position.set(slot.x, slot.y / 2, slot.z);
+  pedestal.castShadow = true;
+  pedestal.receiveShadow = true;
+  winnerPodiumGroup.add(pedestal);
+
+  const cap = new THREE.Mesh(
+    roundedBoxGeometry(2.9, 0.13, 2.62, 0.12),
+    new THREE.MeshStandardMaterial({
+      color: slot.color, roughness: 0.26, metalness: 0.58,
+      emissive: slot.color, emissiveIntensity: 0.22
+    })
+  );
+  cap.position.set(slot.x, slot.y - 0.10, slot.z);
+  cap.castShadow = false;
+  winnerPodiumGroup.add(cap);
+
+  const badge = labelSprite(slot.label, slot.color);
+  badge.scale.set(1.55, 0.39, 1);
+  badge.position.set(slot.x, slot.y + 0.34, slot.z + 1.32);
+  winnerPodiumGroup.add(badge);
+});
+
+const sweepingBeams = scene.children.filter((obj) => obj.userData.sweepPhase !== undefined);
+const perimeterLEDs = scene.children.filter((obj) => obj.userData.ledIndex !== undefined);
+
+const pads = PAD_POINTS.map((p, index) => {
+  const group = new THREE.Group();
+  const base = new THREE.Mesh(
+    roundedBoxGeometry(7.62, 0.58, 7.62, 0.48),
+    arenaMaterial.steelDark
+  );
+  base.position.y = 0.12;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const lowerTrim = new THREE.Mesh(
+    roundedBoxGeometry(7.38, 0.12, 7.38, 0.38),
+    arenaMaterial.lightCyan
+  );
+  lowerTrim.position.y = 0.39;
+  lowerTrim.castShadow = false;
+  group.add(lowerTrim);
+
+  const platformMaterial = new THREE.MeshStandardMaterial({
+    color: COLORS[index],
+    roughness: 0.31,
+    metalness: 0.18,
+    emissive: COLORS[index],
+    emissiveIntensity: 0.10
+  });
+  const platform = new THREE.Mesh(
+    roundedBoxGeometry(7.08, 0.30, 7.08, 0.34),
+    platformMaterial
+  );
+  platform.position.y = 0.57;
+  platform.castShadow = true;
+  platform.receiveShadow = true;
   group.add(platform);
+
+  const topInset = new THREE.Mesh(
+    roundedBoxGeometry(6.72, 0.035, 6.72, 0.26),
+    new THREE.MeshStandardMaterial({ color: COLORS[index], roughness: 0.48, metalness: 0.08 })
+  );
+  topInset.position.y = 0.735;
+  topInset.castShadow = false;
+  group.add(topInset);
+
+  // Small illuminated corner studs make each bay read as a built platform.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const stud = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.075, 0.075, 0.12, 10),
+        arenaMaterial.lightCyan
+      );
+      stud.position.set(sx * 3.35, 0.78, sz * 3.35);
+      group.add(stud);
+    }
+  }
+
   const tag = labelSprite(String.fromCharCode(65 + index) + " · " + COLOR_NAMES[index], COLORS[index]);
-  tag.position.set(0, 1.05, 0);
+  tag.position.set(0, 1.48, 0);
   group.add(tag);
   group.position.set(p.x, 0, p.z);
   scene.add(group);
@@ -220,6 +2440,263 @@ for (let i = 0; i < 10; i++) {
   crystal.position.set(Math.cos(a) * 19, 1.2 + (i % 3) * 0.3, Math.sin(a) * 19);
   scene.add(crystal);
 }
+const matchEventRings = Array.from({ length: 3 }, (_, index) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: "#62dcff", transparent: true, opacity: 0, depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.055, 8, 56), material);
+  ring.rotation.x = Math.PI / 2;
+  ring.visible = false;
+  ring.userData.ringIndex = index;
+  ring.renderOrder = 2;
+  scene.add(ring);
+  return ring;
+});
+const celebrationPalette = ["#ffffff", "#ffd166", "#65e6c2", "#73d8ff", "#ff8caa", "#b69cff"];
+const celebrationGeometry = new THREE.OctahedronGeometry(0.16, 0);
+const celebrationParticles = Array.from({ length: 24 }, (_, index) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: celebrationPalette[index % celebrationPalette.length],
+    transparent: true, opacity: 0, depthWrite: false
+  });
+  const particle = new THREE.Mesh(celebrationGeometry, material);
+  particle.visible = false;
+  particle.userData.velocity = new THREE.Vector3();
+  particle.userData.spin = (index % 2 ? 1 : -1) * (1.8 + (index % 5) * 0.35);
+  scene.add(particle);
+  return particle;
+});
+
+function triggerQuestionStart() {
+  const questionNumber = Math.max(1, Number(activeState?.questionIndex ?? 0) + 1);
+  const totalQuestions = Math.max(questionNumber, Number(activeState?.totalQuestions || questionNumber));
+  $("roundIntroTitle").textContent = questionNumber === 1 ? "PERTANDINGAN DIMULAI" : "SOAL BERIKUTNYA";
+  $("roundIntroMeta").textContent = "SOAL " + String(questionNumber).padStart(2, "0") +
+    " / " + String(totalQuestions).padStart(2, "0");
+  winnerPodiumGroup.visible = false;
+  if (playerMesh) {
+    playerMesh.userData.winnerTarget = null;
+    playerMesh.userData.winnerRank = 0;
+  }
+  Object.entries(remotePlayers).forEach(([id, entry]) => {
+    const person = playerData[id] || {};
+    const x = Number(person.x || 0);
+    const z = Number(person.z || 0);
+    entry.mesh.userData.winnerTarget = null;
+    entry.mesh.userData.winnerRank = 0;
+    entry.targetX = x;
+    entry.targetY = answerBaySurfaceAt(x, z);
+    entry.targetZ = z;
+  });
+  matchVisualEvent.kind = "question";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 1.25;
+  matchVisualEvent.x = 0;
+  matchVisualEvent.z = 0;
+  matchVisualEvent.color = "#73dfff";
+  $("app").classList.remove("timer-critical", "answer-revealed", "champions-reveal");
+  $("app").classList.add("question-enter");
+  celebrationParticles.forEach((particle) => { particle.visible = false; });
+}
+function triggerAvatarReaction(mesh, kind, duration = 1.7) {
+  if (!mesh?.userData) return;
+  mesh.userData.reaction = {
+    kind,
+    startedAt: performance.now(),
+    duration: Math.max(0.35, duration)
+  };
+}
+
+function triggerAudienceReaction(kind, duration) {
+  // Audience reaction is local visual state; it never writes to Firebase.
+  audienceReaction.kind = kind;
+  audienceReaction.startedAt = performance.now();
+  audienceReaction.duration = Math.max(0.35, Number(duration) || 1.5);
+}
+
+function triggerAnswerReveal(state) {
+  triggerAudienceReaction("reveal", 1.65);
+  const correctIndex = THREE.MathUtils.clamp(Number(state.correctOption) || 0, 0, 3);
+  const correctText = String(state.question?.options?.[correctIndex] || "Jawaban tidak tersedia");
+  $("answerRevealLetter").textContent = String.fromCharCode(65 + correctIndex);
+  $("answerRevealText").textContent = correctText;
+  $("answerRevealToast").style.setProperty("--reveal-color", COLORS[correctIndex]);
+  const point = PAD_POINTS[correctIndex] || { x: 0, z: 0 };
+  // Remote avatars only show a shared reveal reaction; their private answer stays private.
+  Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "reveal", 1.2));
+  if (playerMesh && localAnswerRound === Number(state.questionIndex) && localAnswerIndex >= 0) {
+    triggerAvatarReaction(playerMesh, localAnswerIndex === correctIndex ? "correct" : "wrong", 1.85);
+  }
+  matchVisualEvent.kind = "reveal";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 1.65;
+  matchVisualEvent.x = point.x;
+  matchVisualEvent.z = point.z;
+  matchVisualEvent.color = COLORS[correctIndex];
+  $("app").classList.remove("timer-critical", "question-enter");
+  $("app").classList.add("answer-revealed");
+  $("answers").querySelectorAll("span").forEach((item, index) => {
+    item.classList.toggle("is-correct-answer", index === correctIndex);
+  });
+
+  celebrationParticles.forEach((particle, index) => {
+    const angle = (index / celebrationParticles.length) * Math.PI * 2;
+    const speed = 2.2 + (index % 4) * 0.55;
+    particle.position.set(point.x, 1.25 + (index % 3) * 0.16, point.z);
+    particle.userData.velocity.set(
+      Math.cos(angle) * speed,
+      3.1 + (index % 5) * 0.48,
+      Math.sin(angle) * speed
+    );
+    particle.rotation.set(Math.random() * 1.4, Math.random() * 1.4, Math.random() * 1.4);
+    particle.material.opacity = 1;
+    particle.visible = true;
+  });
+}
+function applyWinnerPlacements(podium = []) {
+  if (!Array.isArray(podium) || !podium.length) return;
+  winnerPodiumGroup.visible = true;
+  const slotByUid = new Map(podium.slice(0, 3).map((person, index) => [String(person.uid || ""), index]));
+  const place = (mesh, rankIndex) => {
+    const slot = winnerPodiumSlots[rankIndex];
+    if (!mesh || !slot) return;
+    const approachYaw = Math.atan2(slot.x - mesh.position.x, slot.z - mesh.position.z);
+    mesh.userData.winnerRank = rankIndex + 1;
+    mesh.userData.winnerMoving = true;
+    mesh.userData.winnerTarget = {
+      x: slot.x, y: slot.y, z: slot.z, yaw: 0, approachYaw
+    };
+  };
+
+  if (uid && slotByUid.has(String(uid))) place(playerMesh, slotByUid.get(String(uid)));
+  Object.entries(remotePlayers).forEach(([id, entry]) => {
+    const rankIndex = slotByUid.get(String(id));
+    if (rankIndex === undefined) {
+      entry.mesh.userData.winnerRank = 0;
+      entry.mesh.userData.winnerMoving = false;
+      entry.mesh.userData.winnerTarget = null;
+      return;
+    }
+    place(entry.mesh, rankIndex);
+    const slot = winnerPodiumSlots[rankIndex];
+    entry.targetX = slot.x;
+    entry.targetY = slot.y;
+    entry.targetZ = slot.z;
+    entry.targetYaw = entry.mesh.userData.winnerTarget.approachYaw;
+  });
+}
+
+function triggerGameFinish(podium = []) {
+  const champion = Array.isArray(podium) && podium.length
+    ? String(podium[0]?.name || "Pemenang")
+    : "Semua pemain hebat";
+  $("championName").textContent = champion.slice(0, 48);
+  $("app").classList.add("champions-reveal");
+  winnerCameraTransition.startedAt = performance.now();
+  winnerCameraStartPosition.copy(camera.position);
+  camera.getWorldDirection(winnerCameraDirection);
+  winnerCameraStartTarget.copy(camera.position).addScaledVector(winnerCameraDirection, 12);
+  triggerAudienceReaction("victory", 2.25);
+  if (playerMesh) triggerAvatarReaction(playerMesh, "victory", 2.25);
+  Object.values(remotePlayers).forEach((entry) => triggerAvatarReaction(entry.mesh, "victory", 2.25));
+  applyWinnerPlacements(podium);
+
+  matchVisualEvent.kind = "victory";
+  matchVisualEvent.startedAt = performance.now();
+  matchVisualEvent.duration = 2.25;
+  matchVisualEvent.x = 0;
+  matchVisualEvent.z = 0;
+  matchVisualEvent.color = "#ffd166";
+  $("app").classList.remove("timer-critical", "question-enter", "answer-revealed");
+  celebrationParticles.forEach((particle, index) => {
+    const angle = (index / celebrationParticles.length) * Math.PI * 2;
+    const speed = 1.7 + (index % 4) * 0.42;
+    particle.position.set(0, 1.7 + (index % 3) * 0.2, 0);
+    particle.userData.velocity.set(
+      Math.cos(angle) * speed,
+      3.0 + (index % 5) * 0.38,
+      Math.sin(angle) * speed
+    );
+    particle.rotation.set(index * 0.17, index * 0.23, index * 0.11);
+    particle.material.opacity = 1;
+    particle.visible = true;
+  });
+}
+
+function animateAudience(now) {
+  if (!arenaAudience.length) return;
+  const elapsed = audienceReaction.kind
+    ? (now - audienceReaction.startedAt) / 1000
+    : Infinity;
+  const eventActive = elapsed >= 0 && elapsed < audienceReaction.duration;
+  const eventKind = audienceReaction.kind;
+  const intensity = !matchMotionPreference.matches && eventActive
+    ? (eventKind === "victory" ? 1 : 0.68) *
+      Math.sin(Math.PI * THREE.MathUtils.clamp(elapsed / audienceReaction.duration, 0, 1))
+    : 0;
+  const time = now * 0.001;
+  arenaAudience.forEach((spectator) => {
+    const localTime = time + spectator.phase;
+    const cheerElapsed = elapsed - spectator.cheerDelay;
+    const delayedCheer = !matchMotionPreference.matches && eventActive && cheerElapsed >= 0
+      ? Math.max(0, Math.sin(cheerElapsed * 8.5))
+      : 0;
+    const cheerImpact = intensity * delayedCheer;
+    const bounce = 0.018 + intensity * (0.045 + delayedCheer * 0.075);
+    spectator.group.position.y = spectator.baseY + Math.abs(Math.sin(localTime * 2.1)) * 0.012 +
+      Math.abs(Math.sin(localTime * 5.2)) * bounce;
+    spectator.group.rotation.z = Math.sin(localTime * 1.3) * 0.012 +
+      Math.sin(localTime * 4.8) * intensity * 0.025;
+    spectator.torso.rotation.x = Math.sin(localTime * 1.1) * 0.022 - cheerImpact * 0.17;
+    spectator.torso.rotation.z = Math.sin(localTime * 1.7) * 0.018 +
+      spectator.side * cheerImpact * 0.045;
+    // Side spectators subtly turn toward the winners as the stand-wide cheer reaches them.
+    spectator.head.rotation.y = -spectator.side * (0.26 + cheerImpact * 0.16) +
+      Math.sin(localTime * 0.72) * 0.025;
+    spectator.head.rotation.z = Math.sin(localTime * 1.8) * 0.035 -
+      Math.sin(localTime * 5.5) * intensity * 0.045;
+    spectator.head.rotation.x = -0.025 - intensity * (0.035 + delayedCheer * 0.06);
+  });
+}
+
+function updateMatchVisualEffects(now, dt) {
+  const event = matchVisualEvent;
+  const elapsed = event.kind ? (now - event.startedAt) / 1000 : Infinity;
+  const active = elapsed >= 0 && elapsed < event.duration;
+
+  matchEventRings.forEach((ring, index) => {
+    const localProgress = (elapsed - index * 0.12) / Math.max(0.1, event.duration - 0.12);
+    if (!active || localProgress < 0 || localProgress >= 1) {
+      ring.visible = false;
+      return;
+    }
+    const progress = THREE.MathUtils.clamp(localProgress, 0, 1);
+    const radius = event.kind === "question" ? 1.0 + progress * 13.5 : 0.8 + progress * 5.4;
+    ring.position.set(event.x, event.kind === "question" ? 0.045 + index * 0.012 : 0.94 + index * 0.018, event.z);
+    ring.scale.setScalar(radius);
+    ring.material.color.set(event.color);
+    ring.material.opacity = Math.sin(progress * Math.PI) * (event.kind === "question" ? 0.48 : 0.58);
+    ring.visible = true;
+  });
+
+  celebrationParticles.forEach((particle) => {
+    if (!particle.visible) return;
+    const velocity = particle.userData.velocity;
+    particle.position.addScaledVector(velocity, dt);
+    velocity.y -= 6.8 * dt;
+    particle.rotation.x += particle.userData.spin * dt;
+    particle.rotation.y += particle.userData.spin * 0.72 * dt;
+    particle.material.opacity = Math.max(0, 1 - elapsed / event.duration);
+    if (elapsed >= event.duration || particle.position.y < 0.15) particle.visible = false;
+  });
+
+  if (event.kind && elapsed >= event.duration) {
+    event.kind = "";
+    $("app").classList.remove("question-enter", "answer-revealed");
+  }
+}
+
 
 function appearance() {
   return { ...selectedAvatar };
@@ -600,25 +3077,449 @@ function createAvatar(a = {}) {
   return g;
 }
 
+function updateLobbySocial() {
+  const avatars = [];
+  if (playerMesh) avatars.push(playerMesh);
+  Object.values(remotePlayers).forEach((entry) => avatars.push(entry.mesh));
+
+  if (activeState?.phase !== "lobby") {
+    avatars.forEach((mesh) => {
+      mesh.userData.socialLookYaw = 0;
+      mesh.userData.socialConversation = 0;
+      mesh.userData.socialPartnerId = "";
+      mesh.userData.socialHighFive = 0;
+      mesh.userData.socialHighFiveSide = 0;
+      mesh.userData.socialHighFivePartnerId = "";
+      mesh.userData.socialGroupCount = 0;
+      mesh.userData.socialGroupWave = 0;
+      mesh.userData.socialGroupListen = 0;
+      mesh.userData.socialGroupSide = 0;
+      mesh.userData.socialGroupPartnerId = "";
+    });
+    return;
+  }
+  const nearestByMesh = new Map();
+  avatars.forEach((mesh) => {
+    let nearest = null;
+    let nearestDistance = 12;
+    avatars.forEach((other) => {
+      if (other === mesh) return;
+      const dx = other.position.x - mesh.position.x;
+      const dz = other.position.z - mesh.position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = { mesh: other, dx, dz, distance };
+      }
+    });
+
+    nearestByMesh.set(mesh, nearest);
+    let desiredYaw = 0;
+    if (nearest) {
+      desiredYaw = Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y;
+      desiredYaw = Math.atan2(Math.sin(desiredYaw), Math.cos(desiredYaw));
+    }
+    const currentYaw = Number(mesh.userData.socialLookYaw || 0);
+    const yawDelta = Math.atan2(
+      Math.sin(desiredYaw - currentYaw),
+      Math.cos(desiredYaw - currentYaw)
+    );
+    mesh.userData.socialLookYaw = currentYaw + yawDelta * 0.075;
+
+    // A little hysteresis avoids flickering between conversation and idle when people move.
+    const conversationTarget = nearest && nearest.distance < 6.2 ? 1 : 0;
+    const currentConversation = Number(mesh.userData.socialConversation || 0);
+    mesh.userData.socialConversation = currentConversation +
+      (conversationTarget - currentConversation) * 0.065;
+    mesh.userData.socialPartnerId = conversationTarget
+      ? String(nearest.mesh.userData.socialId || "")
+      : "";
+    const activityZone = LOBBY_ACTIVITY_ZONES
+      .map((zone) => ({ zone, distance: Math.hypot(
+        mesh.position.x - zone.x, mesh.position.z - zone.z
+      ) }))
+      .filter((entry) => entry.distance <= entry.zone.radius)
+      .sort((a, b) => a.distance - b.distance)[0];
+    mesh.userData.socialActivity = activityZone?.zone.id || "";
+  });
+
+  // Greedily form compact groups from the same stable identity order on every client.
+  avatars.forEach((mesh) => {
+    mesh.userData.socialGroupCount = 0;
+    mesh.userData.socialGroupWave = 0;
+    mesh.userData.socialGroupListen = 0;
+    mesh.userData.socialGroupSide = 0;
+    mesh.userData.socialGroupPartnerId = "";
+  });
+  const idleAvatars = avatars
+    .filter((mesh) => !mesh.userData.moving && !mesh.userData.winnerMoving &&
+      !mesh.userData.winnerTarget)
+    .slice()
+    .sort((a, b) => String(a.userData.socialId || "").localeCompare(
+      String(b.userData.socialId || "")
+    ));
+  const assignedToGroup = new Set();
+  for (const seed of idleAvatars) {
+    if (assignedToGroup.has(seed)) continue;
+    const nearby = idleAvatars
+      .filter((other) => other !== seed && !assignedToGroup.has(other))
+      .map((other) => ({
+        mesh: other,
+        distance: Math.hypot(
+          other.position.x - seed.position.x,
+          other.position.z - seed.position.z
+        )
+      }))
+      .filter((entry) => entry.distance <= 7.2)
+      .sort((a, b) => a.distance - b.distance ||
+        String(a.mesh.userData.socialId || "").localeCompare(
+          String(b.mesh.userData.socialId || "")
+        ));
+    const members = [seed, ...nearby.slice(0, 3).map((entry) => entry.mesh)];
+    members.forEach((member) => assignedToGroup.add(member));
+    if (members.length < 2) continue;
+
+    const groupIds = members.map((member) =>
+      String(member.userData.socialId || "")
+    ).sort();
+    const groupKey = groupIds.join("|");
+    const groupDuration = members.length * 1350;
+    const groupOffset = socialOffsetFor("group-turn:" + groupKey) % groupDuration;
+    const groupCycle = (Date.now() + groupOffset) % groupDuration;
+    const activeMemberIndex = Math.floor(groupCycle / 1350);
+    const slotProgress = (groupCycle % 1350) / 1350;
+
+    members.forEach((member, index) => {
+      const nextMember = members[(index + 1) % members.length];
+      const dx = nextMember.position.x - member.position.x;
+      const dz = nextMember.position.z - member.position.z;
+      const relativeYaw = Math.atan2(dx, dz) - member.rotation.y;
+      const normalizedYaw = Math.atan2(Math.sin(relativeYaw), Math.cos(relativeYaw));
+      const currentYaw = Number(member.userData.socialLookYaw || 0);
+      const yawDelta = Math.atan2(
+        Math.sin(normalizedYaw - currentYaw),
+        Math.cos(normalizedYaw - currentYaw)
+      );
+      member.userData.socialLookYaw = currentYaw + yawDelta * 0.09;
+      member.userData.socialGroupCount = members.length;
+      member.userData.socialGroupIndex = index;
+      member.userData.socialGroupKey = groupKey;
+      member.userData.socialGroupPartnerId = String(nextMember.userData.socialId || "");
+      member.userData.socialGroupSide = Math.sin(relativeYaw) >= 0 ? 1 : -1;
+
+      const waveEnvelope = index === activeMemberIndex && slotProgress < 0.58
+        ? Math.sin((slotProgress / 0.58) * Math.PI)
+        : 0;
+      const listenerIndex = (activeMemberIndex + 1) % members.length;
+      const listenEnvelope = index === listenerIndex &&
+        slotProgress >= 0.16 && slotProgress < 0.82
+        ? Math.sin(((slotProgress - 0.16) / 0.66) * Math.PI)
+        : 0;
+      member.userData.socialGroupWave = waveEnvelope;
+      member.userData.socialGroupListen = listenEnvelope;
+    });
+  }
+
+  // Two-person pairs use high-five; groups of three or four take turns greeting and listening.
+  avatars.forEach((mesh) => {
+    const nearest = nearestByMesh.get(mesh);
+    const partner = nearest?.mesh;
+    const partnerNearest = partner ? nearestByMesh.get(partner) : null;
+    const mutualPair = Boolean(
+      partner && partnerNearest?.mesh === mesh &&
+      Number(mesh.userData.socialGroupCount || 0) === 2 &&
+      Number(partner.userData.socialGroupCount || 0) === 2 &&
+      nearest.distance >= 1.18 && nearest.distance <= 3.2 &&
+      !mesh.userData.moving && !partner.userData.moving
+    );
+    let target = 0;
+    let phase = 0;
+    if (mutualPair) {
+      const pairIds = [
+        String(mesh.userData.socialId || ""),
+        String(partner.userData.socialId || "")
+      ].sort();
+      const pairOffset = socialOffsetFor("high-five:" + pairIds.join("|")) % 16000;
+      const pairCycle = (Date.now() + pairOffset) % 16000;
+      if (pairCycle < 2200) {
+        phase = pairCycle / 2200;
+        target = Math.sin(phase * Math.PI);
+      }
+    }
+    const current = Number(mesh.userData.socialHighFive || 0);
+    mesh.userData.socialHighFive = current + (target - current) * 0.22;
+    mesh.userData.socialHighFivePhase = phase;
+    mesh.userData.socialHighFiveSide = mutualPair
+      ? (Math.sin(Math.atan2(nearest.dx, nearest.dz) - mesh.rotation.y) >= 0 ? 1 : -1)
+      : 0;
+    mesh.userData.socialHighFivePartnerId = mutualPair
+      ? String(partner.userData.socialId || "")
+      : "";
+  });
+}
+
+function avatarGroundHeight(mesh) {
+  const winnerTarget = mesh?.userData?.winnerTarget;
+  if (winnerTarget) return Number(winnerTarget.y || 0);
+  return answerBaySurfaceAt(
+    Number(mesh?.position?.x || 0),
+    Number(mesh?.position?.z || 0)
+  );
+}
+
 function animateAvatar(mesh, time, moving = false) {
   const rig = mesh?.userData?.rig;
   if (!rig) return;
+
+  // Motion state belongs to each avatar, so local and remote players share the same smooth gait.
+  const motion = mesh.userData.motion || (mesh.userData.motion = {
+    lastTime: time,
+    stridePhase: (mesh.id % 9) * 0.11,
+    gaitBlend: 0,
+    wasAirborne: false,
+    landedAt: -Infinity
+  });
+  const dt = THREE.MathUtils.clamp((time - motion.lastTime) / 1000, 0, 0.05);
+  motion.lastTime = time;
+
   const t = time * 0.001;
-  const stride = t * 10.5;
-  const walk = moving ? 1 : 0;
-  const swing = Math.sin(stride) * walk;
-  const airborne = mesh.position.y > 0.16;
-  rig.leftArm.rotation.x = swing * 0.68 + Math.sin(t * 2.2) * 0.035;
-  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.035;
-  rig.leftArm.rotation.z = (airborne ? 0.42 : -0.035) - swing * 0.10;
-  rig.rightArm.rotation.z = (airborne ? -0.42 : 0.035) + swing * 0.10;
-  rig.leftLeg.rotation.x = airborne ? -0.42 : -swing * 0.78;
-  rig.rightLeg.rotation.x = airborne ? -0.42 : swing * 0.78;
-  rig.torso.position.y = 1.29 + (walk ? Math.abs(Math.sin(stride * 2)) * 0.05 : Math.sin(t * 3.1) * 0.04);
-  rig.torso.rotation.z = Math.sin(t * 1.5) * 0.018 + swing * 0.018;
-  rig.head.rotation.x = Math.sin(t * 1.35) * 0.025 - Math.abs(swing) * 0.028 + (airborne ? -0.08 : 0);
-  rig.head.rotation.y = Math.sin(t * 0.72) * 0.035;
-  rig.head.rotation.z = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.55) * 0.012;
+  const groundHeight = avatarGroundHeight(mesh);
+  const jumpHeight = THREE.MathUtils.clamp((mesh.position.y - groundHeight) / 1.12, 0, 1);
+  const airborne = jumpHeight > 0.12;
+  const reducedMotion = matchMotionPreference.matches;
+  const motionScale = reducedMotion ? 0.58 : 1;
+  const jumpPose = jumpHeight * motionScale;
+
+  if (motion.wasAirborne && !airborne) motion.landedAt = time;
+  motion.wasAirborne = airborne;
+
+  const gaitTarget = moving && !airborne ? 1 : 0;
+  motion.gaitBlend += (gaitTarget - motion.gaitBlend) * (1 - Math.exp(-13 * dt));
+  if (motion.gaitBlend > 0.001) {
+    motion.stridePhase += dt * 10.8;
+  }
+  const gait = motion.gaitBlend * motionScale;
+  const phase = motion.stridePhase;
+  const swing = Math.sin(phase) * gait;
+  const leftLift = Math.max(0, Math.sin(phase)) * 0.095 * gait;
+  const rightLift = Math.max(0, Math.sin(phase + Math.PI)) * 0.095 * gait;
+  const idleBreath = Math.sin(t * 2.35 + (mesh.id % 7) * 0.22);
+  const idleSway = Math.sin(t * 1.15 + (mesh.id % 5) * 0.31);
+
+  // Alternating foot lift and opposite arm swing make the walk cycle read clearly at game scale.
+  rig.leftArm.rotation.x = swing * 0.68 + idleBreath * 0.025 + jumpPose * 0.22;
+  rig.rightArm.rotation.x = -swing * 0.68 + Math.sin(t * 2.2 + 0.8) * 0.025 + jumpPose * 0.22;
+  rig.leftArm.rotation.z = -0.035 - swing * 0.10 + jumpPose * 0.46;
+  rig.rightArm.rotation.z = 0.035 + swing * 0.10 - jumpPose * 0.46;
+
+  const walkLegBlend = 1 - jumpPose;
+  rig.leftLeg.rotation.x = -swing * 0.78 * walkLegBlend - jumpPose * 0.42;
+  rig.rightLeg.rotation.x = swing * 0.78 * walkLegBlend - jumpPose * 0.42;
+  rig.leftLeg.position.y = 0.83 + leftLift * walkLegBlend;
+  rig.rightLeg.position.y = 0.83 + rightLift * walkLegBlend;
+
+  const landedFor = (time - motion.landedAt) / 1000;
+  const landingImpact = landedFor >= 0 && landedFor < 0.24
+    ? Math.sin((landedFor / 0.24) * Math.PI)
+    : 0;
+  const runBounce = Math.abs(Math.sin(phase * 2)) * gait * 0.045;
+  rig.torso.position.y = 1.29 + idleBreath * 0.018 +
+    runBounce + jumpHeight * 0.10 + landingImpact * 0.045;
+  rig.torso.rotation.x = gait * 0.055 - jumpHeight * 0.14 + landingImpact * 0.045;
+  rig.torso.rotation.z = idleSway * 0.014 + swing * 0.018;
+  rig.torso.scale.y = 1 - landingImpact * 0.075;
+  rig.head.rotation.x = idleBreath * 0.018 - gait * 0.045 -
+    jumpHeight * 0.11 - landingImpact * 0.035;
+
+  const socialEnabled = activeState?.phase === "lobby" && !moving && !airborne;
+  const socialOffset = Number(mesh.userData.socialOffset || 0);
+  const socialCycle = (time + socialOffset) % 14500;
+  const socialConversation = socialEnabled
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialConversation || 0), 0, 1)
+    : 0;
+  const socialHighFive = socialEnabled
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialHighFive || 0), 0, 1)
+    : 0;
+  const socialHighFiveSide = Number(mesh.userData.socialHighFiveSide || 0);
+  const socialGroupCount = socialEnabled ? Number(mesh.userData.socialGroupCount || 0) : 0;
+  const socialGroupWave = socialGroupCount >= 3
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialGroupWave || 0), 0, 1)
+    : 0;
+  const socialGroupListen = socialGroupCount >= 3
+    ? THREE.MathUtils.clamp(Number(mesh.userData.socialGroupListen || 0), 0, 1)
+    : 0;
+  const socialGroupSide = Number(mesh.userData.socialGroupSide || 0);
+  const highFivePhase = Number(mesh.userData.socialHighFivePhase || 0);
+  const highFiveSlap = socialHighFive *
+    Math.max(0, 1 - Math.abs(highFivePhase - 0.58) / 0.16);
+  const socialWave = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle < 920
+    ? Math.sin((socialCycle / 920) * Math.PI) * socialConversation
+    : 0;
+  const socialNod = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle >= 1450 && socialCycle < 2350
+    ? Math.sin(((socialCycle - 1450) / 900) * Math.PI) * socialConversation
+    : 0;
+  const socialChat = socialHighFive < 0.25 && socialGroupCount < 3 &&
+    socialConversation > 0.42 && socialCycle >= 2650 && socialCycle < 4200
+    ? Math.sin(((socialCycle - 2650) / 1550) * Math.PI) * socialConversation
+    : 0;
+  const socialLook = socialEnabled ? Number(mesh.userData.socialLookYaw || 0) : 0;
+  const socialActivity = socialEnabled && socialHighFive < 0.25 && socialGroupCount < 3
+    ? String(mesh.userData.socialActivity || "")
+    : "";
+  const activityPhase = (time + socialOffset) % 4200;
+  const activityBeat = Math.sin((activityPhase / 4200) * Math.PI * 2);
+  const activityPulse = Math.max(0, Math.sin((activityPhase / 4200) * Math.PI * 2));
+  rig.head.rotation.y = socialLook * (0.48 + socialConversation * 0.18) + Math.sin(t * 0.72) * 0.035;
+  rig.head.rotation.x += socialNod * 0.11;
+  rig.head.rotation.z = idleSway * 0.025 + Math.sin(t * 0.55) * 0.012;
+  if (socialWave > 0) {
+    rig.rightArm.rotation.z -= 1.02 * socialWave;
+    rig.rightArm.rotation.x += Math.sin(t * 17) * 0.24 * socialWave;
+    rig.torso.rotation.z -= 0.045 * socialWave;
+  }
+  if (socialGroupWave > 0 && socialGroupSide !== 0) {
+    if (socialGroupSide > 0) {
+      rig.rightArm.rotation.z -= 1.40 * socialGroupWave;
+      rig.rightArm.rotation.x += Math.sin(t * 15) * 0.16 * socialGroupWave;
+    } else {
+      rig.leftArm.rotation.z += 1.40 * socialGroupWave;
+      rig.leftArm.rotation.x += Math.sin(t * 15) * 0.16 * socialGroupWave;
+    }
+    rig.torso.rotation.z += socialGroupSide * -0.035 * socialGroupWave;
+  }
+  if (socialGroupListen > 0) {
+    rig.head.rotation.x += 0.085 * socialGroupListen;
+    rig.torso.rotation.z += 0.018 * socialGroupListen;
+  }
+
+  const arrival = mesh.userData.lobbyArrival;
+  let arrivalWave = 0;
+  let arrivalBounce = 0;
+  if (arrival && socialEnabled) {
+    const arrivalProgress = (time - arrival.startedAt) / (arrival.duration * 1000);
+    if (arrivalProgress >= 1) {
+      mesh.userData.lobbyArrival = null;
+    } else if (arrivalProgress >= 0) {
+      const waveWindow = arrival.kind === "arrive" ? 0.52 : 0.76;
+      if (arrivalProgress < waveWindow) {
+        arrivalWave = Math.sin((arrivalProgress / waveWindow) * Math.PI);
+      }
+      if (arrival.kind === "arrive") {
+        arrivalBounce = Math.abs(Math.sin(arrivalProgress * Math.PI * 3.1)) *
+          (1 - arrivalProgress) * 0.13;
+      }
+    }
+  }
+  if (arrivalWave > 0) {
+    rig.rightArm.rotation.z -= 0.98 * arrivalWave;
+    rig.rightArm.rotation.x += Math.sin(t * 16) * 0.21 * arrivalWave;
+    rig.torso.rotation.z -= 0.035 * arrivalWave;
+  }
+  if (arrivalBounce > 0) rig.torso.position.y += arrivalBounce;
+  if (socialHighFive > 0.04 && socialHighFiveSide !== 0) {
+    // The inward hand is selected from the partner's relative side.
+    if (socialHighFiveSide > 0) {
+      rig.rightArm.rotation.z -= 1.92 * socialHighFive;
+      rig.rightArm.rotation.x -= 0.24 * socialHighFive;
+    } else {
+      rig.leftArm.rotation.z += 1.92 * socialHighFive;
+      rig.leftArm.rotation.x -= 0.24 * socialHighFive;
+    }
+    rig.torso.rotation.y += socialLook * 0.10 * socialHighFive;
+    rig.head.rotation.z += socialHighFive * 0.035;
+    rig.torso.position.y += highFiveSlap * 0.075;
+  }
+  if (socialActivity === "cheer") {
+    rig.leftArm.rotation.z += 0.72 + activityBeat * 0.09;
+    rig.rightArm.rotation.z -= 0.72 - activityBeat * 0.09;
+    rig.leftArm.rotation.x += activityBeat * 0.12;
+    rig.rightArm.rotation.x -= activityBeat * 0.12;
+    rig.torso.position.y += activityPulse * 0.065;
+    rig.head.rotation.z += activityBeat * 0.035;
+  } else if (socialActivity === "dance") {
+    rig.leftArm.rotation.z += 0.32 + activityBeat * 0.18;
+    rig.rightArm.rotation.z -= 0.32 - activityBeat * 0.18;
+    rig.leftArm.rotation.x += activityBeat * 0.16;
+    rig.rightArm.rotation.x -= activityBeat * 0.16;
+    rig.torso.rotation.z += activityBeat * 0.085;
+    rig.head.rotation.z -= activityBeat * 0.055;
+    rig.torso.position.y += activityPulse * 0.035;
+  } else if (socialActivity === "team") {
+    rig.rightArm.rotation.z -= 0.58 + activityPulse * 0.16;
+    rig.rightArm.rotation.x += activityBeat * 0.11;
+    rig.leftArm.rotation.z += 0.12;
+    rig.torso.rotation.z -= activityBeat * 0.025;
+  }
+  if (socialChat > 0) {
+    const chatBeat = Math.sin(t * 8.5 + Number(mesh.userData.socialOffset || 0) * 0.001);
+    rig.leftArm.rotation.z += 0.13 * socialChat;
+    rig.rightArm.rotation.z -= 0.17 * socialChat;
+    rig.leftArm.rotation.x += chatBeat * 0.10 * socialChat;
+    rig.rightArm.rotation.x -= chatBeat * 0.12 * socialChat;
+    rig.torso.rotation.z += chatBeat * 0.018 * socialChat;
+  }
+
+  const reaction = mesh.userData.reaction;
+  if (reaction) {
+    const progress = (time - reaction.startedAt) / reaction.duration;
+    if (progress >= 1) {
+      mesh.userData.reaction = null;
+    } else if (progress >= 0) {
+      const strength = Math.sin(Math.PI * THREE.MathUtils.clamp(progress, 0, 1));
+      if (reaction.kind === "correct" || reaction.kind === "victory") {
+        const bounce = Math.abs(Math.sin(t * 10.5)) * strength;
+        rig.leftArm.rotation.z += 0.78 * strength;
+        rig.rightArm.rotation.z -= 0.78 * strength;
+        rig.leftLeg.rotation.x -= 0.34 * strength;
+        rig.rightLeg.rotation.x -= 0.34 * strength;
+        rig.torso.position.y += 0.12 * strength + 0.13 * bounce;
+        rig.head.rotation.z += Math.sin(t * 7.5) * 0.055 * strength;
+      } else if (reaction.kind === "wrong" || reaction.kind === "missed") {
+        rig.leftArm.rotation.z -= 0.28 * strength;
+        rig.rightArm.rotation.z += 0.28 * strength;
+        rig.leftArm.rotation.x += 0.18 * strength;
+        rig.rightArm.rotation.x += 0.18 * strength;
+        rig.torso.rotation.z += 0.105 * strength;
+        rig.head.rotation.x += 0.13 * strength;
+        rig.head.rotation.z += 0.12 * strength;
+      } else if (reaction.kind === "reveal") {
+        rig.head.rotation.x -= 0.095 * strength;
+        rig.head.rotation.z += Math.sin(t * 3.2) * 0.035 * strength;
+      }
+    }
+  }
+
+  const winnerRank = mesh.userData.winnerMoving ? 0 : Number(mesh.userData.winnerRank || 0);
+  const celebrationMotion = reducedMotion ? 0 : 1;
+  if (winnerRank === 1) {
+    // Champion: both hands stay raised while the arms alternate in a friendly victory wave.
+    const wave = Math.sin(t * 5.4);
+    rig.leftArm.rotation.z += 0.88 + wave * 0.10 * celebrationMotion;
+    rig.rightArm.rotation.z -= 0.88 - wave * 0.10 * celebrationMotion;
+    rig.leftArm.rotation.x += wave * 0.16 * celebrationMotion;
+    rig.rightArm.rotation.x -= wave * 0.16 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, Math.sin(t * 4.5)) * 0.035 * celebrationMotion;
+    rig.head.rotation.z += Math.sin(t * 2.2) * 0.025;
+  } else if (winnerRank === 2) {
+    // Runner-up: one arm gives a warm, repeating salute.
+    const salute = Math.sin(t * 4.2 + 0.6);
+    rig.rightArm.rotation.z -= 0.92 + salute * 0.08 * celebrationMotion;
+    rig.rightArm.rotation.x += salute * 0.18 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, salute) * 0.025 * celebrationMotion;
+    rig.head.rotation.z -= 0.035;
+  } else if (winnerRank === 3) {
+    // Third place: a cheerful two-fist pump with a gentle body sway.
+    const pump = Math.sin(t * 5.0 + 1.2);
+    rig.leftArm.rotation.z += 0.64 + pump * 0.08 * celebrationMotion;
+    rig.rightArm.rotation.z -= 0.64 - pump * 0.08 * celebrationMotion;
+    rig.leftArm.rotation.x += pump * 0.13 * celebrationMotion;
+    rig.rightArm.rotation.x -= pump * 0.13 * celebrationMotion;
+    rig.torso.position.y += Math.max(0, pump) * 0.028 * celebrationMotion;
+    rig.torso.rotation.z += Math.sin(t * 3.8) * 0.035;
+  }
+
   // A quick, staggered blink keeps the faces from looking like static dolls.
   const blinkPhase = (t + (mesh.id % 17) * 0.31) % 5.4;
   let blinkScale = 1;
@@ -626,7 +3527,6 @@ function animateAvatar(mesh, time, moving = false) {
   else if (blinkPhase < 0.14) blinkScale = 0.12 + ((blinkPhase - 0.07) / 0.07) * 0.88;
   rig.eyes.forEach((eye) => { eye.scale.y = eye.userData.openScale * blinkScale; });
 }
-
 function disposeAvatar(mesh) {
   if (!mesh) return;
   const released = new Set();
@@ -640,6 +3540,30 @@ function disposeAvatar(mesh) {
       node.material.dispose();
     }
   });
+}
+function socialOffsetFor(identity) {
+  let hash = 2166136261;
+  for (const char of String(identity || "player")) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % 14500;
+}
+function setAvatarSocialIdentity(mesh, identity) {
+  if (!mesh) return;
+  mesh.userData.socialId = String(identity || "player");
+  mesh.userData.socialOffset = socialOffsetFor(mesh.userData.socialId);
+  mesh.userData.socialLookYaw = 0;
+  mesh.userData.socialConversation = 0;
+  mesh.userData.socialPartnerId = "";
+  mesh.userData.socialHighFive = 0;
+  mesh.userData.socialHighFiveSide = 0;
+  mesh.userData.socialHighFivePartnerId = "";
+  mesh.userData.socialGroupCount = 0;
+  mesh.userData.socialGroupWave = 0;
+  mesh.userData.socialGroupListen = 0;
+  mesh.userData.socialGroupSide = 0;
+  mesh.userData.socialGroupPartnerId = "";
 }
 function setAvatarNameTag(mesh, name) {
   if (!mesh) return;
@@ -669,8 +3593,9 @@ function setOwnAvatar(a) {
     disposeAvatar(playerMesh);
   }
   playerMesh = createAvatar(a);
+  setAvatarSocialIdentity(playerMesh, uid || "local-player");
   setAvatarNameTag(playerMesh, $("name")?.value || "Pemain");
-  playerMesh.position.set(ownPosition.x, 0, ownPosition.z);
+  playerMesh.position.set(ownPosition.x, answerBaySurfaceAt(ownPosition.x, ownPosition.z), ownPosition.z);
   scene.add(playerMesh);
   syncProfile().catch(() => {});
 }
@@ -689,9 +3614,15 @@ async function ensureFirebase() {
   connection("Firebase Spark terhubung", true);
 }
 function stopListeners() {
+  stopQuickColorMatchListeners();
+  stopTeamColorBattleListener();
+  stopSocialCompetitionListener();
   if (stateUnsubscribe) stateUnsubscribe();
   if (playersUnsubscribe) playersUnsubscribe();
   stateUnsubscribe = playersUnsubscribe = null;
+  playersSnapshotReady = false;
+  seenPlayerIds = new Set();
+  lobbyArrivalRoom = "";
   Object.values(remotePlayers).forEach((p) => {
     scene.remove(p.mesh);
     disposeAvatar(p.mesh);
@@ -707,10 +3638,55 @@ async function syncProfile() {
     avatar: ownAvatar
   });
 }
+function triggerLobbyArrival(mesh, kind = "arrive", delay = 0) {
+  if (!mesh?.userData || activeState?.phase !== "lobby") return;
+  mesh.userData.lobbyArrival = {
+    kind,
+    startedAt: performance.now() + Math.max(0, Number(delay) || 0),
+    duration: kind === "arrive" ? 1.55 : 1.10
+  };
+}
+function maybeStartLobbyArrival() {
+  if (!playersSnapshotReady || activeState?.phase !== "lobby" ||
+    !playerMesh || !roomPin || lobbyArrivalRoom === roomPin) return;
+  lobbyArrivalRoom = roomPin;
+  triggerLobbyArrival(playerMesh, "arrive");
+
+  // Existing nearby players acknowledge the person who just entered this view.
+  const nearby = Object.values(remotePlayers)
+    .map((entry) => entry.mesh)
+    .filter((mesh) => Math.hypot(
+      mesh.position.x - playerMesh.position.x,
+      mesh.position.z - playerMesh.position.z
+    ) <= 9.5);
+  nearby.forEach((mesh, index) =>
+    triggerLobbyArrival(mesh, "welcome", Math.min(index, 3) * 135)
+  );
+}
+function welcomeNearbyLobbyPlayers(newcomer) {
+  if (!newcomer || activeState?.phase !== "lobby") return;
+  triggerLobbyArrival(newcomer, "arrive");
+  const avatars = [];
+  if (playerMesh) avatars.push(playerMesh);
+  Object.values(remotePlayers).forEach((entry) => avatars.push(entry.mesh));
+  let greeted = 0;
+  avatars.forEach((other) => {
+    if (other === newcomer) return;
+    const distance = Math.hypot(
+      other.position.x - newcomer.position.x,
+      other.position.z - newcomer.position.z
+    );
+    if (distance <= 9.5) {
+      triggerLobbyArrival(other, "welcome", Math.min(greeted, 3) * 135);
+      greeted += 1;
+    }
+  });
+}
 function updateRemoteAvatar(id, data) {
   const signature = JSON.stringify(data.avatar || {});
   const x = Number(data.x || 0);
   const z = Number(data.z || 0);
+  const y = answerBaySurfaceAt(x, z);
   const name = String(data.name || "Pemain");
   let entry = remotePlayers[id];
   if (!entry || entry.signature !== signature) {
@@ -719,15 +3695,18 @@ function updateRemoteAvatar(id, data) {
       disposeAvatar(entry.mesh);
     }
     const mesh = createAvatar(data.avatar || {});
-    mesh.position.set(x, 0, z);
+    setAvatarSocialIdentity(mesh, id);
+    mesh.position.set(x, y, z);
     setAvatarNameTag(mesh, name);
     entry = {
       mesh, signature, lastMoveAt: 0,
-      lastX: x, lastZ: z, targetX: x, targetZ: z,
+      lastX: x, lastZ: z, targetX: x, targetY: y, targetZ: z,
       targetYaw: 0
     };
     remotePlayers[id] = entry;
     scene.add(entry.mesh);
+    if (activeState?.phase === "reveal") triggerAvatarReaction(entry.mesh, "reveal", 1.2);
+    else if (activeState?.phase === "finished") triggerAvatarReaction(entry.mesh, "victory", 2.25);
   } else {
     setAvatarNameTag(entry.mesh, name);
   }
@@ -740,6 +3719,7 @@ function updateRemoteAvatar(id, data) {
   entry.lastX = x;
   entry.lastZ = z;
   entry.targetX = x;
+  entry.targetY = y;
   entry.targetZ = z;
 }
 function renderPlayers(players) {
@@ -768,6 +3748,7 @@ function renderPlayers(players) {
     if (activeState?.phase === "reveal") settleMyScore(activeState).catch(console.warn);
   }
   if (activeState?.phase === "reveal") renderRoundLeaderboard();
+  if (activeState?.phase === "finished") applyWinnerPlacements(activeState.podium || []);
 }
 function lobbyFromState(state) {
   $("roomPin").textContent = roomPin;
@@ -786,22 +3767,32 @@ function playerInviteUrl() {
 }
 function subscribeRoom() {
   stopListeners();
+  subscribeQuickColorMatch();
+  subscribeTeamColorBattle();
+  subscribeSocialCompetition();
   // A new room subscription must render its first live question, even after switching rooms.
   lastQuestionIndex = -1;
+  lastVisualStateKey = "";
   stateUnsubscribe = onValue(dbPath(`rooms/${roomPin}/public`), (snap) => {
     activeState = snap.val();
     if (!activeState) return;
+    const visualStateKey = String(activeState.questionIndex) + ":" + String(activeState.phase);
+    const visualPhaseChanged = visualStateKey !== lastVisualStateKey;
+    lastVisualStateKey = visualStateKey;
     lobbyFromState(activeState);
+    maybeStartLobbyArrival();
     if (activeState.phase === "lobby") {
       showScreen("lobbyScreen");
     } else if (activeState.phase === "question") {
       if (lastQuestionIndex !== Number(activeState.questionIndex)) {
         lastQuestionIndex = Number(activeState.questionIndex);
         localAnswerRound = -1;
+        localAnswerIndex = -1;
         answerBusy = false;
         ownPosition = { x: 0, z: 0 };
         if (playerMesh) playerMesh.position.set(0, 0, 0);
         renderQuestion(activeState);
+        triggerQuestionStart();
       }
       showScreen("hud");
     } else if (activeState.phase === "reveal") {
@@ -811,6 +3802,7 @@ function subscribeRoom() {
         renderQuestion(activeState);
       }
       showScreen("hud");
+      if (visualPhaseChanged) triggerAnswerReveal(activeState);
       $("feedback").textContent = "Jawaban benar: " + String.fromCharCode(65 + Number(activeState.correctOption)) +
         (activeState.explanation ? " · " + activeState.explanation : "");
       renderRoundLeaderboard();
@@ -820,6 +3812,7 @@ function subscribeRoom() {
       });
       settleMyScore(activeState).catch((error) => console.warn("Settle score:", error));
     } else if (activeState.phase === "finished") {
+      if (visualPhaseChanged) triggerGameFinish(activeState.podium || []);
       $("roundLeaderboard").classList.add("hidden");
       renderPodium(activeState.podium || []);
       showScreen("endScreen");
@@ -827,7 +3820,21 @@ function subscribeRoom() {
   }, (error) => connection("Database: " + error.message, false));
 
   playersUnsubscribe = onValue(dbPath(`rooms/${roomPin}/players`), (snap) => {
-    renderPlayers(snap.val());
+    const nextPlayers = snap.val() || {};
+    const newcomerIds = playersSnapshotReady && activeState?.phase === "lobby"
+      ? Object.keys(nextPlayers).filter((id) =>
+        id !== uid && !seenPlayerIds.has(id) && !remotePlayers[id] &&
+        nextPlayers[id]?.connected !== false
+      )
+      : [];
+    renderPlayers(nextPlayers);
+    seenPlayerIds = new Set(Object.keys(nextPlayers));
+    playersSnapshotReady = true;
+    maybeStartLobbyArrival();
+    newcomerIds.forEach((id) => {
+      const newcomer = remotePlayers[id]?.mesh;
+      if (newcomer) welcomeNearbyLobbyPlayers(newcomer);
+    });
   });
 }
 async function enterLobby() {
@@ -911,11 +3918,13 @@ async function makeRoom() {
   }
 }
 
-function findSpawnPosition(players = {}) {
-  const occupied = Object.values(players || {}).map((person) => ({
-    x: Number(person?.x || 0),
-    z: Number(person?.z || 0)
-  }));
+function findSpawnPosition(players = {}, ignorePlayerId = "") {
+  const occupied = Object.entries(players || {})
+    .filter(([playerId]) => playerId !== ignorePlayerId)
+    .map(([, person]) => ({
+      x: Number(person?.x || 0),
+      z: Number(person?.z || 0)
+    }));
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < 160; i++) {
     const radius = 13 + Math.sqrt(i) * 0.48;
@@ -926,9 +3935,10 @@ function findSpawnPosition(players = {}) {
     };
     const clearPlayers = occupied.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 2.2);
     const clearPlatforms = PAD_POINTS.every((point) => Math.hypot(point.x - candidate.x, point.z - candidate.z) > 5.2);
-    if (clearPlayers && clearPlatforms) return candidate;
+    const clearArenaObjects = !isArenaStaticBlocked(candidate.x, candidate.z);
+    if (clearPlayers && clearPlatforms && clearArenaObjects) return candidate;
   }
-  // The room cap is 40; this fallback is only defensive if stored coordinates are malformed.
+  // The center is kept clear of the answer bays and acts as a safe defensive fallback.
   return { x: 0, z: 0 };
 }
 async function createOwnPlayer() {
@@ -940,14 +3950,15 @@ async function createOwnPlayer() {
   };
   const existing = await get(playerRef);
   if (existing.exists()) {
-    // Rejoining preserves the score and scoring cursor; only refresh the profile.
-    await update(playerRef, profile);
+    // Rejoining preserves the score and scoring cursor; refresh profile and validated position.
+    await update(playerRef, { ...profile, x: ownPosition.x, z: ownPosition.z });
   } else {
     await set(playerRef, {
       uid, ...profile, x: ownPosition.x, z: ownPosition.z, score: 0, streak: 0,
       lastScoredQuestionIndex: -1
     });
   }
+  lastSyncedPosition = { x: ownPosition.x, z: ownPosition.z };
 }
 async function joinRoom() {
   try {
@@ -968,9 +3979,17 @@ async function joinRoom() {
     roomPin = pin;
     isHost = false;
     const savedProfile = existingPlayer.val() || {};
-    ownPosition = existingPlayer.exists()
-      ? { x: Number(savedProfile.x || 0), z: Number(savedProfile.z || 0) }
-      : findSpawnPosition(players);
+    const savedPosition = {
+      x: Number(savedProfile.x || 0),
+      z: Number(savedProfile.z || 0)
+    };
+    const savedPositionClear = !isArenaStaticBlocked(savedPosition.x, savedPosition.z) &&
+      Object.entries(players).every(([playerId, person]) => playerId === uid ||
+        Math.hypot(Number(person?.x || 0) - savedPosition.x,
+          Number(person?.z || 0) - savedPosition.z) >= PLAYER_COLLISION_DISTANCE);
+    ownPosition = existingPlayer.exists() && savedPositionClear
+      ? savedPosition
+      : findSpawnPosition(players, uid);
     await createOwnPlayer();
     setOwnAvatar(appearance());
     await enterLobby();
@@ -981,6 +4000,10 @@ async function joinRoom() {
 }
 async function startGame() {
   if (!isHost || !questionBank || !roomPin) return;
+  if (socialCompetitionData?.tournament?.meta?.phase === "active") {
+    status("Selesaikan Tournament Mode sebelum memulai kuis utama.", true);
+    return;
+  }
   try {
     const q = questionBank.questions[0];
     const duration = Number($("duration").value || questionBank.durationSeconds || 15);
@@ -1000,6 +4023,7 @@ async function submitPlatformAnswer(index) {
       questionIndex: localAnswerRound,
       answerIndex: index
     });
+    localAnswerIndex = Number(index);
     $("feedback").textContent = "Jawaban terkirim. Tunggu pengungkapan hasil.";
   } catch (error) {
     answerBusy = false;
@@ -1010,13 +4034,20 @@ async function settleMyScore(state) {
   const round = Number(state.questionIndex);
   if (!db || !roomPin || !uid || scoreBusyRound === round) return;
   const own = playerData[uid];
-  if (!own || Number(own.lastScoredQuestionIndex ?? -1) >= round) return;
+  if (!own) return;
+  const alreadyScored = Number(own.lastScoredQuestionIndex ?? -1) >= round;
   scoreBusyRound = round;
   try {
     const answerSnap = await get(dbPath(`submissions/${roomPin}/current/${uid}`));
     const answer = answerSnap.val();
     const hasThisAnswer = answer && Number(answer.questionIndex) === round;
     const correct = Boolean(hasThisAnswer && Number(answer.answerIndex) === Number(state.correctOption));
+    if (playerMesh && (localAnswerRound !== round || localAnswerIndex < 0)) {
+      localAnswerRound = round;
+      localAnswerIndex = hasThisAnswer ? Number(answer.answerIndex) : -1;
+      triggerAvatarReaction(playerMesh, correct ? "correct" : hasThisAnswer ? "wrong" : "missed", 1.85);
+    }
+    if (alreadyScored) return;
     const nextScore = Number(own.score || 0) + (correct ? 100 : 0);
     const nextStreak = correct ? Number(own.streak || 0) + 1 : 0;
     await update(dbPath(`rooms/${roomPin}/players/${uid}`), {
@@ -1140,9 +4171,9 @@ async function hostAdvance() {
       hostTransitionBusy = true;
       const nextIndex = round + 1;
       if (nextIndex >= questionBank.questions.length) {
-        const podium = Object.values(playerData)
-          .map((p) => ({ name: p.name || "Pemain", score: Number(p.score || 0) }))
-          .sort((a, b) => b.score - a.score).slice(0, 3);
+        const podium = Object.entries(playerData)
+          .map(([playerUid, p]) => ({ uid: playerUid, name: p.name || "Pemain", score: Number(p.score || 0) }))
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, 3);
         await update(dbPath(`rooms/${roomPin}/public`), {
           phase: "finished", podium, finishedAt: Math.round(now)
         });
@@ -1569,6 +4600,60 @@ $("questionFile").addEventListener("change", async (event) => {
 $("createRoom").addEventListener("click", makeRoom);
 $("joinRoom").addEventListener("click", joinRoom);
 $("startGame").addEventListener("click", startGame);
+$("reactionRushOpen").addEventListener("click", openReactionRush);
+$("reactionRushAction").addEventListener("click", handleReactionRushAction);
+$("startQuickColorMatch").addEventListener("click", startQuickColorMatch);
+$("teamBattleHostAction").addEventListener("click", startTeamColorBattle);
+$("createParty").addEventListener("click", createParty);
+$("joinParty").addEventListener("click", joinParty);
+$("leaveParty").addEventListener("click", leaveParty);
+$("partyTeamRed").addEventListener("click", () => setPartyTeam("red"));
+$("partyTeamBlue").addEventListener("click", () => setPartyTeam("blue"));
+$("registerPartyTournament").addEventListener("click", registerPartyTournament);
+$("createTournament").addEventListener("click", createTournament);
+$("startTournament").addEventListener("click", startTournament);
+$("tournamentShowcaseClose").addEventListener("click", closeTournamentShowcase);
+$("partyJoinCode").addEventListener("input", () => {
+  $("partyJoinCode").value = $("partyJoinCode").value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 6);
+});
+$("partyJoinCode").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") joinParty();
+});
+$("copyPartyCode").addEventListener("click", async () => {
+  const party = getMyParty();
+  if (!party) return;
+  try {
+    await navigator.clipboard.writeText(party.code);
+    $("copyPartyCode").textContent = "Tersalin";
+    setTimeout(() => $("copyPartyCode").textContent = "Salin", 1200);
+  } catch {
+    $("partyCodeValue").textContent = party.code;
+  }
+});
+$("teamBattleChoices").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-team-color-index]");
+  if (button && !button.disabled) submitTeamColorAnswer(Number(button.dataset.teamColorIndex));
+});
+$("quickColorChoices").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-color-index]");
+  if (button && !button.disabled) submitQuickColorAnswer(Number(button.dataset.colorIndex));
+});
+$("reactionRushClose").addEventListener("click", () => closeReactionRush(true));
+$("reactionRushCloseFooter").addEventListener("click", () => closeReactionRush(true));
+$("reactionRushOverlay").addEventListener("click", (event) => {
+  if (event.target === $("reactionRushOverlay")) closeReactionRush(true);
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && reactionRushPhase !== "closed") {
+    closeReactionRush(true);
+  }
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("tournamentShowcaseOverlay").classList.contains("hidden")) {
+    closeTournamentShowcase();
+  }
+});
+renderReactionRushBest();
 $("copyPin").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(roomPin);
@@ -1661,27 +4746,192 @@ function moveInput() {
   const len = Math.hypot(x, z);
   return len > 1 ? { x: x / len, z: z / len } : { x, z };
 }
+function resetLobbyRoam() {
+  const identity = String(uid || "local-player");
+  let seed = 2166136261;
+  for (let i = 0; i < identity.length; i++) {
+    seed ^= identity.charCodeAt(i);
+    seed = Math.imul(seed, 16777619);
+  }
+  const now = performance.now();
+  lobbyRoamState = {
+    seed: seed >>> 0,
+    step: 0,
+    anchorX: ownPosition.x,
+    anchorZ: ownPosition.z,
+    targetX: ownPosition.x,
+    targetZ: ownPosition.z,
+    active: false,
+    nextMoveAt: now + 650 + ((seed >>> 4) % 1350)
+  };
+}
+function lobbyRoamRandom(step, salt = 0) {
+  const seed = Number(lobbyRoamState?.seed || 1) + step * 104729 + salt * 13007;
+  const value = Math.sin(seed * 0.000071) * 43758.5453;
+  return value - Math.floor(value);
+}
+function chooseLobbyRoamTarget(now) {
+  if (!lobbyRoamState) resetLobbyRoam();
+  const roam = lobbyRoamState;
+  roam.step += 1;
+  const visitActivity = lobbyRoamRandom(roam.step, 23) < 0.24;
+  const activityIndex = Math.floor(lobbyRoamRandom(roam.step, 29) * LOBBY_ACTIVITY_ZONES.length);
+  const activity = LOBBY_ACTIVITY_ZONES[activityIndex];
+  for (let attempt = 0; attempt < 18; attempt++) {
+    const angle = lobbyRoamRandom(roam.step, attempt) * Math.PI * 2;
+    const radius = visitActivity
+      ? 0.55 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 0.88
+      : 1.15 + lobbyRoamRandom(roam.step + 3, attempt + 7) * 1.9;
+    const originX = visitActivity ? activity.x : roam.anchorX;
+    const originZ = visitActivity ? activity.z : roam.anchorZ;
+    const x = originX + Math.cos(angle) * radius;
+    const z = originZ + Math.sin(angle) * radius;
+    const clearPlatforms = PAD_POINTS.every((point) =>
+      Math.hypot(point.x - x, point.z - z) > 4.15
+    );
+    const clearPlayers = Object.values(remotePlayers).every((entry) =>
+      Math.hypot(entry.mesh.position.x - x, entry.mesh.position.z - z) > 1.85
+    );
+    if (!isArenaStaticBlocked(x, z) && clearPlatforms && clearPlayers) {
+      roam.targetX = x;
+      roam.targetZ = z;
+      roam.active = true;
+      roam.nextMoveAt = now;
+      return true;
+    }
+  }
+  roam.active = false;
+  roam.nextMoveAt = now + 900;
+  return false;
+}
+function getLobbyRoamVector(now) {
+  if (!lobbyRoamState) resetLobbyRoam();
+  const roam = lobbyRoamState;
+  if (!roam.active && now >= roam.nextMoveAt) chooseLobbyRoamTarget(now);
+  if (!roam.active) return { x: 0, z: 0 };
+  const dx = roam.targetX - ownPosition.x;
+  const dz = roam.targetZ - ownPosition.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.22) {
+    roam.active = false;
+    roam.nextMoveAt = now + 1100 + lobbyRoamRandom(roam.step, 19) * 2200;
+    return { x: 0, z: 0 };
+  }
+  return { x: dx / distance, z: dz / distance };
+}
+function lobbySeparationVector(x, z) {
+  let steerX = 0;
+  let steerZ = 0;
+  for (const entry of Object.values(remotePlayers)) {
+    const dx = x - entry.mesh.position.x;
+    const dz = z - entry.mesh.position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.001 || distance >= 2.45) continue;
+    const strength = (2.45 - distance) / 2.45;
+    steerX += (dx / distance) * strength;
+    steerZ += (dz / distance) * strength;
+  }
+  return { x: steerX, z: steerZ };
+}
+
+function lobbySocialVector(x, z) {
+  let pullX = 0;
+  let pullZ = 0;
+  let totalWeight = 0;
+  for (const entry of Object.values(remotePlayers)) {
+    const dx = entry.mesh.position.x - x;
+    const dz = entry.mesh.position.z - z;
+    const distance = Math.hypot(dx, dz);
+    // Approach nearby people gently, but keep a comfortable conversational gap.
+    if (distance <= 3.8 || distance >= 9.5) continue;
+    const weight = (9.5 - distance) / 5.7;
+    pullX += (dx / distance) * weight;
+    pullZ += (dz / distance) * weight;
+    totalWeight += weight;
+  }
+  if (totalWeight > 0) {
+    pullX /= totalWeight;
+    pullZ /= totalWeight;
+  }
+  return { x: pullX, z: pullZ };
+}
 function movePlayer(dt) {
   if (!playerMesh) return;
-  if (activeState?.phase !== "question") {
+  const phase = activeState?.phase;
+  const inLobby = phase === "lobby";
+  const inQuestion = phase === "question";
+  if (!inLobby && !inQuestion) {
+    lobbyRoamState = null;
     playerMesh.userData.moving = false;
     return;
   }
-  const input = moveInput();
-  playerMesh.userData.moving = Math.abs(input.x) + Math.abs(input.z) > 0.04;
-  const speed = 7.2;
-  ownPosition.x = THREE.MathUtils.clamp(ownPosition.x + input.x * speed * dt, -21, 21);
-  ownPosition.z = THREE.MathUtils.clamp(ownPosition.z + input.z * speed * dt, -21, 21);
-  playerMesh.position.x = ownPosition.x;
-  playerMesh.position.z = ownPosition.z;
-  if (Math.abs(input.x) + Math.abs(input.z) > 0.04) playerMesh.rotation.y = Math.atan2(input.x, input.z);
-  if (jumpVelocity !== 0 || !grounded) {
-    playerMesh.position.y += jumpVelocity * dt;
-    jumpVelocity -= 22 * dt;
-    if (playerMesh.position.y <= 0) { playerMesh.position.y = 0; jumpVelocity = 0; grounded = true; }
+
+  const manualInput = moveInput();
+  const manual = Math.hypot(manualInput.x, manualInput.z) > 0.04;
+  let input = manualInput;
+  let speed = 7.2;
+
+  if (inLobby) {
+    if (manual) {
+      // Manual WASD/joystick movement takes priority over ambient wandering.
+      lobbyRoamState = null;
+    } else {
+      input = getLobbyRoamVector(performance.now());
+      speed = 1.55;
+    }
+    const separation = lobbySeparationVector(ownPosition.x, ownPosition.z);
+    const socialPull = manual ? { x: 0, z: 0 } : lobbySocialVector(ownPosition.x, ownPosition.z);
+    const avoidanceWeight = manual ? 0.90 : 2.60;
+    input = {
+      x: input.x + separation.x * avoidanceWeight + socialPull.x * 0.42,
+      z: input.z + separation.z * avoidanceWeight + socialPull.z * 0.42
+    };
+    const inputLength = Math.hypot(input.x, input.z);
+    if (inputLength > 1) {
+      input.x /= inputLength;
+      input.z /= inputLength;
+    }
+  } else {
+    lobbyRoamState = null;
   }
 
-  if (!answerBusy) {
+  const startX = ownPosition.x;
+  const startZ = ownPosition.z;
+  let nextX = startX + input.x * speed * dt;
+  let nextZ = startZ;
+
+  // Resolve each axis separately so the avatar can slide along a wall, stand or another player.
+  if (isPlayerMovementBlocked(nextX, nextZ, startX, startZ)) nextX = startX;
+  nextZ = startZ + input.z * speed * dt;
+  if (isPlayerMovementBlocked(nextX, nextZ, startX, startZ)) nextZ = startZ;
+
+  ownPosition.x = nextX;
+  ownPosition.z = nextZ;
+  playerMesh.position.x = ownPosition.x;
+  playerMesh.position.z = ownPosition.z;
+
+  const movedX = ownPosition.x - startX;
+  const movedZ = ownPosition.z - startZ;
+  const moved = Math.hypot(movedX, movedZ) > 0.002;
+  playerMesh.userData.moving = moved;
+  if (moved) playerMesh.userData.targetYaw = Math.atan2(movedX, movedZ);
+  // Answer bays are raised podiums. Keep players standing on their top surface
+  // while they are inside the answer area, then return to the main floor.
+  const groundHeight = answerBaySurfaceAt(ownPosition.x, ownPosition.z);
+
+  if (inQuestion && (jumpVelocity !== 0 || !grounded)) {
+    playerMesh.position.y += jumpVelocity * dt;
+    jumpVelocity -= 22 * dt;
+    if (playerMesh.position.y <= groundHeight) {
+      playerMesh.position.y = groundHeight;
+      jumpVelocity = 0;
+      grounded = true;
+    }
+  } else {
+    playerMesh.position.y = groundHeight;
+  }
+
+  if (inQuestion && !answerBusy) {
     for (const pad of pads) {
       if (Math.hypot(ownPosition.x - pad.x, ownPosition.z - pad.z) <= 3.15) {
         submitPlatformAnswer(pad.index);
@@ -1690,8 +4940,15 @@ function movePlayer(dt) {
     }
   }
   const now = performance.now();
-  if (db && roomPin && now - lastPositionWrite > 200) {
+  const movedSinceSync = Math.hypot(
+    ownPosition.x - lastSyncedPosition.x,
+    ownPosition.z - lastSyncedPosition.z
+  );
+  const syncInterval = inLobby ? 320 : 200;
+  const shouldSyncPosition = inQuestion || movedSinceSync >= 0.12;
+  if (db && roomPin && shouldSyncPosition && now - lastPositionWrite > syncInterval) {
     lastPositionWrite = now;
+    lastSyncedPosition = { x: ownPosition.x, z: ownPosition.z };
     update(dbPath(`rooms/${roomPin}/players/${uid}`), { x: ownPosition.x, z: ownPosition.z })
       .catch((error) => console.warn("Position sync:", error));
   }
@@ -1721,7 +4978,175 @@ function updateJoystick(event) {
 
 // Host has no avatar: use a smooth in-arena spectator camera that follows the
 // live group of participants without switching to a top-down overview.
+function updateWinnerCamera(dt) {
+  // A 2.35-second cubic ease makes the cut from live spectator to podium feel deliberate.
+  const progress = THREE.MathUtils.clamp(
+    (performance.now() - winnerCameraTransition.startedAt) / 2350,
+    0,
+    1
+  );
+  const eased = progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+  // Fit all three podiums even on tall, narrow phone screens.
+  const verticalHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+  const horizontalHalfFovTangent = verticalHalfFov * Math.max(0.35, Number(camera.aspect) || 1);
+  const frameDistance = THREE.MathUtils.clamp(
+    5.2 / Math.max(0.12, horizontalHalfFovTangent),
+    13.2,
+    25
+  );
+  const cameraHeight = winnerCameraFocus.y + Math.min(7.6, frameDistance * 0.42);
+  const desiredCamera = spectatorCameraPosition.set(
+    0,
+    cameraHeight,
+    winnerCameraFocus.z + frameDistance
+  );
+  camera.position.lerpVectors(winnerCameraStartPosition, desiredCamera, eased);
+  winnerCameraLookTarget.lerpVectors(winnerCameraStartTarget, winnerCameraFocus, eased);
+  camera.lookAt(winnerCameraLookTarget);
+}
+
+function updateTournamentDirectorCamera(dt) {
+  const session = teamBattleData?.session;
+  const sessionId = Number(session?.sessionId || 0);
+  const isTournamentSession = Boolean(session?.tournamentId) &&
+    ["active", "finished"].includes(session.status) &&
+    teamBattleData?.teams?.sessionId === sessionId;
+  if (!isHost || !isTournamentSession) return false;
+
+  const teamMap = teamBattleData.teams.members || {};
+  const redEntries = Object.entries(teamMap)
+    .filter(([, teamId]) => teamId === "red")
+    .map(([playerId]) => remotePlayers[playerId])
+    .filter((entry) => entry?.mesh?.position);
+  const blueEntries = Object.entries(teamMap)
+    .filter(([, teamId]) => teamId === "blue")
+    .map(([playerId]) => remotePlayers[playerId])
+    .filter((entry) => entry?.mesh?.position);
+  const allEntries = [...redEntries, ...blueEntries];
+  const round = teamBattleData.round?.sessionId === sessionId ? teamBattleData.round : null;
+  const roundId = Number(round?.roundId || session.roundId || 0);
+  const winners = teamBattleData.winners || {};
+  const roundWinner = roundId ? winners["round" + roundId] : null;
+  const now = serverNow();
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const isFinished = session.status === "finished";
+
+  const centerOf = (entries) => {
+    if (!entries.length) return null;
+    let x = 0, z = 0, spread = 0;
+    entries.forEach((entry) => {
+      x += entry.mesh.position.x;
+      z += entry.mesh.position.z;
+    });
+    x /= entries.length;
+    z /= entries.length;
+    entries.forEach((entry) => {
+      spread = Math.max(spread, Math.hypot(entry.mesh.position.x - x, entry.mesh.position.z - z));
+    });
+    return { x, z, spread };
+  };
+  const redFocus = centerOf(redEntries);
+  const blueFocus = centerOf(blueEntries);
+  const wideFocus = centerOf(allEntries) || centerOf(Object.values(remotePlayers)
+    .filter((entry) => entry?.mesh?.position)) || { x: spectatorFocus.x, z: spectatorFocus.z, spread: 0 };
+
+  let shot = "wide";
+  let subject = wideFocus;
+  let subjectTeam = "";
+  let winnerEntry = null;
+
+  // The schedule is based on the synchronized room clock, so every Host reload
+  // gets the same cut sequence without adding a camera-control field to Firebase.
+  if (!matchMotionPreference.matches) {
+    if (isFinished) {
+      const finalRoundResults = Object.values(winners)
+        .filter((item) => Number(item?.sessionId) === sessionId);
+      const redScore = finalRoundResults.filter((item) => item?.teamId === "red").length;
+      const blueScore = finalRoundResults.filter((item) => item?.teamId === "blue").length;
+      const matchWinningTeam = redScore === blueScore ? "" : redScore > blueScore ? "red" : "blue";
+      const finishedAt = Number(session.finishedAt || round?.endsAt || now);
+      if (matchWinningTeam && now - finishedAt < 3200) {
+        subjectTeam = matchWinningTeam;
+        subject = centerOf(matchWinningTeam === "red" ? redEntries : blueEntries) || wideFocus;
+        shot = "winner";
+      }
+    } else if (roundWinner) {
+      winnerEntry = roundWinner.uid ? remotePlayers[roundWinner.uid] : null;
+      if (winnerEntry?.mesh?.position) shot = "winner";
+    } else if (round?.phase === "active" && now >= startsAt && now <= endsAt) {
+      const elapsed = Math.max(0, (now - startsAt) / 1000);
+      if (elapsed >= 1.4 && elapsed < 3.9 && redFocus) {
+        shot = "red";
+        subjectTeam = "red";
+        subject = redFocus;
+      } else if (elapsed >= 3.9 && elapsed < 6.4 && blueFocus) {
+        shot = "blue";
+        subjectTeam = "blue";
+        subject = blueFocus;
+      }
+    }
+  }
+
+  if (shot === "winner" && winnerEntry?.mesh?.position) {
+    subject = {
+      x: winnerEntry.mesh.position.x,
+      z: winnerEntry.mesh.position.z,
+      spread: 0
+    };
+    subjectTeam = roundWinner.teamId === "blue" ? "blue" : "red";
+  }
+
+  const targetY = shot === "wide" ? 0.85 : shot === "winner" ? 1.35 : 1.05;
+  let cameraX = 0;
+  let cameraY = 9.2 + Math.min(1.8, wideFocus.spread * 0.07);
+  let cameraZ = 18.5;
+  let lookX = subject.x;
+  let lookZ = subject.z;
+
+  if (shot === "wide") {
+    const distance = THREE.MathUtils.clamp(18.5 + wideFocus.spread * 0.22, 18.5, 23.5);
+    cameraX = THREE.MathUtils.clamp(wideFocus.x * 0.28, -18.5, 18.5);
+    cameraZ = THREE.MathUtils.clamp(wideFocus.z + distance, -19.5, 19.5);
+  } else if (shot === "red" || shot === "blue") {
+    const distance = THREE.MathUtils.clamp(10.5 + subject.spread * 0.35, 10.5, 13.5);
+    const side = shot === "red" ? -1 : 1;
+    cameraX = THREE.MathUtils.clamp(subject.x + side * distance * 0.48, -19.5, 19.5);
+    cameraY = 5.9 + Math.min(1.0, subject.spread * 0.08);
+    cameraZ = THREE.MathUtils.clamp(subject.z + distance * 0.88, -20, 20);
+  } else {
+    const side = subjectTeam === "blue" ? 1 : -1;
+    cameraX = THREE.MathUtils.clamp(subject.x + side * 3.1, -19.5, 19.5);
+    cameraY = 4.65;
+    cameraZ = THREE.MathUtils.clamp(subject.z + 6.8, -20, 20);
+  }
+
+  spectatorFocus.x += (lookX - spectatorFocus.x) * (1 - Math.exp(-2.4 * dt));
+  spectatorFocus.z += (lookZ - spectatorFocus.z) * (1 - Math.exp(-2.4 * dt));
+  const desiredCamera = spectatorCameraPosition.set(cameraX, cameraY, cameraZ);
+  const desiredLook = spectatorDesiredLookTarget.set(spectatorFocus.x, targetY, spectatorFocus.z);
+  const cameraBlend = 1 - Math.exp(-(matchMotionPreference.matches ? 4.6 : 2.45) * dt);
+  camera.position.lerp(desiredCamera, cameraBlend);
+  spectatorCameraLookTarget.lerp(desiredLook, 1 - Math.exp(-3.2 * dt));
+  camera.lookAt(spectatorCameraLookTarget);
+
+  const shotLabels = {
+    wide: "WIDE SHOT",
+    red: "TEAM MERAH",
+    blue: "TEAM BIRU",
+    winner: "WINNER CLOSE-UP"
+  };
+  const shotLabel = $("tournamentSpectatorCameraShot");
+  const label = shotLabels[shot] || "WIDE SHOT";
+  if (shotLabel && shotLabel.textContent !== label) shotLabel.textContent = label;
+  return true;
+}
+
 function updateHostSpectatorCamera(dt) {
+  if (updateTournamentDirectorCamera(dt)) return;
+
   const entries = Object.values(remotePlayers);
   let focusX = 0, focusZ = 0, spread = 0;
 
@@ -1744,12 +5169,12 @@ function updateHostSpectatorCamera(dt) {
   spectatorFocus.x += (focusX - spectatorFocus.x) * focusBlend;
   spectatorFocus.z += (focusZ - spectatorFocus.z) * focusBlend;
 
-  // Pull back slightly when the group spreads across several answer platforms.
+  // Keep the non-tournament Host spectator composition unchanged.
   const distance = THREE.MathUtils.clamp(18.5 + spread * 0.22, 18.5, 23.5);
   const desiredCamera = spectatorCameraPosition.set(
-    spectatorFocus.x * 0.28,
+    THREE.MathUtils.clamp(spectatorFocus.x * 0.28, -18.5, 18.5),
     9.2 + Math.min(1.8, spread * 0.07),
-    spectatorFocus.z + distance
+    THREE.MathUtils.clamp(spectatorFocus.z + distance, -19.5, 19.5)
   );
   const cameraBlend = 1 - Math.exp(-2.2 * dt);
   camera.position.lerp(desiredCamera, cameraBlend);
@@ -1766,12 +5191,16 @@ function animate() {
     const left = Math.max(0, (Number(activeState.deadlineAt) - serverNow()) / 1000);
     $("time").textContent = String(Math.ceil(left));
     $("bar").style.width = Math.max(0, left / Number(activeState.durationSeconds || 15) * 100) + "%";
+    $("app").classList.toggle("timer-critical", left > 0 && left <= 5);
   } else if (activeState?.phase === "reveal") {
+    $("app").classList.remove("timer-critical");
     $("time").textContent = "✓";
     $("bar").style.width = "100%";
   }
   if (isHost) hostAdvance();
-  if (isHost) {
+  if (activeState?.phase === "finished") {
+    updateWinnerCamera(dt);
+  } else if (isHost) {
     updateHostSpectatorCamera(dt);
   } else if (playerMesh) {
     camera.position.x += (playerMesh.position.x - camera.position.x) * 0.045;
@@ -1779,31 +5208,103 @@ function animate() {
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
   const now = performance.now();
-  if (playerMesh) animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving));
+  if (isHost && now - lastSpectatorHudTick >= 140) {
+    lastSpectatorHudTick = now;
+    tickTournamentSpectatorClock();
+  }
+  updateLobbySocial();
+  let localWinnerWalking = false;
+  if (playerMesh && !playerMesh.userData.winnerTarget) {
+    const desiredYaw = Number(playerMesh.userData.targetYaw);
+    if (Number.isFinite(desiredYaw)) {
+      const yawDelta = Math.atan2(
+        Math.sin(desiredYaw - playerMesh.rotation.y),
+        Math.cos(desiredYaw - playerMesh.rotation.y)
+      );
+      playerMesh.rotation.y += yawDelta * (1 - Math.exp(-14 * dt));
+    }
+  }
+  if (playerMesh?.userData.winnerTarget) {
+    const target = playerMesh.userData.winnerTarget;
+    const remaining = Math.hypot(
+      target.x - playerMesh.position.x,
+      target.y - playerMesh.position.y,
+      target.z - playerMesh.position.z
+    );
+    localWinnerWalking = remaining > 0.12;
+    playerMesh.userData.winnerMoving = localWinnerWalking;
+    const winnerBlend = 1 - Math.exp(-2.6 * dt);
+    playerMesh.position.x += (target.x - playerMesh.position.x) * winnerBlend;
+    playerMesh.position.y += (target.y - playerMesh.position.y) * winnerBlend;
+    playerMesh.position.z += (target.z - playerMesh.position.z) * winnerBlend;
+    const desiredYaw = localWinnerWalking ? target.approachYaw : target.yaw;
+    const yawDelta = Math.atan2(
+      Math.sin(desiredYaw - playerMesh.rotation.y),
+      Math.cos(desiredYaw - playerMesh.rotation.y)
+    );
+    playerMesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
+    if (remaining < 0.006) {
+      playerMesh.position.set(target.x, target.y, target.z);
+      playerMesh.userData.winnerMoving = false;
+      localWinnerWalking = false;
+    }
+  }
+  if (playerMesh) {
+    animateAvatar(playerMesh, now, Boolean(playerMesh.userData.moving) || localWinnerWalking);
+  }
   const remoteBlend = 1 - Math.exp(-16 * dt);
   Object.values(remotePlayers).forEach((entry) => {
+    const targetY = Number(entry.targetY || 0);
     const dx = entry.targetX - entry.mesh.position.x;
+    const dy = targetY - entry.mesh.position.y;
     const dz = entry.targetZ - entry.mesh.position.z;
-    entry.mesh.position.x += dx * remoteBlend;
-    entry.mesh.position.z += dz * remoteBlend;
-    if (Math.abs(dx) + Math.abs(dz) < 0.006) {
-      entry.mesh.position.x = entry.targetX;
-      entry.mesh.position.z = entry.targetZ;
+    const remaining = Math.hypot(dx, dy, dz);
+    const winnerTarget = entry.mesh.userData.winnerTarget;
+    const winnerWalking = Boolean(winnerTarget && remaining > 0.12);
+    entry.mesh.userData.winnerMoving = winnerWalking;
+    const positionBlend = winnerTarget ? 1 - Math.exp(-2.6 * dt) : remoteBlend;
+    entry.mesh.position.x += dx * positionBlend;
+    entry.mesh.position.y += dy * positionBlend;
+    entry.mesh.position.z += dz * positionBlend;
+    if (remaining < 0.006) {
+      entry.mesh.position.set(entry.targetX, targetY, entry.targetZ);
+      entry.mesh.userData.winnerMoving = false;
     }
+    const desiredYaw = winnerTarget
+      ? (winnerWalking ? winnerTarget.approachYaw : winnerTarget.yaw)
+      : entry.targetYaw;
     const yawDelta = Math.atan2(
-      Math.sin(entry.targetYaw - entry.mesh.rotation.y),
-      Math.cos(entry.targetYaw - entry.mesh.rotation.y)
+      Math.sin(desiredYaw - entry.mesh.rotation.y),
+      Math.cos(desiredYaw - entry.mesh.rotation.y)
     );
     entry.mesh.rotation.y += yawDelta * (1 - Math.exp(-12 * dt));
-    const distanceToTarget = Math.hypot(
-      entry.targetX - entry.mesh.position.x,
-      entry.targetZ - entry.mesh.position.z
-    );
-    const moving = distanceToTarget > 0.025 && now - Number(entry.lastMoveAt || 0) < 600;
+    const networkMoving = Number(entry.lastMoveAt || 0) > 0 && now - Number(entry.lastMoveAt || 0) < 390;
+    const moving = winnerWalking || networkMoving;
+    entry.mesh.userData.moving = moving;
     animateAvatar(entry.mesh, now, moving);
   });
   const t = now * 0.001;
+  lobbyActivityPlaza.group.visible = activeState?.phase === "lobby";
+  if (lobbyActivityPlaza.group.visible) {
+    lobbyActivityPlaza.beacons.forEach((beacon, index) => {
+      beacon.rotation.y += dt * (0.72 + index * 0.14);
+      beacon.rotation.x = Math.sin(t * 1.2 + index) * 0.12;
+      beacon.position.y = beacon.userData.activityBaseY +
+        Math.sin(t * 2.0 + index * 1.8) * 0.11;
+    });
+  }
   pads.forEach((pad, i) => { pad.platform.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2 + i) * 0.07; });
+  sweepingBeams.forEach((beam, i) => {
+    beam.rotation.z = Math.PI + Math.sin(t * 0.34 + beam.userData.sweepPhase) * 0.42;
+    beam.rotation.y = Math.sin(t * 0.26 + beam.userData.sweepPhase) * 0.48;
+    beam.material.opacity = 0.035 + (Math.sin(t * 0.9 + i) + 1) * 0.018;
+  });
+  perimeterLEDs.forEach((led) => {
+    const pulse = (Math.sin(t * 2.1 - led.userData.ledIndex * 0.42) + 1) * 0.5;
+    led.material.color.setRGB(0.18 + pulse * 0.22, 0.55 + pulse * 0.38, 0.82 + pulse * 0.18);
+  });
+  animateAudience(now);
+  updateMatchVisualEffects(now, dt);
   renderer.render(scene, camera);
   if (previewRenderer && previewScene) {
     if (previewAvatar) {
