@@ -274,6 +274,41 @@
     <div class="hud-bottom"><span id="playerStreakHud" class="player-only-hud">STREAK <b id="streak">0</b></span><span id="players">1 pemain</span><span id="spectatorViewLabel">MENONTON ARENA LANGSUNG</span><span id="movementHint" class="player-only-hud">WASD / Joystick</span></div>
   </section>
 
+  <section id="tournamentSpectatorPanel" class="tournament-spectator-panel hidden"
+    aria-live="polite" aria-label="Live tournament scoreboard">
+    <div class="tournament-spectator-header">
+      <span>● LIVE TOURNAMENT</span>
+      <b id="tournamentSpectatorPhase">ARENA FEED</b>
+    </div>
+    <div class="tournament-spectator-match">
+      <strong id="tournamentSpectatorStage">MENUNGGU MATCH</strong>
+      <span id="tournamentSpectatorMatch">—</span>
+    </div>
+    <div class="tournament-spectator-versus">
+      <div class="tournament-spectator-team is-red">
+        <small>TEAM MERAH</small>
+        <b id="tournamentSpectatorRedName">PARTY MERAH</b>
+        <strong id="tournamentSpectatorRedScore">0</strong>
+      </div>
+      <span class="tournament-spectator-vs">VS</span>
+      <div class="tournament-spectator-team is-blue">
+        <small>TEAM BIRU</small>
+        <b id="tournamentSpectatorBlueName">PARTY BIRU</b>
+        <strong id="tournamentSpectatorBlueScore">0</strong>
+      </div>
+    </div>
+    <div id="tournamentSpectatorRounds" class="tournament-spectator-rounds" aria-label="Lima ronde pertandingan"></div>
+    <div class="tournament-spectator-target">
+      <div><small>TARGET WARNA</small><strong id="tournamentSpectatorTarget">MENUNGGU</strong></div>
+      <span id="tournamentSpectatorClock">—</span>
+    </div>
+    <div class="tournament-spectator-progress"><i id="tournamentSpectatorProgress"></i></div>
+    <div class="tournament-spectator-footer">
+      <span id="tournamentSpectatorStatus">Menunggu pertandingan turnamen.</span>
+      <b id="tournamentSpectatorBracket">0/0 MATCH</b>
+    </div>
+  </section>
+
   <div id="championBanner" class="champion-banner" aria-live="polite" aria-atomic="true">
     <span class="champion-banner-kicker">QUIZVERSE CHAMPIONS</span>
     <strong>🏆 JUARA PERTANDINGAN</strong>
