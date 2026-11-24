@@ -1273,6 +1273,143 @@ function renderTournamentCenter() {
     message = "Turnamen sedang berjalan. Selesaikan bracket sebelum memulai kuis utama.";
   }
   $("tournamentStatus").textContent = message;
+  renderTournamentSpectator();
+}
+function renderTournamentSpectator() {
+  const panel = $("tournamentSpectatorPanel");
+  if (!panel) return;
+  const snapshot = getTournamentSnapshot();
+  const meta = snapshot.meta;
+  const session = teamBattleData?.session || null;
+  if (!isHost || meta?.phase !== "active") {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  const entrants = tournamentEntrantList(snapshot.registrations);
+  const entrantByCode = new Map(entrants.map((entrant) => [entrant.partyCode, entrant]));
+  const resultsByMatch = Object.fromEntries(Object.entries(snapshot.results)
+    .filter(([, item]) => item?.matchId && item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); } catch {}
+  const sessionMatchesTournament = session?.tournamentId === snapshot.tournamentId &&
+    Boolean(session?.tournamentMatchId);
+  const matchId = sessionMatchesTournament
+    ? String(session.tournamentMatchId)
+    : String(bracket?.currentMatchId || "");
+  const match = bracket
+    ? Object.values(bracket.rounds).flatMap((round) => Object.values(round.matches))
+      .find((item) => item.id === matchId)
+    : null;
+  if (!matchId && !match) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  const partyA = sessionMatchesTournament ? session.partyA : match?.partyA;
+  const partyB = sessionMatchesTournament ? session.partyB : match?.partyB;
+  const partyName = (code, fallback) =>
+    code ? (entrantByCode.get(code)?.name || snapshot.tournament.parties?.[code]?.name || fallback || ("Party " + code)) : "Menunggu";
+  const roundMeta = bracket
+    ? Object.values(bracket.rounds).find((round) =>
+      Object.values(round.matches).some((item) => item.id === matchId))
+    : null;
+  const roundIndex = roundMeta
+    ? Object.keys(bracket.rounds).indexOf(roundMeta.id) + 1
+    : 0;
+  const matchIndex = roundMeta
+    ? Object.keys(roundMeta.matches).indexOf(matchId) + 1
+    : 0;
+  const totalMatches = bracket
+    ? Object.values(bracket.rounds).reduce((sum, round) => sum + Object.keys(round.matches).length, 0)
+    : 0;
+  const resolvedMatches = bracket
+    ? Object.values(bracket.rounds).reduce((sum, round) => sum +
+      Object.values(round.matches).filter((item) => ["finished", "bye"].includes(item.status)).length, 0)
+    : 0;
+
+  const currentSessionId = Number(session?.sessionId || 0);
+  const round = teamBattleData?.round?.sessionId === currentSessionId ? teamBattleData.round : null;
+  const winners = Object.values(teamBattleData?.winners || {})
+    .filter((item) => Number(item?.sessionId) === currentSessionId);
+  const redScore = winners.filter((item) => item?.teamId === "red").length;
+  const blueScore = winners.filter((item) => item?.teamId === "blue").length;
+  const totalRounds = Math.max(1, Math.min(5, Number(session?.totalRounds || 5)));
+  const roundId = Math.max(0, Math.min(totalRounds, Number(session?.roundId || round?.roundId || 0)));
+  const now = serverNow();
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const secondsToStart = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const targetIndex = Number(round?.targetIndex);
+  const hasTarget = Number.isInteger(targetIndex) && targetIndex >= 0 && targetIndex < COLOR_NAMES.length;
+  const roundWinner = roundId ? winners.find((item) => Number(item.roundId) === roundId) : null;
+  const isMatchingSession = sessionMatchesTournament && Number(session?.sessionId) === currentSessionId;
+  const isRunning = isMatchingSession && session?.status === "active";
+  const isFinished = isMatchingSession && session?.status === "finished";
+
+  $("tournamentSpectatorPhase").textContent = isRunning ? "MATCH LIVE" : isFinished ? "MATCH END" : "NEXT MATCH";
+  $("tournamentSpectatorStage").textContent = roundMeta?.label ||
+    (roundIndex ? "BABAK " + roundIndex + "/" + Number(bracket?.roundCount || roundIndex) : "TURNAMEN LIVE");
+  $("tournamentSpectatorMatch").textContent = matchId.toUpperCase() +
+    (matchIndex ? " · MATCH " + matchIndex : "");
+  $("tournamentSpectatorRedName").textContent = partyName(partyA, "PARTY MERAH");
+  $("tournamentSpectatorBlueName").textContent = partyName(partyB, "PARTY BIRU");
+  $("tournamentSpectatorRedScore").textContent = String(redScore);
+  $("tournamentSpectatorBlueScore").textContent = String(blueScore);
+
+  const roundsRoot = $("tournamentSpectatorRounds");
+  if (roundsRoot.childElementCount !== totalRounds) {
+    roundsRoot.replaceChildren();
+    for (let index = 1; index <= totalRounds; index++) {
+      const step = document.createElement("span");
+      step.className = "tournament-spectator-round";
+      step.dataset.round = String(index);
+      step.textContent = String(index);
+      roundsRoot.appendChild(step);
+    }
+  }
+  roundsRoot.querySelectorAll(".tournament-spectator-round").forEach((step) => {
+    const index = Number(step.dataset.round);
+    const winner = winners.find((item) => Number(item.roundId) === index);
+    step.classList.toggle("is-current", index === roundId && isRunning);
+    step.classList.toggle("is-red", Boolean(winner?.teamId === "red"));
+    step.classList.toggle("is-blue", Boolean(winner?.teamId === "blue"));
+    step.classList.toggle("is-unresolved", index < roundId && !winner);
+  });
+
+  const target = $("tournamentSpectatorTarget");
+  target.textContent = hasTarget ? COLOR_NAMES[targetIndex] : "—";
+  target.style.color = hasTarget ? COLORS[targetIndex] : "#b7c8d9";
+  let clockLabel = "MENUNGGU";
+  let statusLabel = "Menunggu host memulai pertandingan.";
+  let timeRatio = 0;
+  if (isRunning && (round?.phase === "preparing" || now < startsAt)) {
+    clockLabel = secondsToStart + "s";
+    statusLabel = "BERSIAP · RONDE " + Math.max(1, roundId) + " DIMULAI";
+  } else if (isRunning && round?.phase === "active" && now <= endsAt && !roundWinner) {
+    clockLabel = secondsLeft + "s";
+    statusLabel = "LIVE · RONDE " + roundId + "/" + totalRounds;
+    timeRatio = endsAt > startsAt ? Math.max(0, Math.min(1, (endsAt - now) / (endsAt - startsAt))) : 0;
+  } else if (isRunning && roundWinner) {
+    clockLabel = "POIN";
+    statusLabel = "POIN UNTUK TEAM " + (roundWinner.teamId === "red" ? "MERAH" : "BIRU");
+  } else if (isRunning && round?.phase === "active" && now > endsAt) {
+    clockLabel = "0s";
+    statusLabel = "WAKTU HABIS · TANPA POIN";
+  } else if (isFinished && redScore === blueScore) {
+    clockLabel = "SERI";
+    statusLabel = "SKOR SERI · MATCH PERLU DIULANG";
+  } else if (isFinished) {
+    clockLabel = "SELESAI";
+    statusLabel = "MATCH SELESAI · PEMENANG MELAJU";
+  }
+  $("tournamentSpectatorClock").textContent = clockLabel;
+  $("tournamentSpectatorStatus").textContent = statusLabel;
+  $("tournamentSpectatorProgress").style.transform = "scaleX(" + timeRatio + ")";
+  $("tournamentSpectatorBracket").textContent = resolvedMatches + "/" + totalMatches + " MATCH";
+  panel.classList.remove("hidden");
 }
 async function createTournament() {
   if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
@@ -4826,7 +4963,18 @@ function updateWinnerCamera(dt) {
 }
 
 function updateHostSpectatorCamera(dt) {
-  const entries = Object.values(remotePlayers);
+  const session = teamBattleData?.session;
+  const sessionId = Number(session?.sessionId || 0);
+  const tournamentFocusIds = session?.status === "active" && session.tournamentId &&
+    teamBattleData?.teams?.sessionId === sessionId
+    ? new Set(Object.keys(teamBattleData.teams.members || {})) : null;
+  const tournamentEntries = tournamentFocusIds
+    ? Object.entries(remotePlayers)
+      .filter(([playerId]) => tournamentFocusIds.has(playerId))
+      .map(([, entry]) => entry)
+    : [];
+  const entries = tournamentEntries.length >= 2
+    ? tournamentEntries : Object.values(remotePlayers);
   let focusX = 0, focusZ = 0, spread = 0;
 
   if (entries.length) {
