@@ -809,6 +809,9 @@ function subscribeSocialCompetition() {
       const previous = socialCompetitionData;
       socialCompetitionData = snap.val() || {};
       handleTournamentSocialUpdate(previous, socialCompetitionData);
+      if (teamBattleData?.session?.status === "active" && teamBattleData.session.tournamentId) {
+        announceTournamentMatchIntro(teamBattleData.session);
+      }
       renderPartyCenter();
       renderTournamentCenter();
     },
@@ -963,12 +966,12 @@ function tournamentNameForCode(code, registrations) {
 }
 function announceTournamentMatchIntro(session) {
   if (!session?.tournamentId || !session?.tournamentMatchId) return;
+  const snapshot = getTournamentSnapshot();
+  if (snapshot.tournamentId !== session.tournamentId) return;
   const key = String(session.tournamentId) + ":" + String(session.tournamentMatchId) +
     ":" + String(session.sessionId);
   if (key === tournamentIntroKey) return;
   tournamentIntroKey = key;
-  const snapshot = getTournamentSnapshot();
-  if (snapshot.tournamentId !== session.tournamentId) return;
   const partyA = tournamentNameForCode(session.partyA, snapshot.registrations);
   const partyB = tournamentNameForCode(session.partyB, snapshot.registrations);
   showTournamentShowcase("intro", {
@@ -980,7 +983,7 @@ function announceTournamentMatchIntro(session) {
     sideBLabel: "TEAM BIRU",
     medal: "⚔️",
     note: "Bersiaplah! Pertandingan akan segera dimulai.",
-    duration: 2450
+    duration: 1900
   });
 }
 function showTournamentMatchResult(tournamentId, matchId, result) {
