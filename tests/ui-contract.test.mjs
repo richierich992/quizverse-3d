@@ -424,6 +424,7 @@ assert.match(main, /function updateTournamentDirectorCamera\(dt\)/, "Tournament 
 assert.match(main, /elapsed >= 1\.4 && elapsed < 3\.9 && redFocus/, "The Host camera cuts to the Red team for a synchronized action shot");
 assert.match(main, /elapsed >= 3\.9 && elapsed < 6\.4 && blueFocus/, "The Host camera follows with a Blue team action shot");
 assert.match(main, /shot === "winner"/, "A correct round answer triggers a winner close-up when the winner avatar is visible");
+assert.match(main, /matchWinningTeam = redScore === blueScore \? "" : redScore > blueScore/, "A drawn tournament match does not falsely frame either party as the match champion");
 assert.match(main, /camera\.position\.lerp\(desiredCamera, cameraBlend\)/, "Cinematic cuts ease the camera instead of snapping");
 assert.match(main, /matchMotionPreference\.matches/, "Reduced-motion preference avoids the alternating close-up sequence");
 assert.match(main, /function tickTournamentSpectatorClock\(\)/, "Spectator countdown and progress update between Firebase snapshots");
