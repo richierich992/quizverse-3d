@@ -416,7 +416,7 @@ assert.match(css, /\.tournament-hall-entry/, "The Hall of Fame has a dedicated h
 
 assert.match(index, /id="tournamentSpectatorPanel"/, "Host has a live tournament scoreboard over the arena");
 assert.match(main, /function renderTournamentSpectator\(\)/, "Tournament spectator UI is derived from the live bracket and Team Battle data");
-assert.match(main, /const redEntries = Object\\.entries\\(teamMap\\)[\\s\\S]*?const blueEntries = Object\\.entries\\(teamMap\\)/, "Host camera groups the active tournament players by their registered team");
+assert.match(main, /const redEntries = Object\.entries\(teamMap\)[\s\S]*?const blueEntries = Object\.entries\(teamMap\)/, "Host camera groups the active tournament players by their registered team");
 assert.match(main, /tournamentSpectatorProgress/, "Tournament spectator shows the live round countdown progress");
 assert.match(css, /\.tournament-spectator-panel/, "Tournament spectator panel is styled as a compact arena HUD");
 
