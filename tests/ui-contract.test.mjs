@@ -413,3 +413,9 @@ assert.match(main, /function showTournamentMatchResult\(tournamentId, matchId, r
 assert.match(css, /@keyframes tournament-dialog-in/, "The tournament showcase has an animated arena entrance");
 assert.match(css, /@keyframes tournament-champion-glow/, "The champion ceremony has a celebratory glow");
 assert.match(css, /\.tournament-hall-entry/, "The Hall of Fame has a dedicated history layout");
+
+assert.match(index, /id="tournamentSpectatorPanel"/, "Host has a live tournament scoreboard over the arena");
+assert.match(main, /function renderTournamentSpectator\(\)/, "Tournament spectator UI is derived from the live bracket and Team Battle data");
+assert.match(main, /const tournamentFocusIds = session\?\.status === "active" && session\.tournamentId/, "Host camera focuses on registered match participants during tournament battles");
+assert.match(main, /tournamentSpectatorProgress/, "Tournament spectator shows the live round countdown progress");
+assert.match(css, /\.tournament-spectator-panel/, "Tournament spectator panel is styled as a compact arena HUD");
