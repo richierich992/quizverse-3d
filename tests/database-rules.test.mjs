@@ -344,7 +344,25 @@ try {
   await assertSucceeds(update(ref(host, tournamentMeta), {
     phase: "completed", completedAt: Date.now(), championPartyCode: "PARY01"
   }));
-  console.log("PASS: private keys, one answer per round, mini-game security, party permissions, tournament registrations, and host-only bracket results.");
+
+  const hallOfFameRef = `${tournamentSocial}/tournament/hallOfFame/cup-1`;
+  const hallOfFameRecord = {
+    tournamentId: "cup-1",
+    title: "QuizVerse Cup",
+    championPartyCode: "PARY01",
+    championPartyName: "Party One",
+    runnerUpPartyCode: "PARY02",
+    runnerUpPartyName: "Party Two",
+    participantCount: 2,
+    completedAt: Date.now()
+  };
+  await assertFails(set(ref(p1, hallOfFameRef), hallOfFameRecord));
+  await assertFails(set(ref(host, hallOfFameRef), {
+    ...hallOfFameRecord, championPartyCode: "PARY02"
+  }));
+  await assertSucceeds(set(ref(host, hallOfFameRef), hallOfFameRecord));
+  await assertFails(set(ref(host, hallOfFameRef), hallOfFameRecord));
+  console.log("PASS: private keys, mini-game security, party registration, host-only bracket results, and immutable champion Hall of Fame records.");
 } finally {
   await env.cleanup();
 }
