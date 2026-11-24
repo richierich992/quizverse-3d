@@ -1094,3 +1094,28 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
   .tournament-showcase-backdrop,.tournament-showcase-dialog,.tournament-showcase-medal,
   .tournament-showcase-orbit,.tournament-showcase-champion{animation:none!important}
 }
+
+
+.tournament-showcase-overlay.is-intro .tournament-showcase-side.is-red{
+  animation:tournament-side-in-a .72s .12s cubic-bezier(.2,.8,.25,1) both
+}
+.tournament-showcase-overlay.is-intro .tournament-showcase-side.is-blue{
+  animation:tournament-side-in-b .72s .12s cubic-bezier(.2,.8,.25,1) both
+}
+.tournament-showcase-side strong.is-match-winner{
+  color:#ffe6a4;text-shadow:0 0 16px #f0c76b88
+}
+.tournament-showcase-overlay.is-result .tournament-showcase-side strong.is-match-winner{
+  padding:3px 2px;border-radius:5px;background:#d8b56b14
+}
+@keyframes tournament-side-in-a{
+  from{opacity:0;transform:translateX(-28px) scale(.96)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+@keyframes tournament-side-in-b{
+  from{opacity:0;transform:translateX(28px) scale(.96)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+@media(prefers-reduced-motion:reduce){
+  .tournament-showcase-overlay.is-intro .tournament-showcase-side{animation:none!important}
+}
