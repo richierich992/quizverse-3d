@@ -419,3 +419,14 @@ assert.match(main, /function renderTournamentSpectator\(\)/, "Tournament spectat
 assert.match(main, /const tournamentFocusIds = session\?\.status === "active" && session\.tournamentId/, "Host camera focuses on registered match participants during tournament battles");
 assert.match(main, /tournamentSpectatorProgress/, "Tournament spectator shows the live round countdown progress");
 assert.match(css, /\.tournament-spectator-panel/, "Tournament spectator panel is styled as a compact arena HUD");
+
+assert.match(main, /function updateTournamentDirectorCamera\(dt\)/, "Tournament matches use a dedicated cinematic camera director");
+assert.match(main, /elapsed >= 1\.4 && elapsed < 3\.9 && redFocus/, "The Host camera cuts to the Red team for a synchronized action shot");
+assert.match(main, /elapsed >= 3\.9 && elapsed < 6\.4 && blueFocus/, "The Host camera follows with a Blue team action shot");
+assert.match(main, /shot === "winner"/, "A correct round answer triggers a winner close-up when the winner avatar is visible");
+assert.match(main, /camera\.position\.lerp\(desiredCamera, cameraBlend\)/, "Cinematic cuts ease the camera instead of snapping");
+assert.match(main, /matchMotionPreference\.matches/, "Reduced-motion preference avoids the alternating close-up sequence");
+assert.match(main, /function tickTournamentSpectatorClock\(\)/, "Spectator countdown and progress update between Firebase snapshots");
+assert.match(main, /lastSpectatorHudTick >= 140/, "The spectator HUD clock is throttled instead of writing to the DOM every frame");
+assert.match(index, /id="tournamentSpectatorCameraShot"/, "Host can see which cinematic camera shot is active");
+assert.match(css, /\.tournament-spectator-shot/, "The active camera shot has a compact visual indicator");
