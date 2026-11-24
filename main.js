@@ -989,14 +989,13 @@ function announceTournamentMatchIntro(session) {
 function showTournamentMatchResult(tournamentId, matchId, result) {
   const snapshot = getTournamentSnapshot();
   if (!result?.winnerPartyCode || snapshot.tournamentId !== tournamentId) return;
-  const champion = snapshot.meta?.phase === "completed"
-    ? String(snapshot.meta?.championPartyCode || "") : "";
   const entrants = tournamentEntrantList(snapshot.registrations);
   const resultsByMatch = Object.fromEntries(Object.entries(snapshot.results)
     .filter(([, item]) => item?.winnerPartyCode)
     .map(([id, item]) => [id, item.winnerPartyCode]));
   let bracket = null;
   try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); } catch {}
+  const champion = String(snapshot.meta?.championPartyCode || bracket?.championPartyCode || "");
   const entrantByCode = new Map(entrants.map((entry) => [entry.partyCode, entry]));
   const winnerName = entrantByCode.get(result.winnerPartyCode)?.name || result.winnerPartyCode;
   if (champion && champion === result.winnerPartyCode) {
@@ -1057,6 +1056,14 @@ function handleTournamentSocialUpdate(previous, next) {
     seenTournamentResults.add(key);
     if (result?.winnerPartyCode) newlyCompleted.push({ matchId, result });
   });
+  const allResults = Object.fromEntries(Object.entries(resultRows)
+    .filter(([, item]) => item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracketAfterUpdate = null;
+  try { bracketAfterUpdate = buildSingleEliminationBracket(
+    tournamentEntrantList(tournament.registrations?.[tournamentId] || {}), allResults
+  ); } catch {}
+  if (bracketAfterUpdate?.championPartyCode) seenTournamentChampions.add(tournamentId);
 
   if (newlyCompleted.length) {
     newlyCompleted.forEach(({ matchId, result }, index) => {
@@ -4457,6 +4464,11 @@ $("reactionRushOverlay").addEventListener("click", (event) => {
 addEventListener("keydown", (event) => {
   if (event.key === "Escape" && reactionRushPhase !== "closed") {
     closeReactionRush(true);
+  }
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("tournamentShowcaseOverlay").classList.contains("hidden")) {
+    closeTournamentShowcase();
   }
 });
 renderReactionRushBest();
