@@ -140,6 +140,7 @@ let localAnswerRound = -1, localAnswerIndex = -1, answerBusy = false, scoreBusyR
 let hostTransitionBusy = false, lastPositionWrite = 0, lastStatusMessage = "";
 let lastSyncedPosition = { x: 0, z: 0 };
 let lastVisualStateKey = "";
+let lastSpectatorHudTick = 0;
 const matchVisualEvent = { kind: "", startedAt: 0, duration: 0, x: 0, z: 0, color: "#62dcff" };
 const matchMotionPreference = matchMedia("(prefers-reduced-motion: reduce)");
 const REACTION_RUSH_BEST_KEY = "quizverse-reaction-rush-best-v1";
@@ -1414,6 +1415,45 @@ function renderTournamentSpectator() {
   $("tournamentSpectatorBracket").textContent = resolvedMatches + "/" + totalMatches + " MATCH";
   panel.classList.remove("hidden");
 }
+function tickTournamentSpectatorClock() {
+  const panel = $("tournamentSpectatorPanel");
+  if (!isHost || !panel || panel.classList.contains("hidden")) return;
+  const session = teamBattleData?.session;
+  if (!session?.tournamentId || !["active", "finished"].includes(session.status)) return;
+  const sessionId = Number(session.sessionId || 0);
+  const round = teamBattleData?.round?.sessionId === sessionId ? teamBattleData.round : null;
+  if (!round) return;
+  const roundId = Number(round.roundId || 0);
+  const winner = roundId ? teamBattleData?.winners?.["round" + roundId] : null;
+  const now = serverNow();
+  const startsAt = Number(round.startsAt || 0);
+  const endsAt = Number(round.endsAt || 0);
+  const leftToStart = Math.max(0, Math.ceil((startsAt - now) / 1000));
+  const leftToEnd = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  let clockLabel = "MENUNGGU";
+  let statusLabel = "Menunggu host memulai pertandingan.";
+  let progress = 0;
+  if (session.status === "finished") {
+    clockLabel = winner ? "SELESAI" : "SERI";
+    statusLabel = winner ? "MATCH SELESAI · PEMENANG MELAJU" : "SKOR SERI · MATCH PERLU DIULANG";
+  } else if (round.phase === "preparing" || now < startsAt) {
+    clockLabel = leftToStart + "s";
+    statusLabel = "BERSIAP · RONDE " + Math.max(1, roundId) + " DIMULAI";
+  } else if (round.phase === "active" && winner) {
+    clockLabel = "POIN";
+    statusLabel = "POIN UNTUK TEAM " + (winner.teamId === "red" ? "MERAH" : "BIRU");
+  } else if (round.phase === "active" && now <= endsAt) {
+    clockLabel = leftToEnd + "s";
+    statusLabel = "LIVE · RONDE " + roundId + "/" + Number(session.totalRounds || 5);
+    progress = endsAt > startsAt ? Math.max(0, Math.min(1, (endsAt - now) / (endsAt - startsAt))) : 0;
+  } else if (round.phase === "active") {
+    clockLabel = "0s";
+    statusLabel = "WAKTU HABIS · TANPA POIN";
+  }
+  $("tournamentSpectatorClock").textContent = clockLabel;
+  $("tournamentSpectatorStatus").textContent = statusLabel;
+  $("tournamentSpectatorProgress").style.transform = "scaleX(" + progress + ")";
+}
 async function createTournament() {
   if (!isHost || !roomPin || activeState?.phase !== "lobby" || tournamentBusy ||
       teamBattleData?.session?.status === "active") return;
@@ -1769,6 +1809,7 @@ const winnerCameraDirection = new THREE.Vector3();
 const winnerCameraLookTarget = new THREE.Vector3();
 const spectatorFocus = new THREE.Vector3(0, 0, 0);
 const spectatorCameraPosition = new THREE.Vector3();
+const spectatorCameraLookTarget = new THREE.Vector3(0, 0.85, 0);
 const winnerCameraFocus = new THREE.Vector3(0, 1.62, -17.15);
 const renderer = new THREE.WebGLRenderer({ canvas: $("world"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
@@ -4965,19 +5006,141 @@ function updateWinnerCamera(dt) {
   camera.lookAt(winnerCameraLookTarget);
 }
 
-function updateHostSpectatorCamera(dt) {
+function updateTournamentDirectorCamera(dt) {
   const session = teamBattleData?.session;
   const sessionId = Number(session?.sessionId || 0);
-  const tournamentFocusIds = session?.status === "active" && session.tournamentId &&
-    teamBattleData?.teams?.sessionId === sessionId
-    ? new Set(Object.keys(teamBattleData.teams.members || {})) : null;
-  const tournamentEntries = tournamentFocusIds
-    ? Object.entries(remotePlayers)
-      .filter(([playerId]) => tournamentFocusIds.has(playerId))
-      .map(([, entry]) => entry)
-    : [];
-  const entries = tournamentEntries.length >= 2
-    ? tournamentEntries : Object.values(remotePlayers);
+  const isTournamentSession = Boolean(session?.tournamentId) &&
+    ["active", "finished"].includes(session.status) &&
+    teamBattleData?.teams?.sessionId === sessionId;
+  if (!isHost || !isTournamentSession) return false;
+
+  const teamMap = teamBattleData.teams.members || {};
+  const redEntries = Object.entries(teamMap)
+    .filter(([, teamId]) => teamId === "red")
+    .map(([playerId]) => remotePlayers[playerId])
+    .filter((entry) => entry?.mesh?.position);
+  const blueEntries = Object.entries(teamMap)
+    .filter(([, teamId]) => teamId === "blue")
+    .map(([playerId]) => remotePlayers[playerId])
+    .filter((entry) => entry?.mesh?.position);
+  const allEntries = [...redEntries, ...blueEntries];
+  const round = teamBattleData.round?.sessionId === sessionId ? teamBattleData.round : null;
+  const roundId = Number(round?.roundId || session.roundId || 0);
+  const winners = teamBattleData.winners || {};
+  const roundWinner = roundId ? winners["round" + roundId] : null;
+  const now = serverNow();
+  const startsAt = Number(round?.startsAt || 0);
+  const endsAt = Number(round?.endsAt || 0);
+  const isFinished = session.status === "finished";
+
+  const centerOf = (entries) => {
+    if (!entries.length) return null;
+    let x = 0, z = 0, spread = 0;
+    entries.forEach((entry) => {
+      x += entry.mesh.position.x;
+      z += entry.mesh.position.z;
+    });
+    x /= entries.length;
+    z /= entries.length;
+    entries.forEach((entry) => {
+      spread = Math.max(spread, Math.hypot(entry.mesh.position.x - x, entry.mesh.position.z - z));
+    });
+    return { x, z, spread };
+  };
+  const redFocus = centerOf(redEntries);
+  const blueFocus = centerOf(blueEntries);
+  const wideFocus = centerOf(allEntries) || centerOf(Object.values(remotePlayers)
+    .filter((entry) => entry?.mesh?.position)) || { x: spectatorFocus.x, z: spectatorFocus.z, spread: 0 };
+
+  let shot = "wide";
+  let subject = wideFocus;
+  let subjectTeam = "";
+  let winnerEntry = null;
+
+  // The schedule is based on the synchronized room clock, so every Host reload
+  // gets the same cut sequence without adding a camera-control field to Firebase.
+  if (!matchMotionPreference.matches) {
+    if (isFinished && roundWinner) {
+      const finishedAt = Number(session.finishedAt || round?.endsAt || now);
+      if (now - finishedAt < 3200) {
+        winnerEntry = roundWinner.uid ? remotePlayers[roundWinner.uid] : null;
+        if (winnerEntry?.mesh?.position) shot = "winner";
+      }
+    } else if (roundWinner && !isFinished) {
+      winnerEntry = roundWinner.uid ? remotePlayers[roundWinner.uid] : null;
+      if (winnerEntry?.mesh?.position) shot = "winner";
+    } else if (round?.phase === "active" && now >= startsAt && now <= endsAt) {
+      const elapsed = Math.max(0, (now - startsAt) / 1000);
+      if (elapsed >= 1.4 && elapsed < 3.9 && redFocus) {
+        shot = "red";
+        subjectTeam = "red";
+        subject = redFocus;
+      } else if (elapsed >= 3.9 && elapsed < 6.4 && blueFocus) {
+        shot = "blue";
+        subjectTeam = "blue";
+        subject = blueFocus;
+      }
+    }
+  }
+
+  if (shot === "winner" && winnerEntry?.mesh?.position) {
+    subject = {
+      x: winnerEntry.mesh.position.x,
+      z: winnerEntry.mesh.position.z,
+      spread: 0
+    };
+    subjectTeam = roundWinner.teamId === "blue" ? "blue" : "red";
+  }
+
+  const targetY = shot === "wide" ? 0.85 : shot === "winner" ? 1.35 : 1.05;
+  let cameraX = 0;
+  let cameraY = 9.2 + Math.min(1.8, wideFocus.spread * 0.07);
+  let cameraZ = 18.5;
+  let lookX = wideFocus.x;
+  let lookZ = wideFocus.z;
+
+  if (shot === "wide") {
+    const distance = THREE.MathUtils.clamp(18.5 + wideFocus.spread * 0.22, 18.5, 23.5);
+    cameraX = THREE.MathUtils.clamp(wideFocus.x * 0.28, -18.5, 18.5);
+    cameraZ = THREE.MathUtils.clamp(wideFocus.z + distance, -19.5, 19.5);
+  } else if (shot === "red" || shot === "blue") {
+    const distance = THREE.MathUtils.clamp(10.5 + subject.spread * 0.35, 10.5, 13.5);
+    const side = shot === "red" ? -1 : 1;
+    cameraX = THREE.MathUtils.clamp(subject.x + side * distance * 0.48, -19.5, 19.5);
+    cameraY = 5.9 + Math.min(1.0, subject.spread * 0.08);
+    cameraZ = THREE.MathUtils.clamp(subject.z + distance * 0.88, -20, 20);
+  } else {
+    const side = subjectTeam === "blue" ? 1 : -1;
+    cameraX = THREE.MathUtils.clamp(subject.x + side * 3.1, -19.5, 19.5);
+    cameraY = 4.65;
+    cameraZ = THREE.MathUtils.clamp(subject.z + 6.8, -20, 20);
+  }
+
+  spectatorFocus.x += (lookX - spectatorFocus.x) * (1 - Math.exp(-2.4 * dt));
+  spectatorFocus.z += (lookZ - spectatorFocus.z) * (1 - Math.exp(-2.4 * dt));
+  const desiredCamera = spectatorCameraPosition.set(cameraX, cameraY, cameraZ);
+  const desiredLook = spectatorCameraLookTarget.set(spectatorFocus.x, targetY, spectatorFocus.z);
+  const cameraBlend = 1 - Math.exp(-(matchMotionPreference.matches ? 4.6 : 2.45) * dt);
+  camera.position.lerp(desiredCamera, cameraBlend);
+  spectatorCameraLookTarget.lerp(desiredLook, 1 - Math.exp(-3.2 * dt));
+  camera.lookAt(spectatorCameraLookTarget);
+
+  const shotLabels = {
+    wide: "WIDE SHOT",
+    red: "TEAM MERAH",
+    blue: "TEAM BIRU",
+    winner: "WINNER CLOSE-UP"
+  };
+  const shotLabel = $("tournamentSpectatorCameraShot");
+  const label = shotLabels[shot] || "WIDE SHOT";
+  if (shotLabel && shotLabel.textContent !== label) shotLabel.textContent = label;
+  return true;
+}
+
+function updateHostSpectatorCamera(dt) {
+  if (updateTournamentDirectorCamera(dt)) return;
+
+  const entries = Object.values(remotePlayers);
   let focusX = 0, focusZ = 0, spread = 0;
 
   if (entries.length) {
@@ -4999,7 +5162,7 @@ function updateHostSpectatorCamera(dt) {
   spectatorFocus.x += (focusX - spectatorFocus.x) * focusBlend;
   spectatorFocus.z += (focusZ - spectatorFocus.z) * focusBlend;
 
-  // Pull back slightly when the group spreads across several answer platforms.
+  // Keep the non-tournament Host spectator composition unchanged.
   const distance = THREE.MathUtils.clamp(18.5 + spread * 0.22, 18.5, 23.5);
   const desiredCamera = spectatorCameraPosition.set(
     THREE.MathUtils.clamp(spectatorFocus.x * 0.28, -18.5, 18.5),
@@ -5038,6 +5201,10 @@ function animate() {
     camera.lookAt(playerMesh.position.x, 0.7, playerMesh.position.z);
   }
   const now = performance.now();
+  if (isHost && now - lastSpectatorHudTick >= 140) {
+    lastSpectatorHudTick = now;
+    tickTournamentSpectatorClock();
+  }
   updateLobbySocial();
   let localWinnerWalking = false;
   if (playerMesh && !playerMesh.userData.winnerTarget) {
