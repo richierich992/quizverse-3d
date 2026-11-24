@@ -1220,3 +1220,13 @@ input:focus,select:focus,textarea:focus{border-color:#55d8ff;box-shadow:0 0 0 2p
 @media(prefers-reduced-motion:reduce){
   .tournament-spectator-progress i{transition:none}
 }
+
+.tournament-spectator-shot{
+  flex:none;padding:4px 6px;border:1px solid #a88bd955;border-radius:6px;
+  background:#34284d;color:#e5d4ff!important;font-size:6px!important;
+  letter-spacing:.7px!important
+}
+@media(max-width:800px){
+  .tournament-spectator-header{flex-wrap:wrap}
+  .tournament-spectator-shot{margin-left:auto}
+}
