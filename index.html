@@ -232,6 +232,12 @@
         <p class="tournament-empty">Belum ada pendaftaran.</p>
       </div>
       <div id="tournamentBracket" class="tournament-bracket"></div>
+      <div class="tournament-hall">
+        <div class="tournament-section-label">HALL OF FAME 🏆</div>
+        <div id="tournamentHallOfFame" class="tournament-hall-list">
+          <p class="tournament-empty">Belum ada juara turnamen di room ini.</p>
+        </div>
+      </div>
       <p id="tournamentStatus" class="tournament-status" aria-live="polite">Host dapat membuka pendaftaran. Peserta berupa party, bukan pemain satuan.</p>
       <span class="tournament-footnote">Single elimination · 2–16 party · Host sebagai spectator · hasil match menentukan party yang maju.</span>
     </section>
@@ -297,6 +303,35 @@
   </section>
   <div class="version">QUIZVERSE 3D · REALTIME LEARNING</div>
 </main>
+<div id="tournamentShowcaseOverlay" class="tournament-showcase-overlay hidden" aria-hidden="true">
+  <div class="tournament-showcase-backdrop"></div>
+  <section class="tournament-showcase-dialog" role="dialog" aria-modal="true" aria-labelledby="tournamentShowcaseTitle">
+    <div class="tournament-showcase-orbit tournament-showcase-orbit-a"></div>
+    <div class="tournament-showcase-orbit tournament-showcase-orbit-b"></div>
+    <span id="tournamentShowcaseEyebrow" class="tournament-showcase-eyebrow">QUIZVERSE CUP</span>
+    <div id="tournamentShowcaseMedal" class="tournament-showcase-medal">🏆</div>
+    <h2 id="tournamentShowcaseTitle">MATCH DAY</h2>
+    <p id="tournamentShowcaseSubtitle" class="tournament-showcase-subtitle">Dua party bersiap memasuki arena.</p>
+    <div id="tournamentShowcaseVersus" class="tournament-showcase-versus">
+      <div class="tournament-showcase-side is-red">
+        <small id="tournamentShowcaseSideALabel">TEAM MERAH</small>
+        <strong id="tournamentShowcaseSideA">PARTY A</strong>
+      </div>
+      <span id="tournamentShowcaseVs" class="tournament-showcase-vs">VS</span>
+      <div class="tournament-showcase-side is-blue">
+        <small id="tournamentShowcaseSideBLabel">TEAM BIRU</small>
+        <strong id="tournamentShowcaseSideB">PARTY B</strong>
+      </div>
+    </div>
+    <div id="tournamentShowcaseChampion" class="tournament-showcase-champion hidden">
+      <small>JUARA TURNAMEN</small>
+      <strong id="tournamentShowcaseChampionName">—</strong>
+      <span id="tournamentShowcaseRunnerUp">Runner-up · —</span>
+    </div>
+    <p id="tournamentShowcaseNote" class="tournament-showcase-note">Host menjadi spectator. Pemain bertanding untuk party masing-masing.</p>
+    <button id="tournamentShowcaseClose" type="button" class="primary full">LANJUTKAN</button>
+  </section>
+</div>
 <script>
 (() => {
   function reportBootError(message, details = "") {
