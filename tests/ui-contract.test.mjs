@@ -402,3 +402,14 @@ assert.match(main, /Skor turnamen seri\.[\s\S]*?mengulang pertandingan/, "A draw
 assert.match(main, /championPartyCode: bracket\.championPartyCode/, "The tournament stores the final champion");
 assert.match(main, /Selesaikan Tournament Mode sebelum memulai kuis utama/, "The quiz cannot interrupt an active tournament");
 assert.match(css, /\.tournament-match\.is-current/, "The current tournament matchup is highlighted");
+
+assert.match(index, /id="tournamentShowcaseOverlay"/, "Host receives a synchronized tournament match and champion showcase");
+assert.match(player, /id="tournamentShowcaseOverlay"/, "Players receive the same tournament match and champion showcase");
+assert.match(main, /function announceTournamentMatchIntro\(session\)/, "Each tournament match announces both parties before the first round");
+assert.match(main, /function handleTournamentSocialUpdate\(previous, next\)/, "Match results trigger synchronized winner announcements");
+assert.match(main, /function renderTournamentHallOfFame\(records\)/, "Tournament history renders a persistent Hall of Fame");
+assert.match(main, /tournament\/hallOfFame\/\W*\+ session\.tournamentId/, "The Host stores one permanent Hall of Fame record per tournament");
+assert.match(main, /function showTournamentMatchResult\(tournamentId, matchId, result\)/, "The final match triggers a champion ceremony");
+assert.match(css, /@keyframes tournament-dialog-in/, "The tournament showcase has an animated arena entrance");
+assert.match(css, /@keyframes tournament-champion-glow/, "The champion ceremony has a celebratory glow");
+assert.match(css, /\.tournament-hall-entry/, "The Hall of Fame has a dedicated history layout");
