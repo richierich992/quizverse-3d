@@ -158,6 +158,11 @@ let socialCompetitionUnsubscribe = null;
 let socialCompetitionData = null;
 let partyBusy = false;
 let tournamentBusy = false;
+let tournamentShowcaseTimeout = null;
+let tournamentIntroKey = "";
+let tournamentHistoryInitialized = false;
+const seenTournamentResults = new Set();
+const seenTournamentChampions = new Set();
 
 const serverNow = () => Date.now() + serverOffset;
 function status(message, error = false) {
@@ -372,9 +377,17 @@ function subscribeTeamColorBattle() {
   stopTeamColorBattleListener();
   const base = `rooms/${roomPin}/miniGames/teamColorBattle`;
   teamBattleUnsubscribe = onValue(dbPath(base), (snap) => {
-    teamBattleData = snap.val() || null;
+    const next = snap.val() || null;
+    const oldSessionId = Number(teamBattleData?.session?.sessionId || 0);
+    teamBattleData = next;
+    const nextSession = next?.session;
+    if (nextSession?.status === "active" && nextSession.tournamentId &&
+        Number(nextSession.sessionId) !== oldSessionId) {
+      announceTournamentMatchIntro(nextSession);
+    }
     renderTeamColorBattle();
     renderPartyCenter();
+    renderTournamentCenter();
   }, (error) => {
     $("teamBattleStatus").textContent = "Team Battle tidak dapat dimuat: " + error.message;
   });
@@ -580,6 +593,7 @@ async function startTeamColorBattle() {
       ...(teamBattleData || {}), session: nextSession,
       teams: { sessionId: nextSessionId, members }
     };
+    if (tournamentMatch) announceTournamentMatchIntro(nextSession);
     teamBattleBusy = false;
     renderTeamColorBattle();
     await startNextTeamColorRound();
@@ -695,6 +709,26 @@ async function finishTeamColorBattle() {
               phase: "completed", completedAt: finishedAt,
               championPartyCode: bracket.championPartyCode
             });
+            const entrantByCode = new Map(entrants.map((entry) => [entry.partyCode, entry]));
+            const finalResult = nextResults["r" + bracket.roundCount + "m1"];
+            const runnerUpCode = finalResult?.partyA === bracket.championPartyCode
+              ? finalResult?.partyB : finalResult?.partyA;
+            const championEntry = entrantByCode.get(bracket.championPartyCode);
+            const runnerUpEntry = entrantByCode.get(runnerUpCode);
+            const hallRef = "rooms/" + roomPin + "/socialCompetition/tournament/hallOfFame/" + session.tournamentId;
+            const hallSnap = await get(dbPath(hallRef));
+            if (!hallSnap.exists()) {
+              await set(dbPath(hallRef), {
+                tournamentId: session.tournamentId,
+                title: String(meta.title || "QuizVerse Cup"),
+                championPartyCode: bracket.championPartyCode,
+                championPartyName: String(championEntry?.name || bracket.championPartyCode),
+                runnerUpPartyCode: String(runnerUpCode || "------"),
+                runnerUpPartyName: String(runnerUpEntry?.name || runnerUpCode || "Belum tersedia"),
+                participantCount: entrants.length,
+                completedAt: finishedAt
+              });
+            }
             $("teamBattleStatus").textContent =
               "🏆 Turnamen selesai! Juara: " + (entrants.find((entry) =>
                 entry.partyCode === bracket.championPartyCode)?.name || bracket.championPartyCode);
@@ -761,13 +795,20 @@ function stopSocialCompetitionListener() {
   socialCompetitionUnsubscribe = null;
   socialCompetitionData = null;
   partyBusy = false;
+  tournamentHistoryInitialized = false;
+  seenTournamentResults.clear();
+  seenTournamentChampions.clear();
+  tournamentIntroKey = "";
+  closeTournamentShowcase();
 }
 function subscribeSocialCompetition() {
   stopSocialCompetitionListener();
   socialCompetitionUnsubscribe = onValue(
     dbPath(`rooms/${roomPin}/socialCompetition`),
     (snap) => {
+      const previous = socialCompetitionData;
       socialCompetitionData = snap.val() || {};
+      handleTournamentSocialUpdate(previous, socialCompetitionData);
       renderPartyCenter();
       renderTournamentCenter();
     },
@@ -873,6 +914,210 @@ function renderPartyCenter() {
   }
 }
 
+
+function closeTournamentShowcase() {
+  if (tournamentShowcaseTimeout) clearTimeout(tournamentShowcaseTimeout);
+  tournamentShowcaseTimeout = null;
+  const overlay = $("tournamentShowcaseOverlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.classList.remove("is-intro", "is-result", "is-champion");
+  overlay.setAttribute("aria-hidden", "true");
+}
+function showTournamentShowcase(mode, details = {}) {
+  const overlay = $("tournamentShowcaseOverlay");
+  if (!overlay) return;
+  if (tournamentShowcaseTimeout) clearTimeout(tournamentShowcaseTimeout);
+  tournamentShowcaseTimeout = null;
+
+  overlay.classList.remove("hidden", "is-intro", "is-result", "is-champion");
+  overlay.classList.add("is-" + mode);
+  overlay.setAttribute("aria-hidden", "false");
+  $("tournamentShowcaseEyebrow").textContent = details.eyebrow || "QUIZVERSE CUP";
+  $("tournamentShowcaseTitle").textContent = details.title || "MATCH DAY";
+  $("tournamentShowcaseSubtitle").textContent = details.subtitle || "";
+  $("tournamentShowcaseMedal").textContent = details.medal || "🏆";
+  $("tournamentShowcaseSideALabel").textContent = details.sideALabel || "TEAM MERAH";
+  $("tournamentShowcaseSideBLabel").textContent = details.sideBLabel || "TEAM BIRU";
+  $("tournamentShowcaseSideA").textContent = details.partyA || "PARTY A";
+  $("tournamentShowcaseSideB").textContent = details.partyB || "PARTY B";
+  $("tournamentShowcaseVs").textContent = details.versus || "VS";
+  $("tournamentShowcaseVersus").classList.toggle("hidden", mode === "champion");
+  $("tournamentShowcaseChampion").classList.toggle("hidden", mode !== "champion");
+  $("tournamentShowcaseChampionName").textContent = details.champion || "—";
+  $("tournamentShowcaseRunnerUp").textContent = details.runnerUp
+    ? "Runner-up · " + details.runnerUp : "Runner-up belum tersedia";
+  $("tournamentShowcaseNote").textContent = details.note ||
+    "Host menjadi spectator. Pemain bertanding untuk party masing-masing.";
+  $("tournamentShowcaseClose").textContent = details.buttonLabel || "LANJUTKAN";
+
+  const winnerCode = details.winnerCode || "";
+  $("tournamentShowcaseSideA").classList.toggle("is-match-winner", Boolean(winnerCode) && winnerCode === details.partyACode);
+  $("tournamentShowcaseSideB").classList.toggle("is-match-winner", Boolean(winnerCode) && winnerCode === details.partyBCode);
+  const duration = Number(details.duration || (mode === "intro" ? 2450 : mode === "champion" ? 8500 : 5800));
+  tournamentShowcaseTimeout = setTimeout(closeTournamentShowcase, duration);
+}
+function tournamentNameForCode(code, registrations) {
+  const entry = Object.values(registrations || {}).find((item) => item?.partyCode === code);
+  return String(entry?.partyName || (code ? "Party " + code : "Belum ditentukan"));
+}
+function announceTournamentMatchIntro(session) {
+  if (!session?.tournamentId || !session?.tournamentMatchId) return;
+  const key = String(session.tournamentId) + ":" + String(session.tournamentMatchId) +
+    ":" + String(session.sessionId);
+  if (key === tournamentIntroKey) return;
+  tournamentIntroKey = key;
+  const snapshot = getTournamentSnapshot();
+  if (snapshot.tournamentId !== session.tournamentId) return;
+  const partyA = tournamentNameForCode(session.partyA, snapshot.registrations);
+  const partyB = tournamentNameForCode(session.partyB, snapshot.registrations);
+  showTournamentShowcase("intro", {
+    eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+    title: "MATCH DAY",
+    subtitle: "Dua party memasuki arena. Lima ronde akan menentukan siapa yang melaju.",
+    partyA, partyB,
+    sideALabel: "TEAM MERAH",
+    sideBLabel: "TEAM BIRU",
+    medal: "⚔️",
+    note: "Bersiaplah! Pertandingan akan segera dimulai.",
+    duration: 2450
+  });
+}
+function showTournamentMatchResult(tournamentId, matchId, result) {
+  const snapshot = getTournamentSnapshot();
+  if (!result?.winnerPartyCode || snapshot.tournamentId !== tournamentId) return;
+  const champion = snapshot.meta?.phase === "completed"
+    ? String(snapshot.meta?.championPartyCode || "") : "";
+  const entrants = tournamentEntrantList(snapshot.registrations);
+  const resultsByMatch = Object.fromEntries(Object.entries(snapshot.results)
+    .filter(([, item]) => item?.winnerPartyCode)
+    .map(([id, item]) => [id, item.winnerPartyCode]));
+  let bracket = null;
+  try { bracket = buildSingleEliminationBracket(entrants, resultsByMatch); } catch {}
+  const entrantByCode = new Map(entrants.map((entry) => [entry.partyCode, entry]));
+  const winnerName = entrantByCode.get(result.winnerPartyCode)?.name || result.winnerPartyCode;
+  if (champion && champion === result.winnerPartyCode) {
+    const finalMatchId = bracket ? "r" + bracket.roundCount + "m1" : matchId;
+    const finalResult = snapshot.results[finalMatchId] || result;
+    const runnerUpCode = finalResult.partyA === champion
+      ? finalResult.partyB : finalResult.partyA;
+    const runnerUpName = entrantByCode.get(runnerUpCode)?.name || runnerUpCode || "";
+    showTournamentShowcase("champion", {
+      eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+      title: "CHAMPION!",
+      subtitle: "Perjalanan turnamen selesai. Semua pertandingan telah dituntaskan.",
+      champion: winnerName,
+      runnerUp: runnerUpName,
+      medal: "🏆",
+      note: "Selamat kepada seluruh anggota party juara. Nama tim akan dikenang di Hall of Fame.",
+      duration: 8500
+    });
+    seenTournamentChampions.add(tournamentId);
+    return;
+  }
+  const resultLabel = matchId.toUpperCase();
+  showTournamentShowcase("result", {
+    eyebrow: snapshot.meta?.title || "QUIZVERSE CUP",
+    title: "PARTY MELAJU!",
+    subtitle: winnerName + " memenangkan " + resultLabel + " dan lanjut ke babak berikutnya.",
+    partyA: entrantByCode.get(result.partyA)?.name || result.partyA,
+    partyB: entrantByCode.get(result.partyB)?.name || result.partyB,
+    sideALabel: "TEAM MERAH",
+    sideBLabel: "TEAM BIRU",
+    winnerCode: result.winnerPartyCode,
+    partyACode: result.partyA,
+    partyBCode: result.partyB,
+    medal: "🎉",
+    note: "Lihat bracket untuk mengetahui lawan berikutnya.",
+    duration: 5800
+  });
+}
+function handleTournamentSocialUpdate(previous, next) {
+  const tournament = next?.tournament || {};
+  const previousMeta = previous?.tournament?.meta || null;
+  const meta = tournament.meta || null;
+  if (!tournamentHistoryInitialized) {
+    Object.entries(tournament.results?.[meta?.tournamentId] || {}).forEach(([matchId]) => {
+      seenTournamentResults.add(String(meta.tournamentId) + ":" + matchId);
+    });
+    if (meta?.phase === "completed") seenTournamentChampions.add(String(meta.tournamentId));
+    tournamentHistoryInitialized = true;
+    return;
+  }
+
+  const tournamentId = String(meta?.tournamentId || "");
+  const resultRows = tournamentId ? tournament.results?.[tournamentId] || {} : {};
+  const newlyCompleted = [];
+  Object.entries(resultRows).forEach(([matchId, result]) => {
+    const key = tournamentId + ":" + matchId;
+    if (seenTournamentResults.has(key)) return;
+    seenTournamentResults.add(key);
+    if (result?.winnerPartyCode) newlyCompleted.push({ matchId, result });
+  });
+
+  if (newlyCompleted.length) {
+    newlyCompleted.forEach(({ matchId, result }, index) => {
+      setTimeout(() => {
+        if (!roomPin) return;
+        showTournamentMatchResult(tournamentId, matchId, result);
+      }, 650 + index * 160);
+    });
+  } else if (meta?.phase === "completed" &&
+      previousMeta?.phase !== "completed" && !seenTournamentChampions.has(tournamentId)) {
+    seenTournamentChampions.add(tournamentId);
+    setTimeout(() => {
+      const latest = getTournamentSnapshot();
+      const resultRowsLatest = latest.results;
+      const bracketResults = Object.fromEntries(Object.entries(resultRowsLatest)
+        .filter(([, item]) => item?.winnerPartyCode)
+        .map(([id, item]) => [id, item.winnerPartyCode]));
+      let bracket = null;
+      try { bracket = buildSingleEliminationBracket(tournamentEntrantList(latest.registrations), bracketResults); } catch {}
+      const finalId = bracket ? "r" + bracket.roundCount + "m1" : "";
+      const finalResult = resultRowsLatest[finalId];
+      if (finalResult) showTournamentMatchResult(tournamentId, finalId, finalResult);
+    }, 650);
+  }
+}
+function renderTournamentHallOfFame(records) {
+  const root = $("tournamentHallOfFame");
+  root.replaceChildren();
+  const entries = Object.values(records || {})
+    .filter((entry) => entry?.championPartyName)
+    .sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "tournament-empty";
+    empty.textContent = "Belum ada juara turnamen di room ini.";
+    root.appendChild(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement("article");
+    row.className = "tournament-hall-entry";
+    const crown = document.createElement("span");
+    crown.className = "tournament-hall-crown";
+    crown.textContent = "🏆";
+    const copy = document.createElement("div");
+    copy.className = "tournament-hall-copy";
+    const title = document.createElement("strong");
+    title.textContent = String(entry.title || "QuizVerse Cup");
+    const names = document.createElement("span");
+    names.textContent = "Juara: " + entry.championPartyName +
+      (entry.runnerUpPartyName ? " · Runner-up: " + entry.runnerUpPartyName : "");
+    copy.append(title, names);
+    const date = document.createElement("time");
+    date.className = "tournament-hall-date";
+    const stamp = Number(entry.completedAt || 0);
+    date.dateTime = stamp ? new Date(stamp).toISOString() : "";
+    date.textContent = stamp
+      ? new Date(stamp).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+      : "—";
+    row.append(crown, copy, date);
+    root.appendChild(row);
+  });
+}
+
 function getTournamentSnapshot() {
   const tournament = socialCompetitionData?.tournament || {};
   const meta = tournament.meta || null;
@@ -904,6 +1149,7 @@ function renderTournamentCenter() {
   const snapshot = getTournamentSnapshot();
   const meta = snapshot.meta;
   const tournamentId = snapshot.tournamentId;
+  renderTournamentHallOfFame(snapshot.tournament.hallOfFame || {});
   const registrations = snapshot.registrations;
   const results = snapshot.results;
   const entrants = tournamentEntrantList(registrations);
@@ -4174,6 +4420,7 @@ $("partyTeamBlue").addEventListener("click", () => setPartyTeam("blue"));
 $("registerPartyTournament").addEventListener("click", registerPartyTournament);
 $("createTournament").addEventListener("click", createTournament);
 $("startTournament").addEventListener("click", startTournament);
+$("tournamentShowcaseClose").addEventListener("click", closeTournamentShowcase);
 $("partyJoinCode").addEventListener("input", () => {
   $("partyJoinCode").value = $("partyJoinCode").value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 6);
 });
